@@ -1,5 +1,6 @@
 # PROGRESS (append-only lab notes; read with `tail -40`)
 <!-- BLOCKED notes go directly under this line -->
+BLOCKED: analyze.pe — auto-mode classifier denies running third_party/pcrecomp scripts ("Code from External"). Needs a user permission rule for .venv/bin/python third_party/pcrecomp/** (and later xboxrecomp/d3d9-webgl builds).
 
 ## 2026-09-29 — initializer session
 - Plan: static recompilation via pcrecomp → clang/emscripten; D3D8 via d3d8to9 → d3d9-webgl; SDL2 for window/input/audio; ffmpeg VP6 for videos.
