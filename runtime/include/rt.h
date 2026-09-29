@@ -49,6 +49,9 @@ uint32_t guest_callv(uint32_t va, int n, const uint32_t *args);
 
 /* Import bridges (generated table, gen/runtime/imports.c) */
 typedef uint32_t (*rt_hle_fn)(const uint32_t *a);
+/* Define an import handler: HLE(CreateFileA) { ... a[0] ... return value; }  (a[k] = k-th arg slot).
+ * tools/gen_imports.py finds these by name; an import without one logs UNIMPL and returns 0. */
+#define HLE(name) uint32_t hle_##name(const uint32_t *a)
 typedef struct { uint32_t iat_va; const char *dll, *name; uint16_t pop, slots; rt_hle_fn fn; } rt_import_t;
 extern const rt_import_t rt_imports[];
 extern const uint32_t rt_import_count;

@@ -86,7 +86,7 @@
       ],
       "desc": "gen/ + runtime/ compile with clang on macOS (CMake), 0 errors; unresolved import stubs auto-generated and log on call",
       "check": "cmake --build build/native -j >logs/native_build.log 2>&1",
-      "passes": false
+      "passes": true
     },
     {
       "id": "native.boot",
