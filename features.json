@@ -40,7 +40,7 @@
       ],
       "desc": "Ghidra headless analysis (RTTI on) + pcrecomp ghidra scripts export function bounds CSV to analysis/ghidra_funcs.csv",
       "check": "test $(wc -l < analysis/ghidra_funcs.csv) -gt 15000",
-      "passes": false
+      "passes": true
     },
     {
       "id": "analyze.score",
