@@ -1,0 +1,18 @@
+# EA-owned content: never commit
+Game Files/
+*.exe
+*.EXE
+*.big
+*.gob
+*.viv
+*.vp6
+# generated / heavy
+gen/
+build/
+ghidra/
+logs/
+analysis/
+*.log
+.DS_Store
+__pycache__/
+.venv/

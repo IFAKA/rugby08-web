@@ -1,0 +1,12 @@
+[submodule "third_party/pcrecomp"]
+	path = third_party/pcrecomp
+	url = https://github.com/sp00nznet/pcrecomp
+[submodule "third_party/d3d8to9"]
+	path = third_party/d3d8to9
+	url = https://github.com/crosire/d3d8to9
+[submodule "third_party/d3d9-webgl"]
+	path = third_party/d3d9-webgl
+	url = https://github.com/LostMyCode/d3d9-webgl
+[submodule "third_party/xboxrecomp"]
+	path = third_party/xboxrecomp
+	url = https://github.com/sp00nznet/xboxrecomp

@@ -1,0 +1,272 @@
+{
+  "_rules": "Edit only 'passes' (and 'notes'). Set passes=true only after `./init.sh check <id>` exits 0. Items run in order unless deps allow otherwise. Adding new items is fine; deleting or weakening a check is not.",
+  "items": [
+    {
+      "id": "setup.tools",
+      "deps": [],
+      "desc": "Toolchain installed: JDK21, Ghidra headless, emscripten, SDL2, capstone, python venv with capstone+pefile",
+      "check": "tools/check_tools.sh",
+      "passes": true
+    },
+    {
+      "id": "setup.harness",
+      "deps": [],
+      "desc": "CLAUDE.md, features.json, PROGRESS.md, init.sh, scripts/run.sh exist; krn state objective set",
+      "check": "test -f CLAUDE.md -a -f PROGRESS.md -a -x init.sh -a -x scripts/run.sh && krn state show | grep -qi rugby",
+      "passes": true
+    },
+    {
+      "id": "analyze.pe",
+      "deps": [
+        "setup.tools"
+      ],
+      "desc": "pcrecomp pe_analyze + extract_imports → analysis/pe_analysis.json, analysis/imports.json; import count recorded in REVERSE.md",
+      "check": "jq -e '.imports|length>0' analysis/pe_analysis.json >/dev/null && grep -q 'Imports:' REVERSE.md",
+      "passes": false
+    },
+    {
+      "id": "analyze.disasm",
+      "deps": [
+        "analyze.pe"
+      ],
+      "desc": "pcrecomp disasm32 → analysis/functions.json with >=15000 functions",
+      "check": "python3 tools/count_functions.py analysis/functions.json --min 15000",
+      "passes": false
+    },
+    {
+      "id": "analyze.ghidra",
+      "deps": [
+        "setup.tools"
+      ],
+      "desc": "Ghidra headless analysis (RTTI on) + pcrecomp ghidra scripts export function bounds CSV to analysis/ghidra_funcs.csv",
+      "check": "test $(wc -l < analysis/ghidra_funcs.csv) -gt 15000",
+      "passes": false
+    },
+    {
+      "id": "analyze.score",
+      "deps": [
+        "analyze.disasm",
+        "analyze.ghidra"
+      ],
+      "desc": "score_recovery: pcrecomp catalog vs Ghidra; recall >= 0.97 recorded in REVERSE.md; missing starts merged into functions.json",
+      "check": "grep -Eq 'recall: (0\\.9[7-9]|1\\.0)' REVERSE.md",
+      "passes": false
+    },
+    {
+      "id": "analyze.rtti",
+      "deps": [
+        "analyze.disasm"
+      ],
+      "desc": "pcrecomp cpp/rtti.py → analysis/vtables.json; class count >= 600 (matches rugby08_classes_and_sources.txt)",
+      "check": "jq -e 'length>=600' analysis/vtables.json >/dev/null",
+      "passes": false
+    },
+    {
+      "id": "lift.all",
+      "deps": [
+        "analyze.score"
+      ],
+      "desc": "python -m tools (pcrecomp translator) lifts every function into gen/; 0 instructions lifted as comments/unsupported",
+      "check": "tools/lift_report.sh --max-unsupported 0",
+      "passes": false
+    },
+    {
+      "id": "lift.difftest",
+      "deps": [
+        "lift.all"
+      ],
+      "desc": "pcrecomp difftest (or our port of it to macOS: run lifted C vs unicorn/x86 emulation) passes on >=500 sampled leaf functions",
+      "check": "tools/difftest.sh --sample 500",
+      "passes": false
+    },
+    {
+      "id": "native.compile",
+      "deps": [
+        "lift.all"
+      ],
+      "desc": "gen/ + runtime/ compile with clang on macOS (CMake), 0 errors; unresolved import stubs auto-generated and log on call",
+      "check": "cmake --build build/native -j >logs/native_build.log 2>&1",
+      "passes": false
+    },
+    {
+      "id": "native.boot",
+      "deps": [
+        "native.compile"
+      ],
+      "desc": "Native binary runs CRT init and reaches WinMain (trace line 'WinMain entered')",
+      "check": "tools/run_native.sh --frames 0 --expect 'WinMain entered'",
+      "passes": false
+    },
+    {
+      "id": "native.window",
+      "deps": [
+        "native.boot"
+      ],
+      "desc": "RegisterClass/CreateWindowEx → SDL window; message pump works; reaches Direct3DCreate8",
+      "check": "tools/run_native.sh --frames 0 --expect 'Direct3DCreate8'",
+      "passes": false
+    },
+    {
+      "id": "native.icall",
+      "deps": [
+        "native.boot"
+      ],
+      "desc": "Indirect-call dispatch: runtime records unresolved targets to logs/icall_miss.txt; regen loop; 0 misses through menu boot",
+      "check": "tools/run_native.sh --frames 600 && test ! -s logs/icall_miss.txt",
+      "passes": false
+    },
+    {
+      "id": "native.threads",
+      "deps": [
+        "native.boot"
+      ],
+      "desc": "CreateThread/events/critical sections/TLS/timeSetEvent implemented on SDL threads; no deadlock for 600 frames",
+      "check": "tools/run_native.sh --frames 600 --expect 'frame 600'",
+      "passes": false
+    },
+    {
+      "id": "native.fs",
+      "deps": [
+        "native.boot"
+      ],
+      "desc": "CreateFile/ReadFile/FindFirstFile etc. map to Game Files/ with case-insensitive, backslash-aware paths; all .big/.gob opened without error",
+      "check": "tools/run_native.sh --frames 600 && ! grep -q 'FILE_NOT_FOUND' logs/native_run.log",
+      "passes": false
+    },
+    {
+      "id": "native.d3d.present",
+      "deps": [
+        "native.window"
+      ],
+      "desc": "D3D8 via d3d8to9 → d3d9-webgl (desktop GL/ANGLE backend): device creates, first Present shows a non-black frame",
+      "check": "tools/run_native.sh --frames 120 --screenshot logs/f120.png && python3 tools/img_stats.py logs/f120.png --not-blank",
+      "passes": false
+    },
+    {
+      "id": "native.d3d.complete",
+      "deps": [
+        "native.d3d.present"
+      ],
+      "desc": "Every D3D8 method the game calls implemented (none hit 'D3D8 unimplemented' log), texture stages/lights extended beyond d3d9-webgl limits as needed",
+      "check": "tools/run_native.sh --frames 3000 --replay tests/replays/menu_to_match.txt && ! grep -q 'unimplemented' logs/native_run.log",
+      "passes": false
+    },
+    {
+      "id": "native.video",
+      "deps": [
+        "native.d3d.present"
+      ],
+      "desc": "VP6 intro videos decode (ffmpeg libavcodec vp6) and play",
+      "check": "tools/run_native.sh --frames 200 --expect 'vp6 frame decoded'",
+      "passes": false
+    },
+    {
+      "id": "native.audio",
+      "deps": [
+        "native.boot"
+      ],
+      "desc": "DirectSound buffers → SDL audio; menu music audible (non-silent capture)",
+      "check": "tools/run_native.sh --frames 900 --audio-capture logs/menu.wav && python3 tools/audio_stats.py logs/menu.wav --not-silent",
+      "passes": false
+    },
+    {
+      "id": "native.input",
+      "deps": [
+        "native.window"
+      ],
+      "desc": "DirectInput keyboard + gamepads via SDL; scripted replay drives menus",
+      "check": "tools/run_native.sh --frames 1500 --replay tests/replays/menu_nav.txt --expect 'menu state changed'",
+      "passes": false
+    },
+    {
+      "id": "native.menu",
+      "deps": [
+        "native.d3d.complete",
+        "native.icall",
+        "native.fs"
+      ],
+      "desc": "Main menu reached and rendered (reference screenshot committed as hash only)",
+      "check": "tools/run_native.sh --frames 1800 --screenshot logs/menu.png && python3 tools/img_stats.py logs/menu.png --not-blank --min-colors 200",
+      "passes": false
+    },
+    {
+      "id": "native.match",
+      "deps": [
+        "native.menu",
+        "native.input"
+      ],
+      "desc": "2 local players: scripted replay starts a quick match and reaches kickoff",
+      "check": "tools/run_native.sh --frames 6000 --replay tests/replays/menu_to_match.txt --expect 'kickoff'",
+      "passes": false
+    },
+    {
+      "id": "web.compile",
+      "deps": [
+        "native.compile"
+      ],
+      "desc": "Same sources build with emcc (SDL2 port, WebGL2, pthreads) into build/web/",
+      "check": "test -f build/web/rugby08.wasm -a -f build/web/index.html",
+      "passes": false
+    },
+    {
+      "id": "web.assets",
+      "deps": [
+        "web.compile"
+      ],
+      "desc": "ALL Game Files packaged into chunked lazy-loaded bundles in build/web/data/ (no picker, no fallback); manifest lists every original file",
+      "check": "python3 tools/check_asset_manifest.py 'Game Files' build/web/data/manifest.json",
+      "passes": false
+    },
+    {
+      "id": "web.serve",
+      "deps": [
+        "web.compile"
+      ],
+      "desc": "tools/serve.py serves build/web on localhost with COOP/COEP headers",
+      "check": "tools/serve_check.sh",
+      "passes": false
+    },
+    {
+      "id": "web.boot",
+      "deps": [
+        "web.assets",
+        "web.serve",
+        "native.menu"
+      ],
+      "desc": "Headless Chrome loads localhost, console shows 'WinMain entered' and main menu frame not blank",
+      "check": "tools/web_check.sh --expect 'WinMain entered' --screenshot logs/web_menu.png",
+      "passes": false
+    },
+    {
+      "id": "web.video_audio",
+      "deps": [
+        "web.boot",
+        "native.video",
+        "native.audio"
+      ],
+      "desc": "Intro video and menu audio work in browser (WebAudio unlocked on first click)",
+      "check": "tools/web_check.sh --expect 'vp6 frame decoded' --expect 'audio started'",
+      "passes": false
+    },
+    {
+      "id": "web.match",
+      "deps": [
+        "web.boot",
+        "native.match"
+      ],
+      "desc": "Browser: scripted input reaches kickoff with 2 local players at >= 30 fps",
+      "check": "tools/web_check.sh --replay tests/replays/menu_to_match.txt --expect 'kickoff' --min-fps 30",
+      "passes": false
+    },
+    {
+      "id": "e2e",
+      "deps": [
+        "web.match",
+        "web.video_audio"
+      ],
+      "desc": "Final: ./init.sh serve, open localhost in Chrome (claude-in-chrome), intro plays, menu, 2P quick match, screenshot saved to logs/e2e.png",
+      "check": "tools/web_check.sh --e2e",
+      "passes": false
+    }
+  ]
+}
