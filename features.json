@@ -68,7 +68,7 @@
       ],
       "desc": "python -m tools (pcrecomp translator) lifts every function into gen/; 0 instructions lifted as comments/unsupported",
       "check": "tools/lift_report.sh --max-unsupported 0",
-      "passes": false
+      "passes": true
     },
     {
       "id": "lift.difftest",

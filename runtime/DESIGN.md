@@ -18,7 +18,10 @@
 - 2.2M instructions: 88k x87, 5.4k MMX (94 funcs), 3.1k SSE/SSE2 (65 funcs), and `fs:` in 2,151 funcs (SEH).
 - Lifter: `lift32` via `python -m tools`, the global-register model with RECOMP_TLS. It has MMX and `fs:`, but no XMM.
   - `lift32_cpu` handles XMM, but is a separate driver and slower (a CPU struct behind a pointer).
-- The SSE code is the CPU-dispatched paths of MSVC's libm and math code. Our `cpuid` reports no SSE or SSE2, so those paths never run.
+- Modeled CPU: Pentium Pro (CPUID 0x619: FPU, TSC, CX8, CMOV/FCMOV; no MMX, SSE or 3DNow!). The MMX, SSE and 3DNow! code (math, D3DX-style kernels, codecs) is CPU-dispatched, so those paths never run.
+- `tools/lift_ext.py` gives every instruction that CPU's semantics:
+  - It implements what lift32 lacks (`fucompp`, `fcomi`, `fcmov`, `ficom`, BCD adjusts, `xadd`, `bound`, `arpl`, `lahf`…).
+  - Extensions lift as #UD faults and privileged or I/O instructions as #GP faults. Both go to `recomp_fault` and are loud.
   - If a trace ever hits an XMM function, lift that one function with `lift32_cpu`, or add the ops to lift32.
 
 ## Win32/COM boundary ("bridges")

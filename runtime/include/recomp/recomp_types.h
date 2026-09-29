@@ -859,9 +859,9 @@ static inline void CPUID_impl(uint32_t eax_val, uint32_t ebx_val, uint32_t ecx_v
     (void)ebx_val; (void)ecx_val; (void)edx_val;
     if (eax_val == 0) {          /* max leaf 1, "GenuineIntel" */
         g_eax = 1; g_ebx = 0x756E6547u; g_edx = 0x49656E69u; g_ecx = 0x6C65746Eu;
-    } else if (eax_val == 1) {   /* family 6 model 7 stepping 3 */
-        g_eax = 0x00000673u; g_ebx = 0; g_ecx = 0;
-        g_edx = (1u<<0) | (1u<<4) | (1u<<8) | (1u<<15) | (1u<<23); /* FPU TSC CX8 CMOV MMX */
+    } else if (eax_val == 1) {   /* Pentium Pro: family 6 model 1 stepping 9 */
+        g_eax = 0x00000619u; g_ebx = 0; g_ecx = 0;
+        g_edx = (1u<<0) | (1u<<4) | (1u<<8) | (1u<<15); /* FPU TSC CX8 CMOV(+FCMOV) */
     } else {
         g_eax = 0; g_ebx = 0; g_ecx = 0; g_edx = 0;
     }
@@ -991,4 +991,15 @@ void recomp_dump_trace(const char* why);
     if (!_warned) { fprintf(stderr, "STUB: %s called\n", name); _warned = 1; } \
 } while(0)
 
+
+/* ---- tools/lift_ext.py support (implemented in runtime/core/cpu_ext.c) ---- */
+void recomp_fault(uint32_t va, const char *what);   /* #UD/#GP/#DE/#BR/#OF: logs, aborts */
+void recomp_bcd_daa(uint32_t *eax, uint32_t *fl);
+void recomp_bcd_das(uint32_t *eax, uint32_t *fl);
+void recomp_bcd_aaa(uint32_t *eax, uint32_t *fl);
+void recomp_bcd_aas(uint32_t *eax, uint32_t *fl);
+void recomp_bcd_aam(uint32_t *eax, uint32_t *fl, uint32_t imm);
+void recomp_bcd_aad(uint32_t *eax, uint32_t *fl, uint32_t imm);
+double recomp_fbld(uint32_t va);
+void recomp_fbstp(uint32_t va, double v);
 #endif /* RECOMP_TYPES_H */
