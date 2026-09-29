@@ -22,6 +22,10 @@ base = pe.OPTIONAL_HEADER.ImageBase
 img = pe.get_memory_mapped_image()
 text = [s for s in pe.sections if s.Name.rstrip(b"\0") == b".text"][0]
 T_LO, T_HI = base + text.VirtualAddress, base + text.VirtualAddress + text.Misc_VirtualSize
+sys.path.insert(0, str(root / "tools"))
+import code_patch                                           # noqa: E402
+_ptext, OBF = code_patch.patch(img[T_LO - base:T_HI - base], T_LO, T_HI)
+img = img[:T_LO - base] + _ptext + img[T_HI - base:]      # decode what the lifter decodes
 md = Cs(CS_ARCH_X86, CS_MODE_32)
 log = open(root / "logs/catalog.log", "w")
 
@@ -54,6 +58,8 @@ entries = set(g_starts)
 src = {"ghidra": len(entries)}
 rtti = {r["address"] for r in json.load(open(A / "rtti_seeds.json")) if in_text(r["address"])}
 src["rtti_new"] = len(rtti - entries); entries |= rtti
+obf = {tgt for _, tgt, _ in OBF}
+src["obf_call_targets_new"] = len(obf - entries); entries |= obf
 icall = A / "icall_seeds.json"
 if icall.exists():
     ic = {int(x, 0) if isinstance(x, str) else x for x in json.load(open(icall))}

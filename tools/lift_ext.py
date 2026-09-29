@@ -25,6 +25,33 @@ NOP_LIKE = {"pause", "fsetpm", "fnop", "prefetcht0", "prefetcht1", "prefetcht2",
             "prefetch", "prefetchw", "nop"}
 
 EFL = "recomp_eflags(_flag_k, _flag_a, _flag_b, _cf, _df)"
+
+# Before any compare the x87 condition codes read 0; lift32 starts _fpu_cmp at 0 = "equal"
+# (C3 set). 3 = "no compare yet", which fnstsw encodes as 0x0000 (found by tools/difftest.py
+# on the CRT's _statusfp).
+lift32.FUNCTION_LOCALS = tuple("int _fpu_cmp = 3;" if d == "int _fpu_cmp = 0;" else d
+                               for d in lift32.FUNCTION_LOCALS)
+
+DIV = {  # (size, signed) -> C body; _s is the divisor read once; #DE -> soft fault, result 0
+    (1, False): ("uint32_t _dv = (uint8_t)(_s), _n = LO16(eax);",
+                 "_dv == 0 || _n / _dv > 0xFFu", "SET_LO16(eax, ((_n % _dv) << 8) | (_n / _dv));", "SET_LO16(eax, 0);"),
+    (1, True):  ("int32_t _dv = (int8_t)(_s), _n = (int16_t)LO16(eax);",
+                 "_dv == 0 || _n / _dv > 127 || _n / _dv < -128",
+                 "SET_LO16(eax, ((uint32_t)(uint8_t)(_n % _dv) << 8) | (uint8_t)(_n / _dv));", "SET_LO16(eax, 0);"),
+    (2, False): ("uint32_t _dv = (uint16_t)(_s), _n = (LO16(edx) << 16) | LO16(eax);",
+                 "_dv == 0 || _n / _dv > 0xFFFFu", "SET_LO16(eax, _n / _dv); SET_LO16(edx, _n % _dv);",
+                 "SET_LO16(eax, 0); SET_LO16(edx, 0);"),
+    (2, True):  ("int32_t _dv = (int16_t)(_s), _n = (int32_t)((LO16(edx) << 16) | LO16(eax));",
+                 "_dv == 0 || (_dv == -1 && _n == INT32_MIN) || _n / _dv > 32767 || _n / _dv < -32768",
+                 "SET_LO16(eax, (uint16_t)(_n / _dv)); SET_LO16(edx, (uint16_t)(_n % _dv));",
+                 "SET_LO16(eax, 0); SET_LO16(edx, 0);"),
+    (4, False): ("uint64_t _dv = (uint32_t)(_s), _n = ((uint64_t)edx << 32) | eax;",
+                 "_dv == 0 || _n / _dv > 0xFFFFFFFFull", "eax = (uint32_t)(_n / _dv); edx = (uint32_t)(_n % _dv);",
+                 "eax = 0; edx = 0;"),
+    (4, True):  ("int64_t _dv = (int32_t)(_s), _n = (int64_t)(((uint64_t)edx << 32) | eax);",
+                 "_dv == 0 || (_dv == -1 && _n == INT64_MIN) || _n / _dv > 2147483647LL || _n / _dv < -2147483648LL",
+                 "eax = (uint32_t)(int32_t)(_n / _dv); edx = (uint32_t)(int32_t)(_n % _dv);", "eax = 0; edx = 0;"),
+}
 SET_EFL = "_flag_k = FK_EFLAGS; _flag_a = _fl; _flag_b = 0; _cf = _fl & 1u;"
 
 
@@ -79,6 +106,42 @@ class Lifter(lift32.Lifter):
                 return super()._lift_instruction(insn)
             finally:
                 insn.mnemonic = m
+
+        # lift32 skips fdivp/fdivrp by zero (leaves the destination); the x87 with ZE masked (the
+        # CRT's default) gives +-Inf, and 0/0 gives NaN -- plain IEEE division. (difftest: sub_00783F60)
+        if m == "fdivp":
+            d = self._fpu_popdst(ops)
+            return [f"{{ double _v = fp_pop(); {d} = {d} / _v; }} {comment}"]
+        if m == "fdivrp":
+            d = self._fpu_popdst(ops)
+            return [f"{{ double _v = fp_pop(); {d} = _v / {d}; }} {comment}"]
+
+        if m in ("div", "idiv") and len(ops) == 1:
+            decl, bad, ok, zero = DIV[(ops[0].size, m == "idiv")]
+            s = self._fmt_read(ops[0])
+            return [f"{{ uint32_t _s = {s}; {decl} {comment}",
+                    f'  if ({bad}) {{ recomp_soft_fault(0x{insn.address:08X}u, "#DE {m}"); {zero} }}',
+                    f"  else {{ {ok} }} }}"]
+
+        if m in ("fist", "fistp") and ops and ops[0].type == lift32.X86_OP_MEM:
+            addr = self._fmt_mem_addr(ops[0].mem)
+            src = "fp_pop()" if m == "fistp" else "_st[0]"
+            bits = {2: 16, 4: 32, 8: 64}[ops[0].size]
+            return [f"MEM{bits}({addr}) = recomp_fist{bits}(fp_to_int({src})); {comment}"]
+
+        # Privileged / I/O instructions fault in user mode even where lift32 has a stub (in/out).
+        if m in GP:
+            return self._fault(insn, "#GP", comment)
+        # The modeled CPU has no MMX/SSE/3DNow!: #UD even where lift32 knows the instruction.
+        if _is_ud(insn):
+            return self._fault(insn, "#UD", comment)
+
+        if m in ("fnstsw", "fstsw"):
+            # lift32 builds C3..C0 from the last compare; add TOP (bits 11-13) = (8 - depth) & 7.
+            lines = super()._lift_instruction(insn)
+            return [l.replace("| ((_fpu_cmp", "| ((((8 - _fp_top) & 7) << 11)) | ((_fpu_cmp")
+                     .replace("(uint16_t)((_fpu_cmp", "(uint16_t)(((8 - _fp_top) & 7) << 11) | (uint16_t)((_fpu_cmp")
+                    for l in lines]
 
         if m in NOP_LIKE:
             return [f"/* {m} */ {comment}"]

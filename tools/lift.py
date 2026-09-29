@@ -14,7 +14,7 @@ PC = root / "third_party/pcrecomp/tools"
 for d in ("pe", "disasm", "lift"):
     sys.path.insert(0, str(PC / d))
 sys.path.insert(0, str(root / "tools"))
-import generate, lift32, lift_ext                         # noqa: E402
+import generate, lift32, lift_ext, code_patch             # noqa: E402
 from pe_analyze import analyze_pe, build_iat_map          # noqa: E402
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32          # noqa: E402
 
@@ -27,7 +27,8 @@ def _init():
     info = analyze_pe(EXE)
     pe_data = open(EXE, "rb").read()
     text = [s for s in info.sections if s.name == ".text"][0]
-    _G["code"] = pe_data[text.raw_offset:text.raw_offset + min(text.virtual_size, text.raw_size)]
+    raw = pe_data[text.raw_offset:text.raw_offset + min(text.virtual_size, text.raw_size)]
+    _G["code"], _G["obf_sites"] = code_patch.patch(raw, info.code_start, info.code_start + len(raw))
     _G["code_start"] = info.code_start
     _G["code_end"] = info.code_end
     _G["iat"] = build_iat_map(info)
@@ -39,35 +40,38 @@ def _init():
     lifter.lifted = set(cat)     # calls to anything else go through RECOMP_ICALL (logged miss)
     _G["lifter"] = lifter
 
+def lift_one(idx):
+    """Lift catalog entry idx -> (C code, ok). Shared by main() and tools/difftest.py."""
+    E, code, cs, ce = _G["entries"], _G["code"], _G["code_start"], _G["code_end"]
+    addr = E[idx]
+    end = min(E[idx + 1] if idx + 1 < len(E) else ce, addr + 0x10000)
+    name = f"sub_{addr:08X}"
+    try:
+        insns, leaders = generate.linear_disassemble_function(_G["md"], code, cs, addr, end)
+        trimmed, seen_ret = [], False
+        for i in insns:
+            if i.mnemonic == "int3":
+                break
+            if seen_ret:
+                if i.address not in leaders:
+                    continue
+                seen_ret = False
+            trimmed.append(i)
+            if i.is_ret:
+                seen_ret = True
+        if not trimmed:
+            return f"void {name}(void) {{ recomp_fault(0x{addr:08X}u, \"#UD empty entry\"); }}\n", False
+        return generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr), True
+    except Exception as e:  # keep going; the report counts these
+        return f"/* LIFT_ERROR {name}: {e} */\nvoid {name}(void) {{ }}\n", False
+
 def _lift_chunk(job):
     file_idx, lo, hi = job
-    E, code, cs, ce = _G["entries"], _G["code"], _G["code_start"], _G["code_end"]
     funcs, errs = [], 0
     for idx in range(lo, hi):
-        addr = E[idx]
-        end = min(E[idx + 1] if idx + 1 < len(E) else ce, addr + 0x10000)
-        name = f"sub_{addr:08X}"
-        try:
-            insns, leaders = generate.linear_disassemble_function(_G["md"], code, cs, addr, end)
-            trimmed, seen_ret = [], False
-            for i in insns:
-                if i.mnemonic == "int3":
-                    break
-                if seen_ret:
-                    if i.address not in leaders:
-                        continue
-                    seen_ret = False
-                trimmed.append(i)
-                if i.is_ret:
-                    seen_ret = True
-            if not trimmed:
-                funcs.append((f"void {name}(void) {{ recomp_fault(0x{addr:08X}u, \"#UD empty entry\"); }}\n", addr, name))
-                errs += 1
-                continue
-            funcs.append((generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr), addr, name))
-        except Exception as e:  # keep going; the report counts these
-            funcs.append((f"/* LIFT_ERROR {name}: {e} */\nvoid {name}(void) {{ }}\n", addr, name))
-            errs += 1
+        c, ok = lift_one(idx)
+        funcs.append((c, _G["entries"][idx], f"sub_{_G['entries'][idx]:08X}"))
+        errs += 0 if ok else 1
     generate.write_chunk(str(OUT), file_idx, funcs)
     return file_idx, hi - lo, errs
 

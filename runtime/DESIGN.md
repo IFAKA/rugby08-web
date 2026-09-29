@@ -24,6 +24,16 @@
   - Extensions lift as #UD faults and privileged or I/O instructions as #GP faults. Both go to `recomp_fault` and are loud.
   - If a trace ever hits an XMM function, lift that one function with `lift32_cpu`, or add the ops to lift32.
 
+## x87 model limits (by design, from pcrecomp)
+- The x87 stack holds C doubles (53-bit). 80-bit `fld/fstp xword` rounds to double, and transcendentals use libm.
+  - Both differ from hardware only in the last bits. The difftest skips such bodies, and everything else must match bit for bit.
+- The x87's 15-bit exponent range is not modeled (the model overflows and underflows at double range), and neither are the status-word exception flags (bits 0–5).
+- NaN payload and sign are not modeled. The x87 default NaN is negative and ARM's is positive, and wasm makes NaN bits nondeterministic, so the difftest's inputs contain no NaN or Inf patterns.
+
+## Compiling generated code
+- Always use `-fwrapv -fno-strict-aliasing`. lift32 emits signed `imul` as `(int32_t)a * (int32_t)b`, and signed overflow is UB: clang then widened an address computation past 4 GiB, which the difftest caught in sub_00890DA0. MEM8/16/32/F/D pun one byte array through many types.
+- Use `-DRECOMP_LOCAL_REGS`, which keeps registers in locals and touches the TLS globals only at call boundaries. The difftest compiles exactly like this.
+
 ## Win32/COM boundary ("bridges")
 - The IAT holds 226 slots at VA 0x8CC07C..0x8CC39C (RVAs in `pe_analysis.json` `.imports[].iat_rva`). At boot, slot i ← `BRIDGE_IMPORT_BASE + 16*i`, where `BRIDGE_IMPORT_BASE` = 0xFFF00000. That range is never dereferenced, only dispatched.
 - COM objects (IDirect3D8, IDirect3DDevice8…, IDirectSound…, IDirectInput…) live in guest memory:

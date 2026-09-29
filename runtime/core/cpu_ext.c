@@ -6,6 +6,17 @@ void recomp_fault(uint32_t va, const char *what) {
     rt_fatal("CPU fault %s at 0x%08X (in sub_%08X)", what, va, g_cur_func);
 }
 
+/* #DE: the original never divides by zero on a real path, so this marks a bug upstream. Log each
+ * site once and continue with a 0 result (pcrecomp's policy) rather than kill the game. */
+void recomp_soft_fault(uint32_t va, const char *what) {
+    enum { N = 256 };
+    static uint32_t seen[N];
+    static int n;
+    for (int i = 0; i < n; i++) if (seen[i] == va) return;
+    if (n < N) seen[n++] = va;
+    rt_log("CPU soft fault %s at 0x%08X (in sub_%08X), continuing", what, va, g_cur_func);
+}
+
 /* Flags word bits */
 #define F_CF 0x001u
 #define F_PF 0x004u

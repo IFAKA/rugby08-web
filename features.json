@@ -77,7 +77,7 @@
       ],
       "desc": "pcrecomp difftest (or our port of it to macOS: run lifted C vs unicorn/x86 emulation) passes on >=500 sampled leaf functions",
       "check": "tools/difftest.sh --sample 500",
-      "passes": false
+      "passes": true
     },
     {
       "id": "native.compile",
