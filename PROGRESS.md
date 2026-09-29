@@ -1,5 +1,15 @@
 # PROGRESS (append-only lab notes; read with `tail -40`)
 <!-- BLOCKED notes go directly under this line -->
+BLOCKED: native.boot — startup faults inside a relocated protector-region (anti-tamper/obfuscation)
+function, not a normal game routine (`CPU fault #UD empty entry at 0x01059EEA in sub_01059ED6`,
+another push/push/ret obfuscation form whose junk/target didn't fully lift). Reversing that
+protection layer further is out of scope for static recompilation as agreed with the user and is
+where Claude's own safety check stopped a response once already. Do NOT resume analyzing/patching
+the protection layer without the user explicitly asking for it. The path forward the user is
+considering instead: obtain a build of the exe that doesn't carry this protection layer, then
+re-run analyze.* / lift.* on that copy (the tooling built so far — catalog, lifter, difftest,
+runtime, Win32 HLE — should apply with little to no change). See `krn state show` for the recorded
+negative result.
 
 ## 2026-09-29 — initializer session
 - Plan: static recompilation via pcrecomp → clang/emscripten; D3D8 via d3d8to9 → d3d9-webgl; SDL2 for window/input/audio; ffmpeg VP6 for videos.
@@ -31,3 +41,26 @@
   - lift32 stubs for in/out now #GP, and MMX ops #UD (the modeled CPU has no MMX).
 - x87 model limits (80-bit precision, 15-bit exponent, NaN bits, exception flags) are documented in runtime/DESIGN.md. The difftest inputs avoid them, and it excludes a case only when the reference shows the unmodeled state.
 - Next: native.compile (CMake for gen/ + runtime/ with clang).
+
+## 2026-09-29 — session: Win32 HLE runtime + protector-region lift, then paused
+- Added runtime/win32: handles.c, k32_mem.c (Heap/Virtual/Global/Local + IsBad*Ptr), k32_sync.c,
+  k32_sys.c, k32_file.c (guest path -> host with userdata overlay; Game Files never written to),
+  paths.c, strings.c (cp1252<->UTF-16), win32.h. cpu.c's recomp_miss() now logs unresolved
+  ICALL/ITAIL targets to logs/icall_miss.txt instead of silently returning 0.
+- Discovered a second protection layer distinct from the outer packer already handled: 933
+  `push R; push T; ret` obfuscated calls in .text (tools/code_patch.py rewrites them for the
+  lifter only, image in guest memory is untouched), plus real game code relocated into the
+  former .IN/.HEAVEN sections (0xE65000-0x1463000, tools/ranges.py PROT), reached via
+  jmp/call [ptr] stubs and direct branches from .text. tools/build_catalog.py, lift.py,
+  lift_ext.py extended to cover both regions; tools/patch_exe.py emits a deobfuscated copy for
+  Ghidra only; tools/lift_fixpoint.sh iterates catalog+lift to a fixed point (45,001 functions,
+  converged after 7 rounds). ghidra_analyze.sh re-targets the deobfuscated exe.
+- native.compile still passes; lift.difftest still passes on sampled functions after the
+  protector-region lift (no new lifter bugs found there beyond the earlier fixes).
+- native.boot fails inside the relocated protector region itself (see BLOCKED note at top).
+  Committed everything verified so far (commit ebf1b1e) so no work is lost. Stopped here on the
+  user's decision, not on a technical dead end — the remaining question is a scope/sourcing
+  decision (get an unprotected build vs. reverse the protection), not more coding.
+- Next session: read the BLOCKED note first. If the user has supplied an alternate/unprotected
+  exe, point analyze.pe and the rest of the pipeline at it (same tooling, same features.json).
+  Otherwise wait for the user's direction before touching the protector region again.
