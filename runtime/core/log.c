@@ -45,10 +45,27 @@ void rt_fatal(const char *fmt, ...) {
     exit(3);
 }
 
+/* RECOMP_TRACE builds: every lifted body calls this on entry (per-thread ring, dumped on fatal) */
+#define ENTER_RING 256
+static RECOMP_TLS uint32_t t_enter[ENTER_RING];
+static RECOMP_TLS uint32_t t_enter_idx;
+void recomp_trace_enter(uint32_t va) { t_enter[t_enter_idx++ & (ENTER_RING - 1)] = va; }
+
 void recomp_dump_trace(const char *why) {
+    if (t_enter_idx) {
+        char line[ENTER_RING * 11 + 1];
+        int o = 0;
+        for (uint32_t i = t_enter_idx > ENTER_RING ? t_enter_idx - ENTER_RING : 0; i < t_enter_idx; i++)
+            o += snprintf(line + o, sizeof line - (size_t)o, " %08X", t_enter[i & (ENTER_RING - 1)]);
+        rt_log("entered (%s), oldest first:%s", why, line);
+    }
     rt_log("icall trace (%s), last %d:", why, ICALL_TRACE_SIZE);
     for (int i = 0; i < ICALL_TRACE_SIZE; i++) {
         uint32_t k = (g_icall_trace_idx - ICALL_TRACE_SIZE + (uint32_t)i) & (ICALL_TRACE_SIZE - 1);
         if (g_icall_trace[k]) rt_log("  0x%08X <- 0x%08X", g_icall_trace[k], g_icall_from[k]);
     }
+}
+
+void rt_hook_enter(uint32_t va, const char *name) {
+    rt_trace("%s entered (0x%08X)", name, va);
 }

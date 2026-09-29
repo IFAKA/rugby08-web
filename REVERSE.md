@@ -46,3 +46,7 @@ Facts only, each backed by a tool output in `analysis/` (gitignored). Regenerate
   - The 7,032 split starts are excluded on purpose, because an entry mid-function would cut it apart.
 - RTTI (`tools/rtti.sh`): 704 classes with vtables (matches `rugby08_classes_and_sources.txt`) and 2,211 virtual-method entries.
 - Instruction census (`tools/insn_stats.py`): 2.2M instructions in Ghidra bodies. 88k x87, 5.4k MMX (94 funcs), 3.1k SSE (65 funcs, CPU-dispatched CRT math), and `fs:` in 2,151 funcs.
+
+## Entry points (from disassembly of the CRT entry 0x87555C)
+- WinMainCRTStartup is 0x87555C. It calls GetModuleHandleA(0) and does the MZ/PE check, then heap and IO init, GetCommandLineA and GetStartupInfoA. Finally it calls `WinMain(hInstance, 0, lpCmdLine, nShowCmd)` at **0x812FC0**.
+- Traced function hooks (`tools/hooks.json`) make a lifted body log `<name> entered` on entry.

@@ -2,6 +2,7 @@
 #include "rt.h"
 #include <pthread.h>
 #include <time.h>
+#include <stdio.h>
 
 /* Per-thread CPU state (declared RECOMP_TLS in the vendored recomp_types.h) */
 RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp, g_ebx, g_esi, g_edi, g_ebp;
@@ -155,4 +156,21 @@ uint32_t guest_call(uint32_t va, int n, ...) {
     for (int i = 0; i < n && i < 16; i++) args[i] = va_arg(ap, uint32_t);
     va_end(ap);
     return guest_callv(va, n, args);
+}
+
+/* ---- dispatch misses ---------------------------------------------------------------------------- */
+#define MAX_MISSES 65536
+static uint32_t g_miss[MAX_MISSES];
+static int g_nmiss;
+static pthread_mutex_t g_miss_mu = PTHREAD_MUTEX_INITIALIZER;
+static FILE *g_miss_f;
+
+void recomp_miss(int tail, uint32_t va, uint32_t from) {
+    pthread_mutex_lock(&g_miss_mu);
+    for (int i = 0; i < g_nmiss; i++) if (g_miss[i] == va) { pthread_mutex_unlock(&g_miss_mu); return; }
+    if (g_nmiss < MAX_MISSES) g_miss[g_nmiss++] = va;
+    if (!g_miss_f) g_miss_f = fopen("logs/icall_miss.txt", "w");
+    if (g_miss_f) { fprintf(g_miss_f, "0x%08X %s from 0x%08X\n", va, tail ? "ITAIL" : "ICALL", from); fflush(g_miss_f); }
+    pthread_mutex_unlock(&g_miss_mu);
+    rt_log("%s: unresolved VA 0x%08X from 0x%08X", tail ? "ITAIL" : "ICALL", va, from);
 }

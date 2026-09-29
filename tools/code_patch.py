@@ -18,13 +18,15 @@ PAT = re.compile(rb"\x68(....)\x68(....)\xC3", re.S)
 
 
 def find_sites(text: bytes, t_lo: int, t_hi: int):
-    """[(site_va, target, ret_va)] for every push R; push T; ret with a 4..16-byte junk gap."""
+    """[(site_va, target, ret_va)] for every push R; push T; ret with a 4..16-byte junk gap,
+    site and targets inside a code range (tools/ranges.py)."""
+    from ranges import in_code
     out = []
     for m in PAT.finditer(text):
         r = int.from_bytes(m.group(1), "little")
         t = int.from_bytes(m.group(2), "little")
         site = t_lo + m.start()
-        if t_lo <= r < t_hi and t_lo <= t < t_hi and (r - (site + 11)) in (4, 8, 12, 16):
+        if in_code(site) and in_code(r) and in_code(t) and (r - (site + 11)) in (4, 8, 12, 16):
             out.append((site, t, r))
     return out
 

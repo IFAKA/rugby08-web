@@ -14,7 +14,7 @@ PC = root / "third_party/pcrecomp/tools"
 for d in ("pe", "disasm", "lift"):
     sys.path.insert(0, str(PC / d))
 sys.path.insert(0, str(root / "tools"))
-import generate, lift32, lift_ext, code_patch             # noqa: E402
+import generate, lift32, lift_ext, code_patch, ranges     # noqa: E402
 from pe_analyze import analyze_pe, build_iat_map          # noqa: E402
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32          # noqa: E402
 
@@ -26,25 +26,64 @@ _G = {}
 def _init():
     info = analyze_pe(EXE)
     pe_data = open(EXE, "rb").read()
-    text = [s for s in info.sections if s.name == ".text"][0]
-    raw = pe_data[text.raw_offset:text.raw_offset + min(text.virtual_size, text.raw_size)]
-    _G["code"], _G["obf_sites"] = code_patch.patch(raw, info.code_start, info.code_start + len(raw))
-    _G["code_start"] = info.code_start
-    _G["code_end"] = info.code_end
+    # One buffer over both code ranges (tools/ranges.py): .text and the protector region inside
+    # .data. The dump is flat (raw == virtual), so image bytes are file bytes from ImageBase.
+    import pefile
+    img = pefile.PE(EXE, fast_load=True).get_memory_mapped_image()
+    raw = img[ranges.CODE_LO - info.image_base:ranges.CODE_HI - info.image_base]
+    _G["code"], _G["obf_sites"] = code_patch.patch(raw, ranges.CODE_LO, ranges.CODE_HI)
+    _G["code_start"] = ranges.CODE_LO
+    _G["code_end"] = ranges.CODE_HI
     _G["iat"] = build_iat_map(info)
     cat = json.load(open(root / "analysis/lift_catalog.json"))["entries"]
     _G["entries"] = cat
+    _G["hooks"] = {int(k, 16): v for k, v in json.load(open(root / "tools/hooks.json")).items()}
+    _G["end"] = body_ends(cat, ranges.CODE_HI)
     md = Cs(CS_ARCH_X86, CS_MODE_32); md.detail = True
     _G["md"] = md
     lifter = lift_ext.Lifter(iat_map=_G["iat"])
     lifter.lifted = set(cat)     # calls to anything else go through RECOMP_ICALL (logged miss)
     _G["lifter"] = lifter
 
+def body_ends(entries, code_end):
+    """Where each entry's lifted body stops (see runtime/DESIGN.md "Function bodies").
+    Ghidra functions are lifted over their whole extent -- decoding straight over any other entry
+    inside them -- so loops stay local instead of becoming chains of tail calls. An entry inside a
+    Ghidra function runs to that function's end; anything else stops at the next top-level entry."""
+    import bisect, csv
+    g = []
+    for s, e in csv.reader(open(root / "analysis/ghidra_funcs.csv")):
+        s, e = int(s, 16), int(e, 16)
+        if 0 < e - s <= 0x40000:
+            g.append((s, e))
+    g.sort()
+    gs = [s for s, _ in g]
+    for i in range(len(g) - 1):             # contiguous MSVC bodies: never past the next function
+        if g[i][1] > g[i + 1][0]:
+            g[i] = (g[i][0], g[i + 1][0])
+    gend = dict(g)
+    def host(a):
+        i = bisect.bisect_right(gs, a) - 1
+        return g[i] if i >= 0 and g[i][0] <= a < g[i][1] else None
+    top = sorted(a for a in entries if a in gend or host(a) is None)
+    ends = {}
+    for a in entries:
+        h = host(a)
+        if h:
+            ends[a] = h[1]
+        else:
+            j = bisect.bisect_right(top, a)
+            e = min(top[j] if j < len(top) else code_end, a + 0x10000)
+            if a < ranges.TEXT[1] < e:          # never run from .text into .data
+                e = ranges.TEXT[1]
+            ends[a] = e
+    return ends
+
 def lift_one(idx):
     """Lift catalog entry idx -> (C code, ok). Shared by main() and tools/difftest.py."""
     E, code, cs, ce = _G["entries"], _G["code"], _G["code_start"], _G["code_end"]
     addr = E[idx]
-    end = min(E[idx + 1] if idx + 1 < len(E) else ce, addr + 0x10000)
+    end = _G["end"][addr]
     name = f"sub_{addr:08X}"
     try:
         insns, leaders = generate.linear_disassemble_function(_G["md"], code, cs, addr, end)
@@ -57,11 +96,18 @@ def lift_one(idx):
                     continue
                 seen_ret = False
             trimmed.append(i)
-            if i.is_ret:
+            # after ret or an unconditional jmp (direct, or a switch's jmp [table]) the next bytes
+            # are reachable only through a label: skip them until one (protector junk, tables)
+            if i.is_ret or i.is_uncond_jump:
                 seen_ret = True
         if not trimmed:
             return f"void {name}(void) {{ recomp_fault(0x{addr:08X}u, \"#UD empty entry\"); }}\n", False
-        return generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr), True
+        code = generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr)
+        hook = _G["hooks"].get(addr)
+        if hook:   # tools/hooks.json: announce entry (checks grep for "<name> entered")
+            code = code.replace(f"    RECOMP_ENTER(0x{addr:08X}u);",
+                                f"    RECOMP_ENTER(0x{addr:08X}u);\n    rt_hook_enter(0x{addr:08X}u, \"{hook}\");", 1)
+        return code, True
     except Exception as e:  # keep going; the report counts these
         return f"/* LIFT_ERROR {name}: {e} */\nvoid {name}(void) {{ }}\n", False
 

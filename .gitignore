@@ -17,3 +17,4 @@ analysis/
 __pycache__/
 .venv/
 third_party/wine-specs/
+userdata/

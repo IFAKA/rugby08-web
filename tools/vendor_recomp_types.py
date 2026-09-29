@@ -51,6 +51,17 @@ t = t.replace("#ifdef _MSC_VER\n#include <intrin.h>\n#endif",
               "uint64_t recomp_host_rdtsc(void);\n#define __rdtsc() recomp_host_rdtsc()\n#else\n"
               "#include <x86intrin.h>\n#endif", 1)
 
+# Unresolved dispatch goes to recomp_miss() (runtime/core/cpu.c): recorded once per target in
+# logs/icall_miss.txt, which tools/icall_seed.py feeds back into the lift catalog.
+for a, b in (('fprintf(stderr, "ICALL: unresolved VA 0x%08X from 0x%08X\\n", _va, g_cur_func);',
+              'recomp_miss(0, _va, g_cur_func);'),
+             ('else { fprintf(stderr, "ITAIL: unresolved VA 0x%08X from 0x%08X\\n", _va, g_cur_func); }',
+              'else { recomp_miss(1, _va, g_cur_func); }')):
+    if t.count(a) != 1:
+        sys.exit(f"vendor_recomp_types: miss pattern not found: {a!r}")
+    t = t.replace(a, b)
+t = t.replace("/* Lookup functions */", "void recomp_miss(int tail, uint32_t va, uint32_t from);\n/* Lookup functions */", 1)
+
 n_cur = t.count("extern uint32_t g_cur_func;")
 t = t.replace("extern uint32_t g_cur_func;", "extern RECOMP_TLS uint32_t g_cur_func;")
 
@@ -64,6 +75,7 @@ void recomp_bcd_aaa(uint32_t *eax, uint32_t *fl);
 void recomp_bcd_aas(uint32_t *eax, uint32_t *fl);
 void recomp_bcd_aam(uint32_t *eax, uint32_t *fl, uint32_t imm);
 void recomp_bcd_aad(uint32_t *eax, uint32_t *fl, uint32_t imm);
+void rt_hook_enter(uint32_t va, const char *name);   /* tools/hooks.json functions */
 double recomp_fbld(uint32_t va);
 void recomp_fbstp(uint32_t va, double v);
 /* fist/fistp store: x86 writes the "integer indefinite" for NaN/out-of-range; a C cast is UB

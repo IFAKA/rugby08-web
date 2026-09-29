@@ -27,6 +27,8 @@ SCR_LO, SCR_SZ, STK_LO, STK_SZ = 0x20000000, 0x40000, 0x10000000, 0x10000
 OUT_VA, RET_VA = 0x2FFF0000, 0x7FFE0000
 # fp_ld80/fp_st80: the model's x87 is 53-bit (runtime/DESIGN.md); an 80-bit load of random data
 # keeps 64 mantissa bits on hardware, so those bodies would differ by design, not by bug.
+# `ret imm16` with an absurd pop only occurs in junk and trips a Unicorn quirk (16-bit wrap).
+SKIP_RET = re.compile(r"esp \+= (\d+); \{ RECOMP_REGS_OUT\(\); return; \} /\* 0x[0-9A-F]+: ret")
 SKIP = re.compile(r"RECOMP_CALL|RECOMP_ICALL|RECOMP_ITAIL|recomp_fault|CPUID|__rdtsc|LIFT_ERROR|fp_ld80|fp_st80|"
                   r"\b(sin|cos|tan|atan2|atan|pow|log|log2|exp|exp2)\(")
 
@@ -46,7 +48,8 @@ def main():
     chosen, bodies = [], []
     for idx in order:
         code, ok = lift.lift_one(idx)
-        if ok and not SKIP.search(code) and code.count("\n") < 4000:
+        big_ret = any(int(n) > 0x404 for n in SKIP_RET.findall(code))
+        if ok and not SKIP.search(code) and not big_ret and code.count("\n") < 4000:
             chosen.append(idx); bodies.append(code)
         if len(chosen) >= a.sample * 2:
             break
@@ -69,8 +72,13 @@ def main():
     # ---- memory images
     import pefile
     pe = pefile.PE(str(root / "Rugby08_unpacked.exe"), fast_load=True)
-    img = bytes(pe.get_memory_mapped_image()[:IMG_HI - IMG_LO])
-    img = img + bytes(IMG_HI - IMG_LO - len(img))
+    img = bytearray(pe.get_memory_mapped_image()[:IMG_HI - IMG_LO])
+    img += bytes(IMG_HI - IMG_LO - len(img))
+    # The reference runs the same bytes the lifter decodes: the obfuscated calls rewritten
+    # (tools/code_patch.py), equivalent on every real path.
+    lo, hi = lift.ranges.CODE_LO - IMG_LO, lift.ranges.CODE_HI - IMG_LO
+    img[lo:hi] = lift._G["code"]
+    img = bytes(img)
     (B / "image.bin").write_bytes(img)
     # No NaN/Inf bit patterns in the scratch heap: NaN payload and sign are not part of the model
     # (x87, arm64 and wasm all propagate them differently; see runtime/DESIGN.md). Clearing bit 30

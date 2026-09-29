@@ -30,6 +30,12 @@
 - The x87's 15-bit exponent range is not modeled (the model overflows and underflows at double range), and neither are the status-word exception flags (bits 0–5).
 - NaN payload and sign are not modeled. The x87 default NaN is negative and ARM's is positive, and wasm makes NaN bits nondeterministic, so the difftest's inputs contain no NaN or Inf patterns.
 
+## Function bodies (tools/lift.py `body_ends`)
+- A Ghidra function is lifted over its whole extent, capped at the next Ghidra start, decoding straight over any other entry inside it.
+  - The old rule (stop at the next catalog entry) turned loops that crossed an inner entry into nested tail calls. That means unbounded host recursion.
+- An entry inside a Ghidra function runs to that function's end. Other entries stop at the next top-level entry.
+- Code shared by two entries is lifted twice, which is correct and costs only size.
+
 ## Compiling generated code
 - Always use `-fwrapv -fno-strict-aliasing`. lift32 emits signed `imul` as `(int32_t)a * (int32_t)b`, and signed overflow is UB: clang then widened an address computation past 4 GiB, which the difftest caught in sub_00890DA0. MEM8/16/32/F/D pun one byte array through many types.
 - Use `-DRECOMP_LOCAL_REGS`, which keeps registers in locals and touches the TLS globals only at call boundaries. The difftest compiles exactly like this.

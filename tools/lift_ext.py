@@ -20,7 +20,8 @@ FCMOV = {"fcmovb": "jb", "fcmove": "je", "fcmovbe": "jbe", "fcmovu": "jp",
 GP = {"cli", "sti", "hlt", "in", "out", "insb", "insw", "insd", "outsb", "outsw", "outsd",
       "iret", "iretd", "int", "int1", "ljmp", "lcall", "syscall", "sysenter", "sysexit",
       "lgdt", "lidt", "lldt", "ltr", "clts", "invd", "wbinvd", "invlpg", "rdmsr", "wrmsr", "rsm",
-      "rdpmc", "sysret", "into_gp"}
+      "rdpmc", "sysret", "into_gp", "sgdt", "sidt", "lmsw", "smsw", "str", "sldt_gp", "lar", "lsl",
+      "verr", "verw", "invlpga", "swapgs", "hlt"}
 NOP_LIKE = {"pause", "fsetpm", "fnop", "prefetcht0", "prefetcht1", "prefetcht2", "prefetchnta",
             "prefetch", "prefetchw", "nop"}
 
@@ -89,7 +90,16 @@ class Lifter(lift32.Lifter):
         m, ops = insn.mnemonic, insn.operands
         comment = f"/* 0x{insn.address:08X}: {insn.mnemonic} {insn.op_str} */"
 
-        # --- ignored prefixes: F2 (bnd) and 3E (notrack) on a branch do nothing on this CPU ---
+        # --- ignored prefixes: F2 (bnd) and 3E (notrack) on a branch do nothing on this CPU; a rep
+        # prefix on a non-string instruction (AMD's `rep ret`) is ignored too ---
+        STRING_OPS = ("movs", "stos", "lods", "cmps", "scas")
+        if m.startswith(("rep ", "repz ", "repe ", "repne ", "repnz ")) and \
+                not m.split(" ", 1)[1].startswith(STRING_OPS):
+            insn.mnemonic = m.split(" ", 1)[1]
+            try:
+                return self._lift_instruction(insn)
+            finally:
+                insn.mnemonic = m
         if m.startswith(("bnd ", "notrack ")):
             insn.mnemonic = m.split(" ", 1)[1]
             try:
@@ -203,6 +213,8 @@ class Lifter(lift32.Lifter):
             return self._eflags_op(f"uint32_t _d = (uint16_t)({d}), _s = (uint16_t)({s}); "
                                    f"if ((_d & 3u) < (_s & 3u)) {{ {w}; _fl |= 0x40u; }} else _fl &= ~0x40u;",
                                    comment)
+        if m == "popf":   # 16-bit popf: low word of EFLAGS
+            return self._eflags_op("_fl = (_fl & 0xFFFF0000u) | POP16_VAL(esp); _df = (_fl & 0x400u) ? -1 : 1;", comment)
         if m == "popaw":
             return [f"{{ SET_LO16(edi, POP16_VAL(esp)); SET_LO16(esi, POP16_VAL(esp)); SET_LO16(ebp, POP16_VAL(esp)); "
                     f"esp += 2; SET_LO16(ebx, POP16_VAL(esp)); SET_LO16(edx, POP16_VAL(esp)); "

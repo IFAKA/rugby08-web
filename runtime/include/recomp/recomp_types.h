@@ -898,6 +898,7 @@ extern uint32_t g_icall_from[ICALL_TRACE_SIZE];
 extern uint32_t g_icall_trace_idx;
 extern uint32_t g_icall_count;
 
+void recomp_miss(int tail, uint32_t va, uint32_t from);
 /* Lookup functions */
 recomp_func_t recomp_lookup(uint32_t va);          /* binary search in dispatch table */
 recomp_func_t recomp_lookup_manual(uint32_t va);    /* manual overrides */
@@ -940,7 +941,7 @@ recomp_func_t recomp_lookup_import(uint32_t va);    /* import bridges */
         RECOMP_REGS_IN(); \
         g_cur_func = _caller;  /* the callee RECOMP_ENTER clobbered it */ \
     } else { \
-        fprintf(stderr, "ICALL: unresolved VA 0x%08X from 0x%08X\n", _va, g_cur_func); \
+        recomp_miss(0, _va, g_cur_func); \
         esp += 4; /* pop dummy ret addr */ \
         eax = 0; \
     } \
@@ -959,7 +960,7 @@ recomp_func_t recomp_lookup_import(uint32_t va);    /* import bridges */
     if (_fn) { RECOMP_REGS_OUT(); _fn(); RECOMP_REGS_IN(); } \
     else if (_va == RECOMP_RETADDR) { /* setjmp and friends return by jumping \
         to the saved return address; that is a return, not a missing target. */ } \
-    else { fprintf(stderr, "ITAIL: unresolved VA 0x%08X from 0x%08X\n", _va, g_cur_func); } \
+    else { recomp_miss(1, _va, g_cur_func); } \
 } while(0)
 
 /* ============================================================
@@ -1002,6 +1003,7 @@ void recomp_bcd_aaa(uint32_t *eax, uint32_t *fl);
 void recomp_bcd_aas(uint32_t *eax, uint32_t *fl);
 void recomp_bcd_aam(uint32_t *eax, uint32_t *fl, uint32_t imm);
 void recomp_bcd_aad(uint32_t *eax, uint32_t *fl, uint32_t imm);
+void rt_hook_enter(uint32_t va, const char *name);   /* tools/hooks.json functions */
 double recomp_fbld(uint32_t va);
 void recomp_fbstp(uint32_t va, double v);
 /* fist/fistp store: x86 writes the "integer indefinite" for NaN/out-of-range; a C cast is UB

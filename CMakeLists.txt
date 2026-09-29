@@ -14,6 +14,10 @@ file(GLOB GEN_SRCS CONFIGURE_DEPENDS ${ROOT}/gen/recomp/recomp_*.c ${ROOT}/gen/r
 add_library(recomp_gen STATIC ${GEN_SRCS})
 target_include_directories(recomp_gen PRIVATE ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include)
 target_compile_definitions(recomp_gen PRIVATE RECOMP_LOCAL_REGS)
+option(RUGBY_TRACE "lifted bodies record entry in a per-thread ring (dumped on fatal)" ON)
+if(RUGBY_TRACE)
+  target_compile_definitions(recomp_gen PRIVATE RECOMP_TRACE)
+endif()
 target_compile_options(recomp_gen PRIVATE -w -fwrapv -fno-strict-aliasing -O1 -g0)
 
 # ---- runtime core ------------------------------------------------------------------------
@@ -25,9 +29,9 @@ add_custom_command(OUTPUT ${ROOT}/gen/runtime/imports.c
   COMMAND ${Python3_EXECUTABLE} ${ROOT}/tools/gen_imports.py
   DEPENDS ${ROOT}/tools/gen_imports.py ${ROOT}/analysis/pe_analysis.json ${RT_ALL_SRCS}
   WORKING_DIRECTORY ${ROOT} COMMENT "gen_imports")
-file(GLOB RT_CORE_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/core/*.c)
+file(GLOB RT_CORE_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/core/*.c ${ROOT}/runtime/win32/*.c)
 add_library(rt_core STATIC ${RT_CORE_SRCS} ${ROOT}/gen/runtime/imports.c)
-target_include_directories(rt_core PUBLIC ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include)
+target_include_directories(rt_core PUBLIC ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include ${ROOT}/runtime/win32)
 target_compile_options(rt_core PRIVATE -Wall -Wno-unused-function -fwrapv -fno-strict-aliasing)
 
 # ---- platform + executable -----------------------------------------------------------------
