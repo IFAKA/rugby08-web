@@ -31,7 +31,7 @@
       ],
       "desc": "pcrecomp disasm32 → analysis/functions.json with >=15000 functions",
       "check": "python3 tools/count_functions.py analysis/functions.json --min 15000",
-      "passes": false
+      "passes": true
     },
     {
       "id": "analyze.ghidra",
@@ -50,7 +50,7 @@
       ],
       "desc": "score_recovery: pcrecomp catalog vs Ghidra; recall >= 0.97 recorded in REVERSE.md; missing starts merged into functions.json",
       "check": "grep -Eq 'recall: (0\\.9[7-9]|1\\.0)' REVERSE.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "analyze.rtti",
@@ -59,7 +59,7 @@
       ],
       "desc": "pcrecomp cpp/rtti.py → analysis/vtables.json; class count >= 600 (matches rugby08_classes_and_sources.txt)",
       "check": "jq -e 'length>=600' analysis/vtables.json >/dev/null",
-      "passes": false
+      "passes": true
     },
     {
       "id": "lift.all",

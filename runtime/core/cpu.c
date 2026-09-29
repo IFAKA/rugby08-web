@@ -1,0 +1,158 @@
+/* cpu.c -- the CPU state the lifted code reads, dispatch lookups, bridges, guest_call. */
+#include "rt.h"
+#include <pthread.h>
+#include <time.h>
+
+/* Per-thread CPU state (declared RECOMP_TLS in the vendored recomp_types.h) */
+RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp, g_ebx, g_esi, g_edi, g_ebp;
+RECOMP_TLS double   g_st[8];
+RECOMP_TLS int      g_fp_top;
+RECOMP_TLS uint16_t g_fpu_cw = 0x027F;
+RECOMP_TLS uint32_t g_flag_k, g_flag_a, g_flag_b, g_flag_cf;
+RECOMP_TLS uint32_t g_fs_base;
+RECOMP_TLS uint64_t g_mm[8];
+RECOMP_TLS uint32_t g_cur_func;
+RECOMP_TLS uint32_t rt_last_error;
+uint16_t g_seg_cs, g_seg_ds, g_seg_es, g_seg_fs, g_seg_gs, g_seg_ss;
+uint32_t g_gs_base;
+ptrdiff_t g_mem_base;
+
+/* Diagnostics rings: shared, racy by design (they only feed crash reports) */
+uint32_t g_icall_trace[ICALL_TRACE_SIZE], g_icall_from[ICALL_TRACE_SIZE];
+uint32_t g_icall_trace_idx, g_icall_count;
+
+uint64_t recomp_host_rdtsc(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;  /* "1 GHz" TSC */
+}
+
+/* ---- bridges ------------------------------------------------------------ */
+#define MAX_HOST_BRIDGES 8192
+typedef struct { const char *name; rt_hle_fn fn; uint16_t pop; } host_bridge_t;
+static host_bridge_t g_host[MAX_HOST_BRIDGES];
+static uint32_t g_host_count;
+static pthread_mutex_t g_host_mu = PTHREAD_MUTEX_INITIALIZER;
+
+/* One trampoline per bridge kind: recover the index from the VA being dispatched.
+ * RECOMP_ICALL has already pushed the dummy return address: a[k] = MEM32(esp + 4 + 4k). */
+static RECOMP_TLS uint32_t t_bridge_va;
+
+static void run_bridge(const char *dll, const char *name, rt_hle_fn fn, uint16_t pop) {
+    const uint32_t *a = (const uint32_t *)G2H(g_esp + 4);
+    uint32_t ret;
+    if (fn) {
+        ret = fn(a);
+    } else {
+        rt_log("UNIMPL %s!%s", dll, name);
+        ret = 0;
+    }
+    g_eax = ret;
+    g_esp += 4 + pop;          /* dummy return address + stdcall args */
+}
+
+static void import_trampoline(void) {
+    uint32_t i = (t_bridge_va - RT_BRIDGE_IMPORT) >> 4;
+    const rt_import_t *im = &rt_imports[i];
+    run_bridge(im->dll, im->name, im->fn, im->pop);
+}
+
+static void host_trampoline(void) {
+    uint32_t i = (t_bridge_va - RT_BRIDGE_HOST) >> 4;
+    host_bridge_t *b = &g_host[i];
+    run_bridge("host", b->name, b->fn, b->pop);
+}
+
+uint32_t rt_host_bridge(const char *name, rt_hle_fn fn, uint16_t pop) {
+    pthread_mutex_lock(&g_host_mu);
+    if (g_host_count >= MAX_HOST_BRIDGES) rt_fatal("host bridge table full");
+    uint32_t i = g_host_count++;
+    g_host[i] = (host_bridge_t){ name, fn, pop };
+    pthread_mutex_unlock(&g_host_mu);
+    return RT_BRIDGE_HOST + 16 * i;
+}
+
+recomp_func_t recomp_lookup_manual(uint32_t va) {
+    if (va >= RT_BRIDGE_IMPORT && va < RT_BRIDGE_IMPORT + 16 * rt_import_count) {
+        t_bridge_va = va;
+        return import_trampoline;
+    }
+    if (va >= RT_BRIDGE_HOST && va < RT_BRIDGE_HOST + 16 * g_host_count) {
+        t_bridge_va = va;
+        return host_trampoline;
+    }
+    return NULL;
+}
+
+recomp_func_t recomp_lookup_import(uint32_t va) { (void)va; return NULL; }
+
+recomp_func_t recomp_lookup(uint32_t va) {
+    uint32_t lo = 0, hi = recomp_dispatch_count;
+    while (lo < hi) {
+        uint32_t mid = (lo + hi) >> 1;
+        uint32_t m = recomp_dispatch_table[mid].address;
+        if (m == va) return recomp_dispatch_table[mid].func;
+        if (m < va) lo = mid + 1; else hi = mid;
+    }
+    return NULL;
+}
+
+/* ---- COM ------------------------------------------------------------------ */
+uint32_t rt_com_vtable(const char *iface, const rt_method_t *m, int n) {
+    (void)iface;
+    uint32_t vt = gcalloc(4u * (uint32_t)n);
+    for (int i = 0; i < n; i++)
+        wr32(vt + 4u * (uint32_t)i, rt_host_bridge(m[i].name, m[i].fn, m[i].pop));
+    return vt;
+}
+
+/* Host pointers are 64-bit natively: keep them in a side table, store the index at this+4. */
+#define MAX_COM_OBJS 65536
+static void *g_com_host[MAX_COM_OBJS];
+static uint32_t g_com_count = 1;
+static pthread_mutex_t g_com_mu = PTHREAD_MUTEX_INITIALIZER;
+
+uint32_t rt_com_new(uint32_t vtbl, void *host) {
+    pthread_mutex_lock(&g_com_mu);
+    if (g_com_count >= MAX_COM_OBJS) rt_fatal("COM object table full");
+    uint32_t idx = g_com_count++;
+    g_com_host[idx] = host;
+    pthread_mutex_unlock(&g_com_mu);
+    uint32_t obj = gcalloc(16);
+    wr32(obj, vtbl);
+    wr32(obj + 4, idx);
+    return obj;
+}
+
+void *rt_com_host(uint32_t this_va) {
+    uint32_t idx = rd32(this_va + 4);
+    return idx < MAX_COM_OBJS ? g_com_host[idx] : NULL;
+}
+
+/* ---- guest_call ------------------------------------------------------------ */
+uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
+    recomp_func_t fn = recomp_lookup_manual(va);
+    if (!fn) fn = recomp_lookup(va);
+    if (!fn) {
+        rt_log("guest_call: no function at 0x%08X", va);
+        return 0;
+    }
+    uint32_t sv_esp = g_esp, sv_ebx = g_ebx, sv_esi = g_esi, sv_edi = g_edi, sv_ebp = g_ebp;
+    uint32_t sv_cur = g_cur_func;
+    for (int i = n - 1; i >= 0; i--) { g_esp -= 4; wr32(g_esp, args[i]); }
+    g_esp -= 4; wr32(g_esp, RECOMP_RETADDR);
+    fn();
+    uint32_t ret = g_eax;
+    g_esp = sv_esp; g_ebx = sv_ebx; g_esi = sv_esi; g_edi = sv_edi; g_ebp = sv_ebp;
+    g_cur_func = sv_cur;
+    return ret;
+}
+
+uint32_t guest_call(uint32_t va, int n, ...) {
+    uint32_t args[16];
+    va_list ap;
+    va_start(ap, n);
+    for (int i = 0; i < n && i < 16; i++) args[i] = va_arg(ap, uint32_t);
+    va_end(ap);
+    return guest_callv(va, n, args);
+}

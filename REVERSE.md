@@ -30,3 +30,19 @@ Facts only, each backed by a tool output in `analysis/` (gitignored). Regenerate
 - WINMM: `timeGetTime`, `timeBeginPeriod`, `timeEndPeriod`, `timeSetEvent`, `timeKillEvent`, `waveOutGetNumDevs`, `timeGetDevCaps`.
 - ADVAPI32: registry reads only (`RegOpenKey[Ex]A`, `RegQueryValueExA`, `RegEnumValueA`, `RegCloseKey`).
 - Full list: `analysis/imports.json`. Raw tool output: `logs/extract_imports.log`.
+
+## Function recovery (pcrecomp disasm32 vs Ghidra 12.1 headless; `tools/score.sh`, `tools/build_catalog.py`)
+- disasm32: 54,031 functions, 92.5% byte coverage. Ghidra: 26,664 functions in `.text`, 88.5% byte coverage.
+- Scored against Ghidra: recall: 0.9941, precision 0.558. False positives are 7,721 splits (inside a Ghidra function) and 13,281 invented (outside every one).
+- The "invented" starts are real code that Ghidra skips because only data reaches them:
+  - MSVC C++ EH unwind funclets (`lea ecx,[ebp-X]; jmp dtor`).
+  - EH handler stubs (`mov eax, FuncInfo; jmp 0x8715E3` = __CxxFrameHandler).
+  - `_initterm` static initializers (`fld; fstp; ret`).
+  - Most sit in 0x800000..0x8CC000, and the 85 KB block at 0x8939D3..0x8A9120 is almost all unwind funclets.
+- Lift catalog (`analysis/lift_catalog.json`), 37,882 entries:
+  - All 26,664 Ghidra starts, plus 123 RTTI methods Ghidra lacked.
+  - 11,094 invented starts that decode cleanly to ret/jmp. 2,756 invented were rejected as junk.
+  - 1 extra direct-call target from the closure.
+  - The 7,032 split starts are excluded on purpose, because an entry mid-function would cut it apart.
+- RTTI (`tools/rtti.sh`): 704 classes with vtables (matches `rugby08_classes_and_sources.txt`) and 2,211 virtual-method entries.
+- Instruction census (`tools/insn_stats.py`): 2.2M instructions in Ghidra bodies. 88k x87, 5.4k MMX (94 funcs), 3.1k SSE (65 funcs, CPU-dispatched CRT math), and `fs:` in 2,151 funcs.

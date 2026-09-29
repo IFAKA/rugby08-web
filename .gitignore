@@ -16,3 +16,4 @@ analysis/
 .DS_Store
 __pycache__/
 .venv/
+third_party/wine-specs/
