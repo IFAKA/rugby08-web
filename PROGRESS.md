@@ -1,9 +1,14 @@
 # PROGRESS (append-only lab notes; read with `tail -40`)
 <!-- BLOCKED notes go directly under this line -->
-BLOCKED: analyze.pe — auto-mode classifier denies running third_party/pcrecomp scripts ("Code from External"). Needs a user permission rule for .venv/bin/python third_party/pcrecomp/** (and later xboxrecomp/d3d9-webgl builds).
 
 ## 2026-09-29 — initializer session
 - Plan: static recompilation via pcrecomp → clang/emscripten; D3D8 via d3d8to9 → d3d9-webgl; SDL2 for window/input/audio; ffmpeg VP6 for videos.
 - Harness created: CLAUDE.md, features.json (checks gate `passes`), init.sh (status/next/check), scripts/run.sh (unattended driver).
 - Submodules: third_party/{pcrecomp,xboxrecomp,d3d8to9,d3d9-webgl}. Tools installed (Ghidra 12.1.4 formula, not cask; analyzeHeadless in /opt/homebrew/opt/ghidra/libexec/support).
 - Exe facts: imports d3d8, ddraw, dinput, dsound, winmm, user32, gdi32, kernel32, advapi32; uses CreateThread/events/CS/TLS/timeSetEvent; no D3D shader strings (likely fixed-function).
+
+## 2026-09-29 — session 2: analyze.pe
+- User added .claude/settings.local.json (allow third_party tools, deny destructive/system cmds). The blocker is cleared.
+- pcrecomp pe_analyze + extract_imports: 226 imports across 9 DLLs. analysis/imports.json and REVERSE.md written. analyze.pe PASS.
+- DSOUND is imported by ordinal (1=DirectSoundCreate, 6=DirectSoundCaptureCreate).
+- Next: analyze.disasm (disasm32, slow: hours per pcrecomp docs) running in the background, with analyze.ghidra in parallel.

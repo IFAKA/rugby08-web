@@ -22,7 +22,7 @@
       ],
       "desc": "pcrecomp pe_analyze + extract_imports → analysis/pe_analysis.json, analysis/imports.json; import count recorded in REVERSE.md",
       "check": "jq -e '.imports|length>0' analysis/pe_analysis.json >/dev/null && grep -q 'Imports:' REVERSE.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "analyze.disasm",
