@@ -4,10 +4,10 @@ Facts only, each backed by a tool output in `analysis/` (gitignored). Regenerate
 
 ## PE (pcrecomp `pe/pe_analyze.py`, `pe/extract_imports.py`)
 - PE32 i386, MSVC linker 7.10, image base 0x400000, entry 0x87555C. The header timestamp is 2015-10-24, which suggests the unpacker rewrote it.
-- Sections, each with raw size equal to virtual size (a flat unpacked dump):
-  - `.text`: VA 0x1000, 0x4CB000 bytes (about 4.8 MB of code).
-  - `.data`: VA 0x4CC000, 0xB97000 bytes. The IAT lives here, at 0x4CC07C and later.
-  - `.idata`: VA 0x1063000, 0x2000 bytes.
+- Sections as RVAs (add 0x400000 for the VA), each with raw size equal to virtual size (a flat unpacked dump):
+  - `.text`: RVA 0x1000, 0x4CB000 bytes (about 4.8 MB of code). VA 0x401000..0x8CC000.
+  - `.data`: RVA 0x4CC000, 0xB97000 bytes. The IAT lives here, at VA 0x8CC07C and later.
+  - `.idata`: RVA 0x1063000, 0x2000 bytes. The image spans VA 0x400000..0x1465000.
 - Imports: 226 across 9 DLLs.
 
 | DLL | Count |

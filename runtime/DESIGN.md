@@ -8,14 +8,21 @@
   - Web (wasm32): arena `malloc`ed, 1 GiB. Addition wraps mod 2^32.
   - Flat mode (VA == host pointer) is impossible natively, because arm64 macOS keeps a 4 GiB __PAGEZERO. Both targets use the offset for uniformity.
 - Guest layout:
-  - The whole PE image is copied to 0x400000..0x1065000. That includes `.text`, since MSVC puts switch tables and constants there.
+  - The whole PE image is copied to VA 0x400000..0x1465000. That includes `.text`, since MSVC puts switch tables and constants there.
   - Main-thread stack: 0x00100000..0x00300000 (2 MiB). Each other thread gets a 1 MiB stack from the guest heap.
   - Guest heap: dlmalloc mspace (from emscripten's `system/lib/dlmalloc.c`, CC0) over 0x02000000..(arena end − 16 MiB). It backs HeapAlloc, VirtualAlloc, GlobalAlloc and LocalAlloc.
   - Per-thread TIB (`g_fs_base`): the SEH chain at fs:[0], the stack bounds, and the TLS slots array at fs:[0x2C].
 - Calls: `RECOMP_ICALL(va)` pushes a dummy return address, then looks up in order `recomp_lookup_manual`, the generated table, then `recomp_lookup_import`. We supply the manual and import lookups.
 
+## Lifter choice (measured with `tools/insn_stats.py` → `analysis/insn_stats.json`)
+- 2.2M instructions: 88k x87, 5.4k MMX (94 funcs), 3.1k SSE/SSE2 (65 funcs), and `fs:` in 2,151 funcs (SEH).
+- Lifter: `lift32` via `python -m tools`, the global-register model with RECOMP_TLS. It has MMX and `fs:`, but no XMM.
+  - `lift32_cpu` handles XMM, but is a separate driver and slower (a CPU struct behind a pointer).
+- The SSE code is the CPU-dispatched paths of MSVC's libm and math code. Our `cpuid` reports no SSE or SSE2, so those paths never run.
+  - If a trace ever hits an XMM function, lift that one function with `lift32_cpu`, or add the ops to lift32.
+
 ## Win32/COM boundary ("bridges")
-- The IAT holds 226 slots, starting at VA 0x4CC07C. At boot, slot i ← `BRIDGE_IMPORT_BASE + 16*i`, where `BRIDGE_IMPORT_BASE` = 0xFFF00000. That range is never dereferenced, only dispatched.
+- The IAT holds 226 slots at VA 0x8CC07C..0x8CC39C (RVAs in `pe_analysis.json` `.imports[].iat_rva`). At boot, slot i ← `BRIDGE_IMPORT_BASE + 16*i`, where `BRIDGE_IMPORT_BASE` = 0xFFF00000. That range is never dereferenced, only dispatched.
 - COM objects (IDirect3D8, IDirect3DDevice8…, IDirectSound…, IDirectInput…) live in guest memory:
   - Layout: `{ u32 vtbl_va; u32 host_index; }`.
   - Each vtable is a guest array of bridge VAs in the 0xFFE00000 range.
