@@ -151,6 +151,13 @@ while True:
     print(f"round {rounds}: +{len(new)} call targets", file=log)
 src["call_targets_added"] = added_total
 
+# A start inside a patched `push R; push T; ret` site (and its junk gap) is never a function: the
+# lifter reads that span as `call T; jmp R`. Seeds (fixpoint fall-throughs, invented starts) that land
+# there would cut the enclosing function short and leave a 5-byte call in a 3-byte "function".
+_inside_site = {a for s, _, r in OBF for a in range(s, r)}
+src["dropped_inside_obf_sites"] = len(entries & _inside_site)
+entries -= _inside_site
+
 out = sorted(entries)
 json.dump({"code_ranges": [TEXT, PROT], "sources": src, "entries": out}, open(A / "lift_catalog.json", "w"))
 print(json.dumps(src), file=log)

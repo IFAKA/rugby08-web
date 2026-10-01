@@ -78,3 +78,8 @@ negative result.
 ## 2026-10-02 — web.assets PASS
 - tools/package_assets.py chunks all 1,151 Game Files (1.79 GB) into 8 MiB chunks + manifest.json (path, size, sha256, chunk list) in build/web/data/; tools/check_asset_manifest.py verifies sizes and hashes against the originals.
 - All remaining items depend transitively on native.boot (BLOCKED, protection-layer decision). Nothing independent is left. Waiting on the user: unprotected exe, or explicit go-ahead to analyze the protector region.
+
+## 2026-10-02 — native.boot: first protector fault fixed (still failing, further along)
+- Release NFO says the protection is SecuROM 7.33 (not SafeDisc). Its obfuscation: push/push/ret calls, xor-encrypted indirect calls, stolen procedures behind jmp [ptr], VM for some code (research: lostfilearchives "Breaking SecuROM 7").
+- `#UD empty entry at 0x01059EEA` was OUR bug, not a new protector form: lift_fixpoint seeded function starts (0x1059EEA/EED) inside a patched `push R; push T; ret` site, which cut sub_01059ED6 short. build_catalog.py now drops any start inside a patched site [site, R) (410 dropped; 44,591 entries). Re-lift converged in 4 rounds.
+- Now the native binary gets past that point and segfaults (exit 139) inside CRT startup (entry 0x87555C, which REVERSE.md says IS the relocated WinMainCRTStartup); log shows ICALLs to garbage VAs attributed to sub_00875BA8. tools/run_native.sh (the native.boot check) was never written. Next: lldb backtrace of the segfault.
