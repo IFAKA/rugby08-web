@@ -74,3 +74,7 @@ negative result.
 ## 2026-10-02 — web.serve PASS
 - tools/serve.py: localhost-only (127.0.0.1) server with COOP/COEP/CORP, application/wasm MIME, no-store; tools/serve_check.sh verifies headers. `./init.sh serve` runs it.
 - Remaining items all depend (directly or transitively) on native.boot, which is BLOCKED on the protection-layer decision, except web.assets (needs web.compile, now passing). Next: web.assets.
+
+## 2026-10-02 — web.assets PASS
+- tools/package_assets.py chunks all 1,151 Game Files (1.79 GB) into 8 MiB chunks + manifest.json (path, size, sha256, chunk list) in build/web/data/; tools/check_asset_manifest.py verifies sizes and hashes against the originals.
+- All remaining items depend transitively on native.boot (BLOCKED, protection-layer decision). Nothing independent is left. Waiting on the user: unprotected exe, or explicit go-ahead to analyze the protector region.

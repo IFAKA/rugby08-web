@@ -215,7 +215,7 @@
       ],
       "desc": "ALL Game Files packaged into chunked lazy-loaded bundles in build/web/data/ (no picker, no fallback); manifest lists every original file",
       "check": "python3 tools/check_asset_manifest.py 'Game Files' build/web/data/manifest.json",
-      "passes": false
+      "passes": true
     },
     {
       "id": "web.serve",
