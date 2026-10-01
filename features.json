@@ -206,7 +206,7 @@
       ],
       "desc": "Same sources build with emcc (SDL2 port, WebGL2, pthreads) into build/web/",
       "check": "test -f build/web/rugby08.wasm -a -f build/web/index.html",
-      "passes": false
+      "passes": true
     },
     {
       "id": "web.assets",

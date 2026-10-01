@@ -46,3 +46,16 @@ if(NOT EMSCRIPTEN)
   find_package(Threads REQUIRED)
   target_link_libraries(rugby08 PRIVATE Threads::Threads)
 endif()
+
+if(EMSCRIPTEN)
+  # build/web/{index.html,rugby08.js,rugby08.wasm}; the guest arena needs a large growable heap.
+  set_target_properties(rugby08 PROPERTIES
+    OUTPUT_NAME rugby08 SUFFIX .html
+    RUNTIME_OUTPUT_DIRECTORY ${ROOT}/build/web)
+  target_compile_options(rt_core PRIVATE -pthread)
+  target_compile_options(recomp_gen PRIVATE -pthread)
+  # -O0 at link skips the wasm-opt -O3 pass (>1h and >24 GB on the 91 MB module); revisit for release builds.
+  target_link_options(rugby08 PRIVATE -O0 -pthread -sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
+    -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=4 -sEXIT_RUNTIME=1)
+  add_custom_command(TARGET rugby08 POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:rugby08>/rugby08.html $<TARGET_FILE_DIR:rugby08>/index.html)
+endif()

@@ -64,3 +64,9 @@ negative result.
 - Next session: read the BLOCKED note first. If the user has supplied an alternate/unprotected
   exe, point analyze.pe and the rest of the pipeline at it (same tooling, same features.json).
   Otherwise wait for the user's direction before touching the protector region again.
+
+## 2026-10-02 — web.compile PASS
+- emcc build of all 115 lifted C files + runtime takes ~25 min cold (cached afterwards); platform/web/platform.c is a stub, SDL2 + WebGL2 + pthreads link flags are in CMakeLists.txt.
+- Default link ran `wasm-opt -O3` on the 91 MB module: >1 h and >24 GB RSS, killed. Linking with `-O0` skips it (relink 39 s). Revisit optimization for release builds only.
+- Post-build step copies rugby08.html to index.html (the check expects it).
+- Next: web.serve (tools/serve.py with COOP/COEP). native.boot still BLOCKED on the protection-layer decision.
