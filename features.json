@@ -224,7 +224,7 @@
       ],
       "desc": "tools/serve.py serves build/web on localhost with COOP/COEP headers",
       "check": "tools/serve_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "web.boot",
