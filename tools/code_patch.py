@@ -26,13 +26,61 @@ static data (`push ebx; clc; mov ebx,[A]; sbb ebx,[B]; xchg [esp],ebx; add [esp+
 dozen arithmetic variants) and returns into it with R+K as its return address. resolve_stub runs
 the stub on an emulator over the image bytes; when it reaches its ret with every register but eax
 restored, the site becomes call <callee>; jmp R+K (150 sites). The other 6 jump to a dispatcher
-whose table is filled at runtime; they stay as written.
+whose table is filled at runtime (`add [esp], K; jmp 0xAC54E0`, the key pushed just before the
+site): the callee is unknown statically, but the shape is still a call that returns to R+K, so
+the site becomes call S; jmp R+K with S = the stub just past its add (dispatch_stub). Left as
+written, the generator read `push R; jmp R` as a call returning to R and ran the stub twice.
+Their junk gap ends at R, not at the return address (GAP_END).
 """
 import re
 
 PAT = re.compile(rb"\x68(....)\x68(....)\xC3", re.S)
 PAT_JMP = re.compile(rb"\x68(....)(?:\xE9(....)|\xEB(.))", re.S)
 GAPS = (4, 8, 12, 16)
+GAP_END = {}    # site -> end of its junk gap, where that is not the return address
+
+
+def gap_end(site: int, ret: int) -> int:
+    return GAP_END.get(site, ret)
+
+
+def _junk(i) -> bool:
+    """Protector filler that changes nothing (flags aside): nop, xchg/mov r,r, lea r,[r], shifts by 0."""
+    ops = [o.strip() for o in i.op_str.split(",")]
+    if i.mnemonic == "nop":
+        return True
+    if i.mnemonic in ("xchg", "mov") and len(ops) == 2 and ops[0] == ops[1]:
+        return True
+    if i.mnemonic == "lea" and len(ops) == 2 and ops[1] == f"[{ops[0]}]":
+        return True
+    return i.mnemonic in ("shl", "shr", "sar", "rol", "ror") and len(ops) == 2 and ops[1] == "0"
+
+
+def dispatch_stub(text: bytes, t_lo: int, r: int):
+    """(S, R+K) for a stub at r of the form  junk*; add dword ptr [esp], K; junk*; jmp D  (D in code),
+    whose callee comes from a runtime-filled dispatcher table; else None."""
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_32
+    from ranges import in_code
+    o = r - t_lo
+    if not 0 <= o < len(text):
+        return None
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    s = k = None
+    for n, i in enumerate(md.disasm(text[o:o + 48], r)):
+        if n >= 8:
+            return None
+        if s is None:
+            if i.mnemonic == "add" and i.op_str.startswith("dword ptr [esp], "):
+                k, s = int(i.op_str.rsplit(" ", 1)[1], 0), i.address + i.size
+            elif not _junk(i):
+                return None
+        elif i.mnemonic == "jmp" and i.op_str.startswith("0x"):
+            # D (0xAC54E0, 0xAC66C0) is a protector thunk in .data, outside the code ranges
+            d = int(i.op_str, 16)
+            return (s, r + k) if t_lo <= d < t_lo + len(text) and 0 < k < 0x40 and in_code(r + k) else None
+        elif not _junk(i):
+            return None
+    return None
 
 
 def find_sites(text: bytes, t_lo: int, t_hi: int, low: bytes = b""):
@@ -61,6 +109,8 @@ def find_sites(text: bytes, t_lo: int, t_hi: int, low: bytes = b""):
                 res = resolve_stub(text, t_lo, r, pushed=r, low=low)    # as the site's ret leaves it
                 if res and in_code(res[1]) and t_lo <= res[0] < t_lo + len(text):
                     out.append((site, res[0], res[1]))
+                elif (d := dispatch_stub(text, t_lo, r)):
+                    out.append((site, d[0], d[1])); GAP_END[site] = r
     taken = {a for s, _, r in out for a in range(s, r)}
     for m in PAT_JMP.finditer(text):
         site = t_lo + m.start()
@@ -74,6 +124,8 @@ def find_sites(text: bytes, t_lo: int, t_hi: int, low: bytes = b""):
                 res = resolve_stub(text, t_lo, site, low=low)
                 if res and in_code(res[1]) and t_lo <= res[0] < t_lo + len(text):
                     out.append((site, res[0], res[1]))
+                elif (d := dispatch_stub(text, t_lo, r)):
+                    out.append((site, d[0], d[1])); GAP_END[site] = r
     return sorted(out)
 
 
@@ -164,7 +216,7 @@ def patch(text: bytes, t_lo: int, t_hi: int, low: bytes = b""):
         jmp_rel = (r - (site + 10)) & 0xFFFFFFFF
         buf[o:o + 5] = b"\xE8" + call_rel.to_bytes(4, "little")
         buf[o + 5:o + 10] = b"\xE9" + jmp_rel.to_bytes(4, "little")
-        for k in range(site + 10, r):
+        for k in range(site + 10, gap_end(site, r)):
             buf[k - t_lo] = 0x90
     for m in PAT_PUSHRET.finditer(bytes(buf)):
         site, t = t_lo + m.start(), int.from_bytes(m.group(1), "little")

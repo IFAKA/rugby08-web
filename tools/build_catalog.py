@@ -180,7 +180,8 @@ src["call_targets_added"] = added_total
 # A start inside a patched `push R; push T; ret` site (and its junk gap) is never a function: the
 # lifter reads that span as `call T; jmp R`. Seeds (fixpoint fall-throughs, invented starts) that land
 # there would cut the enclosing function short and leave a 5-byte call in a 3-byte "function".
-_inside_site = {a for s, _, r in OBF for a in range(s, r)}
+# The site start itself stays: a body cut just before it tail-jumps there (0x407599 -> 0x4075A0).
+_inside_site = {a for s, _, r in OBF for a in range(s + 1, code_patch.gap_end(s, r))}
 src["dropped_inside_obf_sites"] = len(entries & _inside_site)
 entries -= _inside_site
 
