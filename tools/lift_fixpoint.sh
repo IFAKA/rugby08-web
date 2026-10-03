@@ -5,6 +5,10 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 : > logs/lift_fixpoint.log
+
+# start from no static seeds: seeds found by an older lift (e.g. before a code_patch rewrite) can
+# land inside real instructions and cut bodies short ("#UD empty entry")
+rm -f analysis/static_seeds.json
 for round in 1 2 3 4 5 6 7 8 9 10; do
   .venv/bin/python tools/build_catalog.py >> logs/lift_fixpoint.log 2>&1 || { echo "lift_fixpoint: catalog failed"; exit 1; }
   .venv/bin/python tools/lift.py >> logs/lift_fixpoint.log 2>&1 || { echo "lift_fixpoint: lift failed"; exit 1; }

@@ -11,3 +11,7 @@ CODE_LO, CODE_HI = TEXT[0], PROT[1]     # one buffer covering both (the lifter d
 
 def in_code(a: int) -> bool:
     return TEXT[0] <= a < TEXT[1] or PROT[0] <= a < PROT[1]
+
+# CRT initializer tables walked by _cinit (0x875BA8): __xi_a..__xi_z (C, return int) and
+# __xc_a..__xc_z (C++ static constructors). Entries are reached only through these tables.
+INITTERM = ((0x94B4C8, 0x94B4E0), (0x947000, 0x94B4C4))

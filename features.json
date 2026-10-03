@@ -95,7 +95,7 @@
       ],
       "desc": "Native binary runs CRT init and reaches WinMain (trace line 'WinMain entered')",
       "check": "tools/run_native.sh --frames 0 --expect 'WinMain entered'",
-      "passes": false
+      "passes": true
     },
     {
       "id": "native.window",

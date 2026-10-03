@@ -50,3 +50,10 @@ Facts only, each backed by a tool output in `analysis/` (gitignored). Regenerate
 ## Entry points (from disassembly of the CRT entry 0x87555C)
 - WinMainCRTStartup is 0x87555C. It calls GetModuleHandleA(0) and does the MZ/PE check, then heap and IO init, GetCommandLineA and GetStartupInfoA. Finally it calls `WinMain(hInstance, 0, lpCmdLine, nShowCmd)` at **0x812FC0**.
 - Traced function hooks (`tools/hooks.json`) make a lifted body log `<name> entered` on entry.
+
+## Protection-layer code transforms (SecuROM 7.33 per release NFO; `tools/code_patch.py`, `tools/ranges.py`)
+- Obfuscated calls, rewritten for the lifter only (guest image untouched) as `call T; jmp R`:
+  `push R; push T; ret` (3,937 sites) and `push R; jmp T` (3,938 near + 72 short), R = 4/8/12/16 bytes past the site, junk in between.
+  Lifting `push R; jmp T` literally made T's `ret` leave the lifted caller, so R's epilog never ran (esp/ebp off by 4-12 at boot).
+- Stolen prologues: `jmp [ptr]` stubs in .text (e.g. 0x421550 -> [0x1384B08] = 0x45C020) whose target is a whole function, so they're tail jumps.
+- Trigger counters: `dec dword [X]; je <check>` throughout game code (e.g. 0x45C027). Lifted as written.

@@ -22,7 +22,7 @@ base = pe.OPTIONAL_HEADER.ImageBase
 img = pe.get_memory_mapped_image()
 sys.path.insert(0, str(root / "tools"))
 import code_patch                                           # noqa: E402
-from ranges import CODE_LO, CODE_HI, TEXT, PROT, in_code    # noqa: E402
+from ranges import CODE_LO, CODE_HI, TEXT, PROT, INITTERM, in_code    # noqa: E402
 T_LO, T_HI = TEXT
 _pcode, OBF = code_patch.patch(img[CODE_LO - base:CODE_HI - base], CODE_LO, CODE_HI)
 img = img[:CODE_LO - base] + _pcode + img[CODE_HI - base:]  # decode what the lifter decodes
@@ -104,6 +104,11 @@ for i in _mds.disasm(img[T_LO - base:T_HI - base], T_LO):
             prot_seeds.add(v)
 prot_seeds = {v for v in prot_seeds if decodes_cleanly(v)}
 src["protector_seeds_new"] = len(prot_seeds - entries); entries |= prot_seeds
+
+# every _initterm slot (tools/ranges.py INITTERM): small initializers nothing else references
+init = {_st.unpack("<I", img[a - base:a - base + 4])[0] for lo_, hi_ in INITTERM for a in range(lo_, hi_, 4)}
+init = {v for v in init if in_code(v)}
+src["initterm_new"] = len(init - entries); entries |= init
 
 inv_ok = inv_bad = inv_noref = split = 0
 for f in json.load(open(A / "functions.json"))["functions"]:

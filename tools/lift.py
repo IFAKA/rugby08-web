@@ -14,7 +14,7 @@ PC = root / "third_party/pcrecomp/tools"
 for d in ("pe", "disasm", "lift"):
     sys.path.insert(0, str(PC / d))
 sys.path.insert(0, str(root / "tools"))
-import generate, lift32, lift_ext, code_patch, ranges     # noqa: E402
+import generate, lift32, lift_ext, code_patch, ranges, jumptables     # noqa: E402
 from pe_analyze import analyze_pe, build_iat_map          # noqa: E402
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32          # noqa: E402
 
@@ -86,7 +86,7 @@ def lift_one(idx):
     end = _G["end"][addr]
     name = f"sub_{addr:08X}"
     try:
-        insns, leaders = generate.linear_disassemble_function(_G["md"], code, cs, addr, end)
+        insns, leaders = jumptables.sweep(_G["md"], code, cs, addr, end)
         trimmed, seen_ret = [], False
         for i in insns:
             if i.mnemonic == "int3":
