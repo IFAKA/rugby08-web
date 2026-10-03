@@ -90,6 +90,7 @@ uint8_t plat_vk_down(uint32_t vk) {
    SetCursorPos every frame, which pinned the desktop pointer during checks. They keep a virtual
    cursor in screen coordinates instead; replay clicks set it. */
 static int g_vcur_x, g_vcur_y;
+static int g_rel, g_cx, g_cy;   /* captured-pointer mode and in-window position */
 static int virtual_cursor(void) { return rt_frame_limit > 0 || rt_replay_path[0]; }
 
 /* ---- window --------------------------------------------------------------------------------- */
@@ -204,6 +205,7 @@ void plat_gl_swap(void) {
 void plat_cursor_pos(int *x, int *y) {
     if (virtual_cursor()) { *x = g_vcur_x; *y = g_vcur_y; return; }
     int gx = 0, gy = 0;
+    if (g_rel && g_win) { int wx, wy; SDL_GetWindowPosition(g_win, &wx, &wy); *x = wx + g_cx; *y = wy + g_cy; return; }
     if (g_inited) SDL_GetGlobalMouseState(&gx, &gy);
     *x = gx; *y = gy;
 }
@@ -252,6 +254,22 @@ static uint32_t mk_buttons(void) {
     return mk;
 }
 
+/* Interactive play captures the pointer (SDL relative mode) and tracks the in-window position from
+   the deltas, so the pointer can never stall at a window edge while the game cursor still has room. */
+static void rel_set(int on) {
+    if (virtual_cursor() || !g_win || on == g_rel) return;
+    if (on) { int x, y; SDL_GetMouseState(&x, &y); g_cx = x; g_cy = y; }
+    SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
+    g_rel = on;
+}
+static void rel_move(int dx, int dy) {
+    int w = 640, h = 480;
+    if (g_win) SDL_GetWindowSize(g_win, &w, &h);
+    g_cx += dx; g_cy += dy;
+    if (g_cx < 0) g_cx = 0; else if (g_cx > w - 1) g_cx = w - 1;
+    if (g_cy < 0) g_cy = 0; else if (g_cy > h - 1) g_cy = h - 1;
+}
+
 static void translate(const SDL_Event *e) {
     if (rt_log_input) {
         if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP)
@@ -267,8 +285,8 @@ static void translate(const SDL_Event *e) {
     case SDL_WINDOWEVENT:
         switch (e->window.event) {
         case SDL_WINDOWEVENT_CLOSE: push(WM_CLOSE_, 0, 0); break;
-        case SDL_WINDOWEVENT_FOCUS_GAINED: push(WM_ACTIVATEAPP_, 1, 0); push(WM_ACTIVATE_, 1, 0); break;
-        case SDL_WINDOWEVENT_FOCUS_LOST: push(WM_ACTIVATE_, 0, 0); push(WM_ACTIVATEAPP_, 0, 0); break;
+        case SDL_WINDOWEVENT_FOCUS_GAINED: rel_set(1); push(WM_ACTIVATEAPP_, 1, 0); push(WM_ACTIVATE_, 1, 0); break;
+        case SDL_WINDOWEVENT_FOCUS_LOST: rel_set(0); push(WM_ACTIVATE_, 0, 0); push(WM_ACTIVATEAPP_, 0, 0); break;
         case SDL_WINDOWEVENT_SIZE_CHANGED:
             push(WM_SIZE_, 0, ((uint32_t)e->window.data2 << 16) | ((uint32_t)e->window.data1 & 0xFFFF)); break;
         case SDL_WINDOWEVENT_MINIMIZED: push(WM_SIZE_, 1, 0); break;
@@ -299,6 +317,8 @@ static void translate(const SDL_Event *e) {
         break;
     case SDL_MOUSEMOTION:
         g_mdx += e->motion.xrel; g_mdy += e->motion.yrel;
+        if (!g_rel && plat_window_focused()) rel_set(1);
+        if (g_rel) { rel_move(e->motion.xrel, e->motion.yrel); push(WM_MOUSEMOVE_, mk_buttons(), ((uint32_t)(g_cy & 0xFFFF) << 16) | (uint32_t)(g_cx & 0xFFFF)); break; }
         push(WM_MOUSEMOVE_, mk_buttons(), ((uint32_t)(e->motion.y & 0xFFFF) << 16) | (uint32_t)(e->motion.x & 0xFFFF));
         break;
     case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: {
@@ -307,6 +327,7 @@ static void translate(const SDL_Event *e) {
         uint8_t vk = b == SDL_BUTTON_LEFT ? 1 : b == SDL_BUTTON_RIGHT ? 2 : b == SDL_BUTTON_MIDDLE ? 4 : 0;
         if (!base) break;
         g_vk_down[vk] = (uint8_t)!up;
+        if (g_rel) { push(base + (uint32_t)up, mk_buttons(), ((uint32_t)(g_cy & 0xFFFF) << 16) | (uint32_t)(g_cx & 0xFFFF)); break; }
         push(base + (uint32_t)up, mk_buttons(), ((uint32_t)(e->button.y & 0xFFFF) << 16) | (uint32_t)(e->button.x & 0xFFFF));
         break;
     }

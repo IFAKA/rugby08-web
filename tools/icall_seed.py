@@ -9,12 +9,20 @@ from ranges import in_code
 seeds_p = root / "analysis/icall_seeds.json"
 seeds = set(json.load(open(seeds_p))) if seeds_p.exists() else set()
 new, outside = set(), []
-miss = root / "logs/icall_miss.txt"
-for line in (miss.read_text().splitlines() if miss.exists() else []):
+lines = []
+for name in ("logs/icall_miss.txt", "logs/play.log"):   # play.log: app-bundle runs start in another cwd
+    f = root / name
+    if f.exists():
+        lines += f.read_text(errors="replace").splitlines()
+for line in lines:
     m = re.match(r"0x([0-9A-F]{8}) (ICALL|ITAIL) from 0x([0-9A-F]{8})", line)
-    if not m:
-        continue
-    va = int(m.group(1), 16)
+    if m:
+        va = int(m.group(1), 16)
+    else:
+        m = re.match(r"(ICALL|ITAIL): unresolved VA 0x([0-9A-F]{8}) from 0x([0-9A-F]{8})", line)
+        if not m:
+            continue
+        va = int(m.group(2), 16)
     if in_code(va):
         if va not in seeds:
             new.add(va)
