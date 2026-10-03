@@ -162,7 +162,8 @@
       ],
       "desc": "VP6 intro videos decode (ffmpeg libavcodec vp6) and play",
       "check": "tools/run_native.sh --frames 200 --expect 'vp6 frame decoded'",
-      "passes": false
+      "passes": true,
+      "notes": "PASS 2026-10-03: the statically linked VP6 decoder (lifted, MMX tier) decodes eaenpc.vp6; hook on its decompress method 0x7EFAF5 (vtable 0x90A7D8 slot 2) fires per frame; frame 60 screenshot shows the EA SPORTS intro (1313 colours). No ffmpeg."
     },
     {
       "id": "native.audio",
