@@ -13,13 +13,15 @@ typedef struct { uint8_t vk, scan, ext; } keymap_t;
 static keymap_t g_keys[SDL_NUM_SCANCODES];
 static uint8_t g_vk_down[256], g_dik_down[256];
 static int g_mdx, g_mdy, g_mdw;
+static uint8_t g_replay_buttons;      /* mouse buttons held by the input replay (ORed into DirectInput) */
 static int g_inited;                  /* SDL video initialised (set in video_init) */
 
 uint8_t plat_dik_down(uint32_t dik) { return dik < 256 ? g_dik_down[dik] : 0; }
 void plat_mouse_delta(int *dx, int *dy, int *dw) { *dx = g_mdx; *dy = g_mdy; *dw = g_mdw; g_mdx = g_mdy = g_mdw = 0; }
 uint8_t plat_mouse_buttons(void) {
     uint32_t b = g_inited ? SDL_GetMouseState(NULL, NULL) : 0;
-    return (uint8_t)((b & SDL_BUTTON_LMASK ? 1 : 0) | (b & SDL_BUTTON_RMASK ? 2 : 0) | (b & SDL_BUTTON_MMASK ? 4 : 0));
+    return (uint8_t)((b & SDL_BUTTON_LMASK ? 1 : 0) | (b & SDL_BUTTON_RMASK ? 2 : 0) | (b & SDL_BUTTON_MMASK ? 4 : 0) |
+                     g_replay_buttons);
 }
 
 static void keymap_init(void) {
@@ -303,13 +305,13 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
 }
 
 /* ---- input replay (plat.h plat_replay_tick) ---------------------------------------------------- */
-typedef struct { uint32_t frame; uint8_t down; SDL_Scancode sc; } replay_ev_t;
+typedef struct { uint32_t frame; uint8_t down, mouse; SDL_Scancode sc; int x, y; } replay_ev_t;
 static replay_ev_t *g_replay;
 static int g_nreplay, g_ireplay, g_replay_loaded;
 
 static void replay_add(uint32_t frame, int down, SDL_Scancode sc) {
     g_replay = realloc(g_replay, (size_t)(g_nreplay + 1) * sizeof *g_replay);
-    g_replay[g_nreplay++] = (replay_ev_t){ frame, (uint8_t)down, sc };
+    g_replay[g_nreplay++] = (replay_ev_t){ frame, (uint8_t)down, 0, sc, 0, 0 };
 }
 
 static int replay_cmp(const void *a, const void *b) {
@@ -324,7 +326,14 @@ static void replay_load(void) {
     if (!f) { rt_log("replay: cannot open %s", rt_replay_path); return; }
     char line[256], act[16], key[64];
     unsigned frame;
+    int mx, my;
     while (fgets(line, sizeof line, f)) {
+        if (sscanf(line, "%u click %d %d", &frame, &mx, &my) == 3) {   /* left click at window x,y */
+            g_replay = realloc(g_replay, (size_t)(g_nreplay + 2) * sizeof *g_replay);
+            g_replay[g_nreplay++] = (replay_ev_t){ frame, 1, 1, SDL_SCANCODE_UNKNOWN, mx, my };
+            g_replay[g_nreplay++] = (replay_ev_t){ frame + 3, 0, 1, SDL_SCANCODE_UNKNOWN, mx, my };
+            continue;
+        }
         if (line[0] == '#' || sscanf(line, "%u %15s %63[^\n]", &frame, act, key) != 3) continue;
         SDL_Scancode sc = SDL_GetScancodeFromName(key);
         if (sc == SDL_SCANCODE_UNKNOWN) { rt_log("replay: unknown key '%s'", key); continue; }
@@ -343,6 +352,19 @@ void plat_replay_tick(uint32_t frame) {
         const replay_ev_t *r = &g_replay[g_ireplay];
         SDL_Event e;
         memset(&e, 0, sizeof e);
+        if (r->mouse) {
+            if (g_win && g_inited) SDL_WarpMouseInWindow(g_win, r->x, r->y);
+            e.type = r->down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+            e.button.windowID = g_win ? SDL_GetWindowID(g_win) : 0;
+            e.button.button = SDL_BUTTON_LEFT;
+            e.button.state = r->down ? SDL_PRESSED : SDL_RELEASED;
+            e.button.clicks = 1;
+            e.button.x = r->x; e.button.y = r->y;
+            if (g_inited) SDL_PushEvent(&e);
+            g_replay_buttons = r->down ? 1 : 0;
+            rt_trace("replay: frame %u mouse %s at %d,%d", frame, r->down ? "down" : "up", r->x, r->y);
+            continue;
+        }
         e.type = r->down ? SDL_KEYDOWN : SDL_KEYUP;
         e.key.state = r->down ? SDL_PRESSED : SDL_RELEASED;
         e.key.windowID = g_win ? SDL_GetWindowID(g_win) : 0;

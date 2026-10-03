@@ -1,0 +1,4 @@
+# From the title screen (shown by about frame 8000 after the intro movie) into the main menu.
+# Format: <presented frame> tap|down|up <SDL key name>  |  <frame> click <x> <y> (window coords)
+8100 click 320 240
+8400 tap Return
