@@ -45,19 +45,27 @@ void rt_fatal(const char *fmt, ...) {
     exit(3);
 }
 
-/* RECOMP_TRACE builds: every lifted body calls this on entry (per-thread ring, dumped on fatal) */
+/* RECOMP_TRACE builds: every lifted body calls this on entry (per-thread ring, dumped on fatal).
+ * Each slot also keeps ecx and esp at entry (the registers are still in the globals there), so a
+ * dump shows how `this` and the stack flowed into the fault. */
 #define ENTER_RING 256
-static RECOMP_TLS uint32_t t_enter[ENTER_RING];
+static RECOMP_TLS uint32_t t_enter[ENTER_RING][3];
 static RECOMP_TLS uint32_t t_enter_idx;
-void recomp_trace_enter(uint32_t va) { t_enter[t_enter_idx++ & (ENTER_RING - 1)] = va; }
+void recomp_trace_enter(uint32_t va) {
+    uint32_t *e = t_enter[t_enter_idx++ & (ENTER_RING - 1)];
+    e[0] = va; e[1] = g_ecx; e[2] = g_esp;
+}
 
 void recomp_dump_trace(const char *why) {
     if (t_enter_idx) {
-        char line[ENTER_RING * 11 + 1];
-        int o = 0;
-        for (uint32_t i = t_enter_idx > ENTER_RING ? t_enter_idx - ENTER_RING : 0; i < t_enter_idx; i++)
-            o += snprintf(line + o, sizeof line - (size_t)o, " %08X", t_enter[i & (ENTER_RING - 1)]);
-        rt_log("entered (%s), oldest first:%s", why, line);
+        rt_log("entered (%s), oldest first: va ecx esp", why);
+        char line[16 * 32 + 1];
+        int o = 0, k = 0;
+        for (uint32_t i = t_enter_idx > ENTER_RING ? t_enter_idx - ENTER_RING : 0; i < t_enter_idx; i++) {
+            const uint32_t *e = t_enter[i & (ENTER_RING - 1)];
+            o += snprintf(line + o, sizeof line - (size_t)o, " %08X(%08X,%08X)", e[0], e[1], e[2]);
+            if (++k % 16 == 0 || i + 1 == t_enter_idx) { rt_log(" %s", line); o = 0; }
+        }
     }
     rt_log("icall trace (%s), last %d:", why, ICALL_TRACE_SIZE);
     for (int i = 0; i < ICALL_TRACE_SIZE; i++) {

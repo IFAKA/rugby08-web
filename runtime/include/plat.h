@@ -44,6 +44,13 @@ void plat_cursor_pos(int *x, int *y);                        /* screen coordinat
 void plat_cursor_set_pos(int x, int y);
 void plat_cursor_visible(int show);
 
+/* Audio output: 44.1 kHz stereo float. mix(out, frames) fills interleaved L/R frames; it runs on
+ * the host's audio thread (or a pacing thread when no device opens), so it must take its own
+ * locks. Started once; with --audio-capture PATH the mixed output is also written as a 16-bit WAV. */
+enum { PLAT_AUDIO_RATE = 44100 };
+typedef void (*plat_audio_mix_fn)(float *out, int frames);
+int  plat_audio_start(plat_audio_mix_fn mix);                /* 0 = device opened, 1 = paced without one */
+
 #ifdef __cplusplus
 }
 #endif

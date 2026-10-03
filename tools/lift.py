@@ -31,7 +31,7 @@ def _init():
     import pefile
     img = pefile.PE(EXE, fast_load=True).get_memory_mapped_image()
     raw = img[ranges.CODE_LO - info.image_base:ranges.CODE_HI - info.image_base]
-    _G["code"], _G["obf_sites"] = code_patch.patch(raw, ranges.CODE_LO, ranges.CODE_HI)
+    _G["code"], _G["obf_sites"] = code_patch.patch(raw, ranges.CODE_LO, ranges.CODE_HI, img[:ranges.CODE_LO - info.image_base])
     _G["code_start"] = ranges.CODE_LO
     _G["code_end"] = ranges.CODE_HI
     _G["iat"] = build_iat_map(info)

@@ -24,7 +24,7 @@ sys.path.insert(0, str(root / "tools"))
 import code_patch                                           # noqa: E402
 from ranges import CODE_LO, CODE_HI, TEXT, PROT, INITTERM, in_code    # noqa: E402
 T_LO, T_HI = TEXT
-_pcode, OBF = code_patch.patch(img[CODE_LO - base:CODE_HI - base], CODE_LO, CODE_HI)
+_pcode, OBF = code_patch.patch(img[CODE_LO - base:CODE_HI - base], CODE_LO, CODE_HI, img[:CODE_LO - base])
 img = img[:CODE_LO - base] + _pcode + img[CODE_HI - base:]  # decode what the lifter decodes
 md = Cs(CS_ARCH_X86, CS_MODE_32)
 log = open(root / "logs/catalog.log", "w")

@@ -3,11 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 char rt_game_dir[1024] = "Game Files";
 char rt_exe_path[1024] = "Rugby08_unpacked.exe";
 int rt_frame_limit = -1;          /* --frames N: exit after N presented frames (checks); <= 0: no limit */
 char rt_screenshot_path[1024];    /* --screenshot PATH: PNG of the last frame before --frames exits */
+char rt_audio_capture_path[1024]; /* --audio-capture PATH: WAV of the mixed audio output */
 
 void rt_log_open(const char *path);
 void rt_mem_init(void);
@@ -15,8 +17,32 @@ uint32_t rt_load_image(const char *path, uint32_t *entry_out);
 void rt_bind_imports(void);
 void rt_platform_init(int argc, char **argv);   /* platform/<target>/ */
 
+#ifndef __EMSCRIPTEN__
+#include <signal.h>
+/* A host fault inside lifted code is a guest access violation: name the guest address, the lifted
+ * function and the guest stack, dump this thread's entry ring, and stop. */
+static void on_fault(int sig, siginfo_t *si, void *ctx) {
+    (void)ctx;
+    uintptr_t a = (uintptr_t)si->si_addr, b = (uintptr_t)g_mem_base;
+    rt_log("FAULT: signal %d at host %p (guest 0x%08llX) in sub_%08X, esp=0x%08X", sig, si->si_addr,
+           (unsigned long long)(a - b), g_cur_func, g_esp);
+    recomp_dump_trace("fault");
+    _exit(139);
+}
+static void install_fault_handler(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = on_fault;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+}
+#else
+static void install_fault_handler(void) {}
+#endif
+
 static void usage(void) {
-    fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--log FILE] [--frames N] [--screenshot PNG] [-v]\n");
+    fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--log FILE] [--frames N] [--screenshot PNG] [--audio-capture WAV] [-v]\n");
     exit(2);
 }
 
@@ -28,11 +54,13 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--log") && i + 1 < argc) log_path = argv[++i];
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) rt_frame_limit = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) snprintf(rt_screenshot_path, sizeof rt_screenshot_path, "%s", argv[++i]);
+        else if (!strcmp(argv[i], "--audio-capture") && i + 1 < argc) snprintf(rt_audio_capture_path, sizeof rt_audio_capture_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "-v")) rt_verbose = 1;
         else if (!strncmp(argv[i], "--", 2)) { /* platform options are parsed by rt_platform_init */ }
         else usage();
     }
     rt_log_open(log_path);
+    install_fault_handler();
     rt_platform_init(argc, argv);
     rt_mem_init();
     uint32_t entry;

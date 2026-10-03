@@ -1,11 +1,13 @@
 """Extensions to pcrecomp's lift32.Lifter for Rugby 08 (imported by tools/lift.py).
 
 Every instruction gets the semantics of the CPU the runtime models (runtime/DESIGN.md: a
-Pentium Pro class x86 -- FPU, TSC, CX8, CMOV/FCMOV; no MMX, SSE, SSE2 or 3DNow!):
+Pentium II class x86 -- FPU, TSC, CX8, CMOV/FCMOV, MMX; no SSE, SSE2 or 3DNow!):
 
   IMPLEMENTED here : valid on that CPU but missing from lift32 (fucompp, fcomi family, fcmov,
                      ficom, lahf, BCD adjusts, xadd, bound, arpl, into, fnstenv/fldenv, ...)
-  #UD fault        : extensions the modeled CPU does not have (MMX/SSE/SSE2/SSE3/3DNow!/AVX/TSX).
+  MMX              : lift32's MMX plus MMX_EXTRA (the VP6 decoder assumes MMX on every x86).
+  #UD fault        : extensions the modeled CPU does not have (SSE/SSE2/SSE3/3DNow!/AVX/TSX,
+                     including SSE's MMX-register additions such as pshufw).
                      A real CPU without them raises #UD; the game's CPUID dispatch never takes
                      them because our CPUID does not advertise them.
   #GP fault        : privileged / I/O / far-transfer / software-interrupt instructions, which
@@ -56,6 +58,15 @@ DIV = {  # (size, signed) -> C body; _s is the divisor read once; #DE -> soft fa
 SET_EFL = "_flag_k = FK_EFLAGS; _flag_a = _fl; _flag_b = 0; _cf = _fl & 1u;"
 
 
+# MMX (advertised, see tools/vendor_recomp_types.py): lift32 implements most of the original set;
+# the rest are runtime helpers (recomp_types.h "MMX instructions lift32 leaves out").
+MMX_EXTRA = {m: f"mmx_{m}({{a}}, {{b}})" for m in (
+    "paddb", "psubb", "paddsb", "psubsb", "paddusb", "psubusb", "paddusw", "psubusw",
+    "pcmpeqb", "pcmpgtb", "pcmpeqd", "pcmpgtd", "packsswb")}
+lift32.MMX_BINOPS.update(MMX_EXTRA)
+MMX = set(lift32.MMX_BINOPS) | set(lift32.MMX_SHIFTS) | {"movq", "movd", "emms"}
+
+
 def _is_ud(insn):
     m, o = insn.mnemonic, insn.op_str
     if "xmm" in o or "ymm" in o or m.startswith("v") and len(m) > 4 and m not in ("verr", "verw"):
@@ -70,9 +81,8 @@ def _is_ud(insn):
              "movq2dq", "movdq2q", "psubq", "paddq", "pmuludq", "cvtpi2ps", "cvtps2pi",
              "cvttps2pi", "cvtpi2pd", "cvtpd2pi", "cvttpd2pi"):
         return True
-    if " mm" in " " + o or "mm0" in o or "mm1" in o or "mm2" in o or "mm3" in o or \
-       "mm4" in o or "mm5" in o or "mm6" in o or "mm7" in o or m == "emms":
-        return True                                            # MMX (not advertised)
+    if any(f"mm{k}" in o for k in range(8)) and m not in MMX:
+        return True                                            # MMX-register forms outside MMX
     return False
 
 

@@ -91,3 +91,10 @@
 - Also fixed in lift: jump-table end guard (tables placed after their arms were cut to one slot, e.g. switch at 0x75E150).
 - Game creates "EAGL PC" 1352x878 then loops creating "EAGL PC Caps Retrieval" windows (63, never destroyed) because D3D/DirectDraw caps fail (Direct3DCreate8 NULL, DirectDrawCreate UNIMPL), then null ICALL from 0x766950 -> segfault. Message pump not exercised yet.
 - Next: native.d3d.present (IDirect3D8 via d3d8to9 -> d3d9-webgl; DirectDrawCreate for caps).
+
+## 2026-10-03 — prior art, MojoShader, DirectSound, protector stubs, MMX (native.icall in progress)
+- docs/PRIOR_ART.md: survey of recompilation/graphics/audio prior art. Decisions: MojoShader for vs.1.1 (submodule added, runtime/d3d8/d3d8_vshader.cpp translates all game shaders to GLSL ES; 7 of 38 fail: relative addressing needs a CTAB, m3x3 writemask); no ffmpeg (VP6/EA-XA/D3DX8 are statically linked).
+- Lift fixes: negated-index jump tables (memmove), tiny truncated Ghidra extents, protector call-dispatcher (0x1055006) table targets seeded statically (335), encrypted calls in the push/push/ret form now resolved by emulating the stub itself (84 sites; the site's own ret had been mistaken for the stub's -> callers lost ebp, which broke a TinyXML destructor), jump-form stubs and stubs reading the PE header.
+- CPU model is now Pentium II + MMX: the VP6 decoder assumes MMX with no reachable C path. MMX_EXTRA ops added; difftest --grep '_mm\[' compares MMX bodies (~56 across 4 seeds, 0 mismatches).
+- runtime/win32/dsound.c + platform/sdl/sdl_audio.c: DirectSound software mixer on SDL audio, --audio-capture WAV, tools/audio_stats.py. The game streams a 4-channel 44.1 kHz buffer; intro audio is captured (-21 dBFS).
+- Native fault handler names guest address/function and dumps the trace ring. Game now reaches frame 60 and plays the intro, then exits: "FILE_loadpack - unable to unpack file e3606260..." (after an ITAIL miss in 0x415870; seeded, rerunning). Next: native.icall / native.fs (data.gob unpack), Shell Folders registry value.

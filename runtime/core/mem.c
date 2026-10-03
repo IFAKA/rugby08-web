@@ -21,6 +21,9 @@ void rt_mem_init(void) {
     rt_guest_size = 0x80000000u;   /* the exe is not LARGEADDRESSAWARE: user space < 2 GiB */
     void *arena = mmap(NULL, 1ull << 32, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
     if (arena == MAP_FAILED) rt_fatal("arena: mmap 4 GiB failed");
+    /* Windows never maps the first 64 KiB: a guest null dereference faults there (FAULT in the
+     * log, with the lifted function) instead of reading zeros and running on. */
+    mprotect(arena, 0x10000, PROT_NONE);
 #endif
     g_mem_base = (ptrdiff_t)arena;
     rt_heap_init(rt_guest_size - 0x01000000u);   /* top 16 MiB kept free (thread TIBs etc.) */

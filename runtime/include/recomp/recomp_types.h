@@ -860,9 +860,9 @@ static inline void CPUID_impl(uint32_t eax_val, uint32_t ebx_val, uint32_t ecx_v
     (void)ebx_val; (void)ecx_val; (void)edx_val;
     if (eax_val == 0) {          /* max leaf 1, "GenuineIntel" */
         g_eax = 1; g_ebx = 0x756E6547u; g_edx = 0x49656E69u; g_ecx = 0x6C65746Eu;
-    } else if (eax_val == 1) {   /* Pentium Pro: family 6 model 1 stepping 9 */
-        g_eax = 0x00000619u; g_ebx = 0; g_ecx = 0;
-        g_edx = (1u<<0) | (1u<<4) | (1u<<8) | (1u<<15); /* FPU TSC CX8 CMOV(+FCMOV) */
+    } else if (eax_val == 1) {   /* Pentium II: family 6 model 3 stepping 3 */
+        g_eax = 0x00000633u; g_ebx = 0; g_ecx = 0;
+        g_edx = (1u<<0) | (1u<<4) | (1u<<8) | (1u<<15) | (1u<<23); /* FPU TSC CX8 CMOV(+FCMOV) MMX */
     } else {
         g_eax = 0; g_ebx = 0; g_ecx = 0; g_edx = 0;
     }
@@ -993,6 +993,38 @@ void recomp_dump_trace(const char* why);
     if (!_warned) { fprintf(stderr, "STUB: %s called\n", name); _warned = 1; } \
 } while(0)
 
+
+/* ---- MMX instructions lift32 leaves out (tools/lift_ext.py MMX_EXTRA) ---- */
+#define MM_B(v, i)  ((int8_t)((uint64_t)(v) >> ((i) * 8)))
+#define MM_UB(v, i) ((uint8_t)((uint64_t)(v) >> ((i) * 8)))
+#define MM_UW(v, i) ((uint16_t)((uint64_t)(v) >> ((i) * 16)))
+#define MM_PUT_B(i, x) ((uint64_t)(uint8_t)(x) << ((i) * 8))
+static inline int8_t mmx_sat8(int32_t v) { return (int8_t)(v > 127 ? 127 : v < -128 ? -128 : v); }
+static inline uint8_t mmx_usat8(int32_t v) { return (uint8_t)(v > 255 ? 255 : v < 0 ? 0 : v); }
+static inline uint16_t mmx_usat16(int32_t v) { return (uint16_t)(v > 65535 ? 65535 : v < 0 ? 0 : v); }
+#define MMX_BYTES(name, expr) static inline uint64_t name(uint64_t a, uint64_t b) { \
+    uint64_t r = 0; for (int i = 0; i < 8; i++) r |= MM_PUT_B(i, (expr)); return r; }
+#define MMX_WORDS(name, expr) static inline uint64_t name(uint64_t a, uint64_t b) { \
+    uint64_t r = 0; for (int i = 0; i < 4; i++) r |= MM_PUT_W(i, (expr)); return r; }
+#define MMX_DWORDS(name, expr) static inline uint64_t name(uint64_t a, uint64_t b) { \
+    uint64_t r = 0; for (int i = 0; i < 2; i++) r |= MM_PUT_D(i, (expr)); return r; }
+MMX_BYTES(mmx_paddb, MM_B(a, i) + MM_B(b, i))
+MMX_BYTES(mmx_psubb, MM_B(a, i) - MM_B(b, i))
+MMX_BYTES(mmx_paddsb, mmx_sat8(MM_B(a, i) + MM_B(b, i)))
+MMX_BYTES(mmx_psubsb, mmx_sat8(MM_B(a, i) - MM_B(b, i)))
+MMX_BYTES(mmx_paddusb, mmx_usat8(MM_UB(a, i) + MM_UB(b, i)))
+MMX_BYTES(mmx_psubusb, mmx_usat8(MM_UB(a, i) - MM_UB(b, i)))
+MMX_BYTES(mmx_pcmpeqb, MM_B(a, i) == MM_B(b, i) ? 0xFF : 0)
+MMX_BYTES(mmx_pcmpgtb, MM_B(a, i) > MM_B(b, i) ? 0xFF : 0)
+MMX_WORDS(mmx_paddusw, mmx_usat16(MM_UW(a, i) + MM_UW(b, i)))
+MMX_WORDS(mmx_psubusw, mmx_usat16(MM_UW(a, i) - MM_UW(b, i)))
+MMX_DWORDS(mmx_pcmpeqd, MM_D(a, i) == MM_D(b, i) ? 0xFFFFFFFFu : 0)
+MMX_DWORDS(mmx_pcmpgtd, MM_D(a, i) > MM_D(b, i) ? 0xFFFFFFFFu : 0)
+static inline uint64_t mmx_packsswb(uint64_t a, uint64_t b) {   /* a's words -> low 4 bytes, b's -> high */
+    uint64_t r = 0;
+    for (int i = 0; i < 4; i++) r |= MM_PUT_B(i, mmx_sat8(MM_W(a, i))) | MM_PUT_B(i + 4, mmx_sat8(MM_W(b, i)));
+    return r;
+}
 
 /* ---- tools/lift_ext.py support (implemented in runtime/core/cpu_ext.c) ---- */
 void recomp_fault(uint32_t va, const char *what);   /* #UD/#GP/#BR/#OF: logs, aborts */

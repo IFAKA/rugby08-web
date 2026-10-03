@@ -21,7 +21,7 @@ Lifted as written, T's `ret` returns out of the lifted caller and the code at R 
 caller's epilog) never runs, leaving esp/ebp wrong. It gets the same call T; jmp R rewrite
 (10 bytes, fits in 10 + gap or 7 + gap). REVERSE.md records the census.
 
-When T == R (156 sites) it is an encrypted call instead: the stub at R computes the callee from
+When T == R (156 jmp-form sites, 84 push/push/ret-form sites) it is an encrypted call instead: the stub at R computes the callee from
 static data (`push ebx; clc; mov ebx,[A]; sbb ebx,[B]; xchg [esp],ebx; add [esp+4],K; ret` and a
 dozen arithmetic variants) and returns into it with R+K as its return address. resolve_stub runs
 the stub on an emulator over the image bytes; when it reaches its ret with every register but eax
@@ -35,17 +35,32 @@ PAT_JMP = re.compile(rb"\x68(....)(?:\xE9(....)|\xEB(.))", re.S)
 GAPS = (4, 8, 12, 16)
 
 
-def find_sites(text: bytes, t_lo: int, t_hi: int):
+def find_sites(text: bytes, t_lo: int, t_hi: int, low: bytes = b""):
     """[(site_va, target, ret_va)] for every push R; push T; ret or push R; jmp T with a 4..16-byte junk gap,
     site and targets inside a code range (tools/ranges.py)."""
     from ranges import in_code
     out = []
+    def via_thunk(t):
+        # 0xAE8780 (in .data, outside the code ranges) is `jmp [0x1159740]` -> the call dispatcher
+        # 0x1055000; 5 sites `push KEY; push R; push 0xAE8780; ret` call through it.
+        o = t - t_lo
+        if not in_code(t) and 0 <= o and o + 6 <= len(text) and text[o:o + 2] == b"\xFF\x25":
+            p = int.from_bytes(text[o + 2:o + 6], "little") - t_lo
+            if 0 <= p and p + 4 <= len(text):
+                return int.from_bytes(text[p:p + 4], "little")
+        return t
+
     for m in PAT.finditer(text):
         r = int.from_bytes(m.group(1), "little")
-        t = int.from_bytes(m.group(2), "little")
+        t = via_thunk(int.from_bytes(m.group(2), "little"))
         site = t_lo + m.start()
         if in_code(site) and in_code(r) and in_code(t) and (r - (site + 11)) in GAPS:
-            out.append((site, t, r))
+            if t != r:
+                out.append((site, t, r))
+            else:                       # encrypted call in the push/push/ret form (84 sites)
+                res = resolve_stub(text, t_lo, r, pushed=r, low=low)    # as the site's ret leaves it
+                if res and in_code(res[1]) and t_lo <= res[0] < t_lo + len(text):
+                    out.append((site, res[0], res[1]))
     taken = {a for s, _, r in out for a in range(s, r)}
     for m in PAT_JMP.finditer(text):
         site = t_lo + m.start()
@@ -56,7 +71,7 @@ def find_sites(text: bytes, t_lo: int, t_hi: int):
             if t != r:
                 out.append((site, t, r))
             else:
-                res = resolve_stub(text, t_lo, site)
+                res = resolve_stub(text, t_lo, site, low=low)
                 if res and in_code(res[1]) and t_lo <= res[0] < t_lo + len(text):
                     out.append((site, res[0], res[1]))
     return sorted(out)
@@ -65,16 +80,23 @@ def find_sites(text: bytes, t_lo: int, t_hi: int):
 _EMU = {}
 
 
-def resolve_stub(text: bytes, t_lo: int, site: int, steps: int = 2000):
+def resolve_stub(text: bytes, t_lo: int, site: int, steps: int = 2000, pushed=None, low: bytes = b""):
     """Run an encrypted-call site on an emulator over the code buffer -> (callee, return VA) or
-    None. Memory the stub writes outside its stack is restored afterwards."""
+    None. Memory the stub writes outside its stack is restored afterwards. pushed: start at the
+    stub itself (site) with this return address already on the stack (the push/push/ret form,
+    whose own ret would otherwise look like the stub's). low: image bytes just below t_lo (the PE
+    header: some stubs take their constants from it). A stub ends at its ret into the callee or,
+    in the jump form (`add [esp], K; jmp callee`), on arriving through a jmp with only the return
+    address on the stack and every register restored."""
     from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_32, UC_HOOK_CODE, UC_HOOK_MEM_WRITE
     from unicorn import x86_const as X
-    key = (id(text), t_lo)
+    key = (id(text), t_lo, len(low))
     if _EMU.get("key") != key:
         mu = Uc(UC_ARCH_X86, UC_MODE_32)
-        lo = t_lo & ~0xFFF
+        lo = (t_lo - len(low)) & ~0xFFF
         mu.mem_map(lo, (t_lo + len(text) - lo + 0xFFF) & ~0xFFF)
+        if low:
+            mu.mem_write(t_lo - len(low), bytes(low))
         mu.mem_write(t_lo, bytes(text))
         mu.mem_map(0x100000, 0x10000)        # stack
         _EMU.update(key=key, mu=mu)
@@ -85,6 +107,9 @@ def resolve_stub(text: bytes, t_lo: int, site: int, steps: int = 2000):
         mu.reg_write(reg, 0x11110000 * (k + 1) + k)
     top = 0x10F000
     mu.reg_write(X.UC_X86_REG_ESP, top)
+    if pushed is not None:
+        mu.mem_write(top - 4, (pushed & 0xFFFFFFFF).to_bytes(4, "little"))
+        mu.reg_write(X.UC_X86_REG_ESP, top - 4)
     out, saved = {}, {}
 
     def on_write(uc, access, addr, size, value, _):
@@ -92,12 +117,24 @@ def resolve_stub(text: bytes, t_lo: int, site: int, steps: int = 2000):
             for a in range(addr, addr + size):
                 saved.setdefault(a, bytes(uc.mem_read(a, 1)))
 
+    clean = lambda uc: all(uc.reg_read(reg) == 0x11110000 * (k + 1) + k for k, reg in enumerate(regs))
+    prev = {"jmp": False}
+
     def on_code(uc, addr, size, _):
-        if size == 1 and uc.mem_read(addr, 1) == b"\xC3" and uc.reg_read(X.UC_X86_REG_ESP) == top - 8:
+        esp = uc.reg_read(X.UC_X86_REG_ESP)
+        if size == 1 and uc.mem_read(addr, 1) == b"\xC3" and esp == top - 8:
             out["callee"] = int.from_bytes(uc.mem_read(top - 8, 4), "little")
             out["ret"] = int.from_bytes(uc.mem_read(top - 4, 4), "little")
-            out["clean"] = all(uc.reg_read(reg) == 0x11110000 * (k + 1) + k for k, reg in enumerate(regs))
+            out["clean"] = clean(uc)
             uc.emu_stop()
+            return
+        ret = int.from_bytes(uc.mem_read(top - 4, 4), "little")
+        if pushed is not None and prev["jmp"] and esp == top - 4 and ret != pushed and clean(uc):
+            out.update(callee=addr, ret=ret, clean=True)
+            uc.emu_stop()
+            return
+        op = bytes(uc.mem_read(addr, 1))
+        prev["jmp"] = op in (b"\xE9", b"\xEB")
 
     hooks = [mu.hook_add(UC_HOOK_CODE, on_code), mu.hook_add(UC_HOOK_MEM_WRITE, on_write)]
     try:
@@ -111,10 +148,10 @@ def resolve_stub(text: bytes, t_lo: int, site: int, steps: int = 2000):
     return (out["callee"], out["ret"]) if out.get("clean") else None
 
 
-def patch(text: bytes, t_lo: int, t_hi: int):
-    """Return (patched bytes, sites)."""
+def patch(text: bytes, t_lo: int, t_hi: int, low: bytes = b""):
+    """Return (patched bytes, sites). low: image bytes from the image base up to t_lo."""
     buf = bytearray(text)
-    sites = find_sites(text, t_lo, t_hi)
+    sites = find_sites(text, t_lo, t_hi, low)
     for site, t, r in sites:
         o = site - t_lo
         call_rel = (t - (site + 5)) & 0xFFFFFFFF

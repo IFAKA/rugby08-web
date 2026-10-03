@@ -11,6 +11,7 @@ precision; libm vs softfloat differ in the last ulp) -- both by design, see runt
 A case is EXCLUDED (not failed) when the reference itself faults (#DE, bad opcode) or runs away.
 
   tools/difftest.py --sample 500      exit 0 iff >= 500 compared and 0 mismatches
+  tools/difftest.py --sample 20 --grep '_mm\['   only bodies using MMX
 Prints one line; details -> logs/difftest.log.
 """
 import argparse, json, os, pathlib, random, re, struct, subprocess, sys
@@ -37,7 +38,9 @@ def main():
     ap.add_argument("--sample", type=int, default=500)
     ap.add_argument("--seed", type=int, default=8)
     ap.add_argument("--dump", help="sub_XXXXXXXX: write both machines' final scratch+stack and diff them")
+    ap.add_argument("--grep", help="only bodies whose lifted C matches this regex (e.g. '_mm\\[' for MMX)")
     a = ap.parse_args()
+    want = re.compile(a.grep) if a.grep else None
     B.mkdir(parents=True, exist_ok=True)
     log = open(root / "logs/difftest.log", "w")
     lift._init()
@@ -49,7 +52,8 @@ def main():
     for idx in order:
         code, ok = lift.lift_one(idx)
         big_ret = any(int(n) > 0x404 for n in SKIP_RET.findall(code))
-        if ok and not SKIP.search(code) and not big_ret and code.count("\n") < 4000:
+        if ok and not SKIP.search(code) and not big_ret and code.count("\n") < 4000 and \
+                (want is None or want.search(code)):
             chosen.append(idx); bodies.append(code)
         if len(chosen) >= a.sample * 2:
             break
