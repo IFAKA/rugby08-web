@@ -105,6 +105,7 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     DevState *s = o->dev;
     dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
     s->frame++;
+    plat_replay_tick(s->frame);
     if (s->frame == 1 || s->frame % 60 == 0 || (int)s->frame == rt_frame_limit) rt_trace("frame %u", s->frame);
     if (rt_frame_limit > 0 && (int)s->frame >= rt_frame_limit) {
         if (rt_screenshot_path[0]) {

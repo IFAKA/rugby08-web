@@ -44,6 +44,11 @@ void plat_cursor_pos(int *x, int *y);                        /* screen coordinat
 void plat_cursor_set_pos(int x, int y);
 void plat_cursor_visible(int show);
 
+/* Input replay (--replay FILE, tests/replays/): lines "<frame> tap|down|up <SDL key name>", '#'
+ * comments. Called once per presented frame; due events become ordinary SDL key events, so they
+ * reach the game as WM_KEY* messages and DirectInput state exactly like a real key. */
+void plat_replay_tick(uint32_t frame);
+
 /* Audio output: 44.1 kHz stereo float. mix(out, frames) fills interleaved L/R frames; it runs on
  * the host's audio thread (or a pacing thread when no device opens), so it must take its own
  * locks. Started once; with --audio-capture PATH the mixed output is also written as a 16-bit WAV. */

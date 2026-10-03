@@ -10,6 +10,7 @@ char rt_exe_path[1024] = "Rugby08_unpacked.exe";
 int rt_frame_limit = -1;          /* --frames N: exit after N presented frames (checks); <= 0: no limit */
 char rt_screenshot_path[1024];    /* --screenshot PATH: PNG of the last frame before --frames exits */
 char rt_audio_capture_path[1024]; /* --audio-capture PATH: WAV of the mixed audio output */
+char rt_replay_path[1024];        /* --replay PATH: scripted key input (tests/replays/) */
 
 void rt_log_open(const char *path);
 void rt_mem_init(void);
@@ -42,7 +43,7 @@ static void install_fault_handler(void) {}
 #endif
 
 static void usage(void) {
-    fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--log FILE] [--frames N] [--screenshot PNG] [--audio-capture WAV] [-v]\n");
+    fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--log FILE] [--frames N] [--screenshot PNG] [--audio-capture WAV] [--replay FILE] [-v]\n");
     exit(2);
 }
 
@@ -55,6 +56,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) rt_frame_limit = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) snprintf(rt_screenshot_path, sizeof rt_screenshot_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--audio-capture") && i + 1 < argc) snprintf(rt_audio_capture_path, sizeof rt_audio_capture_path, "%s", argv[++i]);
+        else if (!strcmp(argv[i], "--replay") && i + 1 < argc) snprintf(rt_replay_path, sizeof rt_replay_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "-v")) rt_verbose = 1;
         else if (!strncmp(argv[i], "--", 2)) { /* platform options are parsed by rt_platform_init */ }
         else usage();

@@ -83,6 +83,7 @@ extern int rt_verbose;
 extern int rt_frame_limit;              /* --frames N (<= 0: run until the game exits) */
 extern char rt_screenshot_path[1024];   /* --screenshot PATH ("" = none) */
 extern char rt_audio_capture_path[1024]; /* --audio-capture PATH ("" = none) */
+extern char rt_replay_path[1024];        /* --replay PATH ("" = none) */
 /* PNG (RGBA8, rows top to bottom); 0 = ok. */
 int rt_png_write(const char *path, int w, int h, const uint8_t *rgba);
 

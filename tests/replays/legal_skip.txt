@@ -1,0 +1,5 @@
+# Probe: press Return on the legal screen (frames 100+) and again later, to see how the
+# front end advances. Format: <presented frame> tap|down|up <SDL key name>
+150 tap Return
+400 tap Return
+700 tap Return

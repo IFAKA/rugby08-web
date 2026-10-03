@@ -58,10 +58,17 @@ static uint32_t dv_notimpl(const uint32_t *a) { (void)a; return E_NOTIMPL_; }
 
 static uint32_t dv_GetDeviceState(const uint32_t *a) {   /* (this, cbData, lpvData) */
     didev_t *d = dev(a);
+    static int logged[3];
+    if (!logged[d->kind]++) rt_log("DirectInput GetDeviceState(%s, %u bytes) first call", d->kind == DEV_KEYBOARD ? "keyboard" : "mouse", a[1]);
     uint32_t n = a[1], p = a[2];
     memset(G2H(p), 0, n);
     if (d->kind == DEV_KEYBOARD) {
-        for (uint32_t k = 0; k < n && k < 256; k++) wr8(p + k, plat_dik_down(k) ? 0x80 : 0);
+        static int seen;
+        for (uint32_t k = 0; k < n && k < 256; k++) {
+            uint8_t on = plat_dik_down(k);
+            wr8(p + k, on ? 0x80 : 0);
+            if (on && seen < 8) { seen++; rt_log("DirectInput keyboard: DIK 0x%02X down", k); }
+        }
     } else if (n >= 16) {                                      /* DIMOUSESTATE: lX lY lZ rgbButtons[4] */
         int dx, dy, dw;
         plat_mouse_delta(&dx, &dy, &dw);
@@ -73,6 +80,8 @@ static uint32_t dv_GetDeviceState(const uint32_t *a) {   /* (this, cbData, lpvDa
 }
 
 static uint32_t dv_GetDeviceData(const uint32_t *a) {    /* (this, cbObjectData, rgdod, pdwInOut, flags) */
+    static int logged;
+    if (!logged++) rt_log("DirectInput GetDeviceData(cb %u, n %u, flags 0x%X) first call", a[1], a[3] ? rd32(a[3]) : 0, a[4]);
     if (a[3]) wr32(a[3], 0);
     return DI_OK;
 }

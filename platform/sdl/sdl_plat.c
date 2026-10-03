@@ -4,6 +4,8 @@
 #include "rt.h"
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ---- keys: SDL scancode -> Win32 virtual key + set-1 scan code -------------------------------- */
@@ -298,4 +300,57 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
     *m = g_pending[0];
     memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);
     return 1;
+}
+
+/* ---- input replay (plat.h plat_replay_tick) ---------------------------------------------------- */
+typedef struct { uint32_t frame; uint8_t down; SDL_Scancode sc; } replay_ev_t;
+static replay_ev_t *g_replay;
+static int g_nreplay, g_ireplay, g_replay_loaded;
+
+static void replay_add(uint32_t frame, int down, SDL_Scancode sc) {
+    g_replay = realloc(g_replay, (size_t)(g_nreplay + 1) * sizeof *g_replay);
+    g_replay[g_nreplay++] = (replay_ev_t){ frame, (uint8_t)down, sc };
+}
+
+static int replay_cmp(const void *a, const void *b) {
+    const replay_ev_t *x = a, *y = b;
+    return x->frame != y->frame ? (x->frame < y->frame ? -1 : 1) : 0;
+}
+
+static void replay_load(void) {
+    g_replay_loaded = 1;
+    if (!rt_replay_path[0]) return;
+    FILE *f = fopen(rt_replay_path, "r");
+    if (!f) { rt_log("replay: cannot open %s", rt_replay_path); return; }
+    char line[256], act[16], key[64];
+    unsigned frame;
+    while (fgets(line, sizeof line, f)) {
+        if (line[0] == '#' || sscanf(line, "%u %15s %63[^\n]", &frame, act, key) != 3) continue;
+        SDL_Scancode sc = SDL_GetScancodeFromName(key);
+        if (sc == SDL_SCANCODE_UNKNOWN) { rt_log("replay: unknown key '%s'", key); continue; }
+        if (!strcmp(act, "tap")) { replay_add(frame, 1, sc); replay_add(frame + 3, 0, sc); }   /* held 3 frames */
+        else if (!strcmp(act, "down")) replay_add(frame, 1, sc);
+        else if (!strcmp(act, "up")) replay_add(frame, 0, sc);
+    }
+    fclose(f);
+    qsort(g_replay, (size_t)g_nreplay, sizeof *g_replay, replay_cmp);
+    rt_log("replay: %d events from %s", g_nreplay, rt_replay_path);
+}
+
+void plat_replay_tick(uint32_t frame) {
+    if (!g_replay_loaded) replay_load();
+    for (; g_ireplay < g_nreplay && g_replay[g_ireplay].frame <= frame; g_ireplay++) {
+        const replay_ev_t *r = &g_replay[g_ireplay];
+        SDL_Event e;
+        memset(&e, 0, sizeof e);
+        e.type = r->down ? SDL_KEYDOWN : SDL_KEYUP;
+        e.key.state = r->down ? SDL_PRESSED : SDL_RELEASED;
+        e.key.windowID = g_win ? SDL_GetWindowID(g_win) : 0;
+        e.key.keysym.scancode = r->sc;
+        e.key.keysym.sym = SDL_GetKeyFromScancode(r->sc);
+        if (g_inited) SDL_PushEvent(&e);
+        keymap_t k = g_keys[r->sc];          /* DirectInput state now, not when the pump runs */
+        if (k.scan) g_dik_down[(k.scan | (k.ext ? 0x80 : 0)) & 0xFF] = r->down;
+        rt_trace("replay: frame %u %s %s", frame, r->down ? "down" : "up", SDL_GetScancodeName(r->sc));
+    }
 }

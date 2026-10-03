@@ -1,0 +1,7 @@
+# Probe which key advances the legal screen (shown from about frame 100)
+200 tap Space
+300 tap Escape
+400 tap Keypad Enter
+500 tap A
+600 tap S
+700 tap Return
