@@ -105,6 +105,19 @@ def straddle_end(addr, end):
             return i.address + i.size
     return end
 
+def carry_flags(code):
+    """Flags live in locals; a ret exports them and a call imports them, but a tail jump did
+    neither. The protector splits `cmp` from its `jcc` across stolen fragments (0x4125F6: cmp
+    eax, [0x13834B0]; jmp 0x6CFB28: je ...), and MSVC's /RTC `cmp esi, esp; call _RTC_CheckEsp`
+    tests the caller's flags inside the callee. So every body starts from the global flags and
+    every tail jump and call exports them first."""
+    code = code.replace("uint32_t _cf = 0;", "uint32_t _cf = g_flag_cf;", 1)
+    code = code.replace("uint32_t _flag_k = FK_NONE;", "uint32_t _flag_k = g_flag_k;", 1)
+    code = code.replace("uint32_t _flag_a = 0, _flag_b = 0;", "uint32_t _flag_a = g_flag_a, _flag_b = g_flag_b;", 1)
+    for m in ("RECOMP_ITAIL(", "RECOMP_CALL(", "RECOMP_ICALL("):
+        code = code.replace(m, "RECOMP_FLAGS_OUT(); " + m)
+    return code
+
 def lift_one(idx):
     """Lift catalog entry idx -> (C code, ok). Shared by main() and tools/difftest.py."""
     E, code, cs, ce = _G["entries"], _G["code"], _G["code_start"], _G["code_end"]
@@ -129,6 +142,7 @@ def lift_one(idx):
         if not trimmed:
             return f"void {name}(void) {{ recomp_fault(0x{addr:08X}u, \"#UD empty entry\"); }}\n", False
         code = generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr)
+        code = carry_flags(code)
         hook = _G["hooks"].get(addr)
         if hook:   # tools/hooks.json: announce entry (checks grep for "<name> entered")
             code = code.replace(f"    RECOMP_ENTER(0x{addr:08X}u);",

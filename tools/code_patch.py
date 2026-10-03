@@ -148,8 +148,14 @@ def resolve_stub(text: bytes, t_lo: int, site: int, steps: int = 2000, pushed=No
     return (out["callee"], out["ret"]) if out.get("clean") else None
 
 
+PAT_PUSHRET = re.compile(rb"\x68(....)\xC3", re.S)
+
+
 def patch(text: bytes, t_lo: int, t_hi: int, low: bytes = b""):
-    """Return (patched bytes, sites). low: image bytes from the image base up to t_lo."""
+    """Return (patched bytes, sites). low: image bytes from the image base up to t_lo.
+    Bare `push T; ret` left over after the call rewrites (18, in protector code) is `jmp T`, and
+    becomes E9 jmp T; 90 -- lifted as written it would return out of the function instead."""
+    from ranges import in_code
     buf = bytearray(text)
     sites = find_sites(text, t_lo, t_hi, low)
     for site, t, r in sites:
@@ -160,4 +166,9 @@ def patch(text: bytes, t_lo: int, t_hi: int, low: bytes = b""):
         buf[o + 5:o + 10] = b"\xE9" + jmp_rel.to_bytes(4, "little")
         for k in range(site + 10, r):
             buf[k - t_lo] = 0x90
+    for m in PAT_PUSHRET.finditer(bytes(buf)):
+        site, t = t_lo + m.start(), int.from_bytes(m.group(1), "little")
+        if in_code(site) and in_code(t):
+            buf[m.start():m.start() + 5] = b"\xE9" + ((t - (site + 5)) & 0xFFFFFFFF).to_bytes(4, "little")
+            buf[m.start() + 5] = 0x90
     return bytes(buf), sites

@@ -88,6 +88,13 @@ HLE(ReadFile) {   /* (h, buf, n, &read, overlapped) */
         got += (uint32_t)n;
     }
     if (a[3]) wr32(a[3], got);
+    if (rt_verbose) {   /* -v: every read with its position and first bytes (pack/loader debugging) */
+        const uint8_t *d = G2H(a[1]);
+        rt_log("ReadFile h=0x%X pos=0x%llX n=%u got=%u [%02X %02X %02X %02X %02X %02X %02X %02X]", a[0],
+               (unsigned long long)lseek(f->fd, 0, SEEK_CUR) - got, a[2], got,
+               got > 0 ? d[0] : 0, got > 1 ? d[1] : 0, got > 2 ? d[2] : 0, got > 3 ? d[3] : 0,
+               got > 4 ? d[4] : 0, got > 5 ? d[5] : 0, got > 6 ? d[6] : 0, got > 7 ? d[7] : 0);
+    }
     return TRUE_;
 }
 
@@ -295,6 +302,7 @@ HLE(CreateFileMappingA) {   /* (hfile, sa, protect, maxhi, maxlo, name) */
     fstat(f->fd, &st);
     m->size = a[4] ? a[4] : (uint32_t)st.st_size;
     h_get(h, H_MAPPING)->p = m;
+    rt_log("CreateFileMappingA(file 0x%X, size 0x%X) -> 0x%X", a[0], m->size, h);
     return h;
 }
 HLE(MapViewOfFile) {   /* (hmap, access, offhi, offlo, size) */
@@ -304,6 +312,7 @@ HLE(MapViewOfFile) {   /* (hmap, access, offhi, offlo, size) */
     file_t *f = fget(m->file);
     uint32_t size = a[4] ? a[4] : m->size - a[3];
     uint32_t va = gcalloc(size);
+    rt_log("MapViewOfFile(map 0x%X, off 0x%X, size 0x%X) -> 0x%08X", a[0], a[3], size, va);
     if (!va) return set_err(ERROR_NOT_ENOUGH_MEMORY_);
     pread(f->fd, G2H(va), size, (off_t)a[3]);
     return va;

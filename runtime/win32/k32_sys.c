@@ -168,7 +168,13 @@ HLE(TerminateProcess) { rt_trace("exit: TerminateProcess(%u)", a[1]); exit((int)
 HLE(GetLastError) { (void)a; return rt_last_error; }
 HLE(SetLastError) { rt_last_error = a[0]; return 0; }
 HLE(IsDebuggerPresent) { (void)a; return FALSE_; }
-HLE(DebugBreak) { (void)a; rt_log("DebugBreak() in sub_%08X", g_cur_func); return 0; }
+HLE(DebugBreak) {   /* the CRT's /RTC failure path ends here: the trace ring shows the failing call */
+    static int n;
+    (void)a;
+    rt_log("DebugBreak() in sub_%08X", g_cur_func);
+    if (n++ < 4) recomp_dump_trace("DebugBreak");
+    return 0;
+}
 HLE(OutputDebugStringA) {
     const char *s = gstr(a[0]);
     size_t n = s ? strlen(s) : 0;
@@ -195,6 +201,14 @@ HLE(UnhandledExceptionFilter) { (void)a; rt_log("UnhandledExceptionFilter called
  * first real use is diagnosed (0xE06D7363 = MSVC C++ throw; a[3] points at its arguments). */
 HLE(RaiseException) {
     uint32_t code = a[0], nargs = a[2], args = a[3];
+    if (code == 0x406D1388u) {
+        /* MS_VC_EXCEPTION: SetThreadName for an attached debugger. The raiser wraps it in
+         * __try/__except(EXCEPTION_EXECUTE_HANDLER) and does nothing in the handler, so without a
+         * debugger it is a no-op. THREADNAME_INFO: dwType(0x1000) szName dwThreadID dwFlags. */
+        if (nargs >= 2 && rd32(args) == 0x1000u && rd32(args + 4))
+            rt_log("SetThreadName(0x%X, \"%s\")", rd32(args + 8), gstr(rd32(args + 4)));
+        return 0;
+    }
     if (code == 0xE06D7363u && nargs >= 3) {
         uint32_t tinfo = rd32(args + 8), ctarr = tinfo ? rd32(tinfo + 12) : 0;
         uint32_t ct = ctarr ? rd32(ctarr + 4) : 0, td = ct ? rd32(ct + 4) : 0;
