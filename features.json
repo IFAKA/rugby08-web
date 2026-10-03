@@ -193,7 +193,7 @@
       ],
       "desc": "Main menu reached and rendered (reference screenshot committed as hash only)",
       "check": "tools/run_native.sh --frames 1800 --screenshot logs/menu.png && python3 tools/img_stats.py logs/menu.png --not-blank --min-colors 200",
-      "passes": false
+      "passes": true
     },
     {
       "id": "native.match",

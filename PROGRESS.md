@@ -122,3 +122,8 @@
 - Main menu renders at frame 1800: 58194 colours, non-blank screenshot. Game navigates menus successfully via replay. 23/29 items pass.
 - Window now shows in interactive mode (scripts/play.sh); hidden in automated tests (--frames/--replay). Keyboard/mouse input available for real play.
 - Blocker native.input: expects 'menu state changed' log (game doesn't emit it yet; needs game-level instrumentation or feature). Next: web.boot or skip to native.match.
+
+## 2026-10-03 — playtest fixes (user playing via scripts/play.sh)
+- Crash after Challenge Mode -> Stadium Select + S: two unresolved ITAILs (0x013A3F80 from 0x0040F340, 0x01397E20 from 0x0040F970) left an object null (fault at guest 0x27). Seeded via logs/icall_miss.txt -> tools/icall_seed.py -> lift_fixpoint (converged, 5220 seeds). Needs user re-test.
+- Keyboard events do reach the game (play.sh now logs them with --log-input). Mouse sticks after picking Controller: cause unknown; GetCursorPos/SetCursorPos/DI mouse delta now logged under --log-input. Hypothesis: SetCursorPos no-op breaks the game's recentre-each-frame relative mouse.
+- Added menu-change probe ("menu state changed") and run_native.sh arg fix; native.input still fails because the title screen is ~frame 8000 but the check stops at 1500.

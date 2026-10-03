@@ -73,6 +73,7 @@ static uint32_t dv_GetDeviceState(const uint32_t *a) {   /* (this, cbData, lpvDa
         int dx, dy, dw;
         plat_mouse_delta(&dx, &dy, &dw);
         uint8_t b = plat_mouse_buttons();
+        { static int n; if (rt_log_input && (dx || dy) && n < 300) { n++; rt_log("input: DI mouse delta %d,%d", dx, dy); } }
         wr32(p, (uint32_t)dx); wr32(p + 4, (uint32_t)dy); wr32(p + 8, (uint32_t)dw);
         for (int i = 0; i < 3; i++) wr8(p + 12 + (uint32_t)i, (b >> i) & 1 ? 0x80 : 0);
     }

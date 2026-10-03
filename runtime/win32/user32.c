@@ -430,8 +430,17 @@ static uint32_t g_cursor;
 static int g_cursor_count;
 HLE(SetCursor) { uint32_t o = g_cursor; g_cursor = a[0]; return o; }
 HLE(ShowCursor) { g_cursor_count += a[0] ? 1 : -1; plat_cursor_visible(g_cursor_count >= 0); return (uint32_t)g_cursor_count; }
-HLE(GetCursorPos) { int x, y; plat_cursor_pos(&x, &y); wr32(a[0], (uint32_t)x); wr32(a[0] + 4, (uint32_t)y); return TRUE_; }
-HLE(SetCursorPos) { plat_cursor_set_pos((int)a[0], (int)a[1]); return TRUE_; }
+HLE(GetCursorPos) {
+    int x, y; plat_cursor_pos(&x, &y);
+    static int n, lx = -1, ly = -1;
+    if (rt_log_input && (x != lx || y != ly) && n < 300) { n++; lx = x; ly = y; rt_log("input: GetCursorPos -> %d,%d", x, y); }
+    wr32(a[0], (uint32_t)x); wr32(a[0] + 4, (uint32_t)y); return TRUE_;
+}
+HLE(SetCursorPos) {
+    static int n, lx = -1, ly = -1;
+    if (rt_log_input && ((int)a[0] != lx || (int)a[1] != ly) && n < 300) { n++; lx = (int)a[0]; ly = (int)a[1]; rt_log("input: SetCursorPos(%d,%d)", (int)a[0], (int)a[1]); }
+    plat_cursor_set_pos((int)a[0], (int)a[1]); return TRUE_;
+}
 
 /* Hooks (the game installs a keyboard hook to swallow the Windows key) are never called. */
 HLE(SetWindowsHookExA) { (void)a; return 0x00F40001u; }
