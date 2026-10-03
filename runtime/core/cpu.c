@@ -1,8 +1,10 @@
 /* cpu.c -- the CPU state the lifted code reads, dispatch lookups, bridges, guest_call. */
 #include "rt.h"
+#include "aems.h"
 #include <pthread.h>
 #include <time.h>
 #include <stdio.h>
+#include <sys/stat.h>
 
 /* Per-thread CPU state (declared RECOMP_TLS in the vendored recomp_types.h) */
 RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp, g_ebx, g_esi, g_edi, g_ebp;
@@ -95,7 +97,8 @@ recomp_func_t recomp_lookup(uint32_t va) {
         if (m == va) return recomp_dispatch_table[mid].func;
         if (m < va) lo = mid + 1; else hi = mid;
     }
-    return NULL;
+    /* outside the image: run-time loaded sound-bank code (runtime/core/aems.c) */
+    return (va < RT_IMAGE_BASE || va >= RT_IMAGE_END) ? aems_lookup(va) : NULL;
 }
 
 /* ---- COM ------------------------------------------------------------------ */
@@ -165,6 +168,27 @@ static int g_nmiss;
 static pthread_mutex_t g_miss_mu = PTHREAD_MUTEX_INITIALIZER;
 static FILE *g_miss_f;
 
+/* Code outside the image is loaded at run time (EA AEMS sound modules from Audio/aems.big). Its
+ * surroundings are dumped to logs/dyncode/<va>.bin (u32 start, then 64 KiB of guest memory) so
+ * tools/aems_capture.py can match the relocated module against the bank files. Native only. */
+static void dyncode_capture(uint32_t va) {
+#ifndef __EMSCRIPTEN__
+    if (va < 0x10000u || (va >= RT_IMAGE_BASE && va < RT_IMAGE_END) || va >= RT_BRIDGE_HOST) return;
+    uint32_t start = (va > 0x18000u ? va - 0x8000u : 0x10000u) & ~0xFFFu, n = 0x10000u;
+    if (start + n > rt_guest_size) return;
+    mkdir("logs/dyncode", 0755);
+    char path[64];
+    snprintf(path, sizeof path, "logs/dyncode/%08X.bin", va);
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    fwrite(&start, 4, 1, f);
+    fwrite(G2H(start), 1, n, f);
+    fclose(f);
+#else
+    (void)va;
+#endif
+}
+
 void recomp_miss(int tail, uint32_t va, uint32_t from) {
     pthread_mutex_lock(&g_miss_mu);
     for (int i = 0; i < g_nmiss; i++) if (g_miss[i] == va) { pthread_mutex_unlock(&g_miss_mu); return; }
@@ -173,4 +197,5 @@ void recomp_miss(int tail, uint32_t va, uint32_t from) {
     if (g_miss_f) { fprintf(g_miss_f, "0x%08X %s from 0x%08X\n", va, tail ? "ITAIL" : "ICALL", from); fflush(g_miss_f); }
     pthread_mutex_unlock(&g_miss_mu);
     rt_log("%s: unresolved VA 0x%08X from 0x%08X", tail ? "ITAIL" : "ICALL", va, from);
+    dyncode_capture(va);
 }

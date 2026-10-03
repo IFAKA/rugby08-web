@@ -10,7 +10,8 @@ set(ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 # ---- lifted game code ----------------------------------------------------------------
 # -fwrapv -fno-strict-aliasing are required for correctness (runtime/DESIGN.md), as is the
 # RECOMP_LOCAL_REGS model the difftest verifies.
-file(GLOB GEN_SRCS CONFIGURE_DEPENDS ${ROOT}/gen/recomp/recomp_*.c ${ROOT}/gen/recomp/recomp_dispatch.c)
+# gen/aems/aems.c: code inside the AEMS sound banks (tools/aems_lift.py), run from the heap.
+file(GLOB GEN_SRCS CONFIGURE_DEPENDS ${ROOT}/gen/recomp/recomp_*.c ${ROOT}/gen/recomp/recomp_dispatch.c ${ROOT}/gen/aems/aems.c)
 add_library(recomp_gen STATIC ${GEN_SRCS})
 target_include_directories(recomp_gen PRIVATE ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include)
 target_compile_definitions(recomp_gen PRIVATE RECOMP_LOCAL_REGS)

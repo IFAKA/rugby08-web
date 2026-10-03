@@ -98,3 +98,9 @@
 - CPU model is now Pentium II + MMX: the VP6 decoder assumes MMX with no reachable C path. MMX_EXTRA ops added; difftest --grep '_mm\[' compares MMX bodies (~56 across 4 seeds, 0 mismatches).
 - runtime/win32/dsound.c + platform/sdl/sdl_audio.c: DirectSound software mixer on SDL audio, --audio-capture WAV, tools/audio_stats.py. The game streams a 4-channel 44.1 kHz buffer; intro audio is captured (-21 dBFS).
 - Native fault handler names guest address/function and dumps the trace ring. Game now reaches frame 60 and plays the intro, then exits: "FILE_loadpack - unable to unpack file e3606260..." (after an ITAIL miss in 0x415870; seeded, rerunning). Next: native.icall / native.fs (data.gob unpack), Shell Folders registry value.
+
+## 2026-10-03 — native.icall, native.threads, native.fs, native.d3d.present, native.audio PASS
+- Flags now cross calls and tail jumps (lift.py carry_flags): protector fragments split cmp/jcc, and /RTC's _RTC_CheckEsp tests the caller's flags. The game's own /RTC ESP checks (DebugBreak dumps the trace ring) then pinpointed the last stack imbalance.
+- Dynamic code: EA AEMS sound modules (Audio/aems.big *.abk, ABKC banks) run from the heap. tools/aems_lift.py lifts all 17 banks (60 functions) at canonical addresses: function fixups are indices into the engine table at 0x9AF720, data fixups are rebased to aems_base[i]. runtime/core/aems.c finds each bank's base on first entry by masked byte matching (fe_sfx at 0x0237A7E0, same as the capture).
+- Also: guest null page unmapped, RaiseException 0x406D1388 no-op, bare push/ret -> jmp, dispatcher thunk outside the code ranges, tools/img_stats.py.
+- Game runs 900 frames: EA logo, intro audio, legal screen with text. Next: native.video (VP6 intro), native.d3d.complete (MojoShader draw path for programmable VS), native.input/menu.

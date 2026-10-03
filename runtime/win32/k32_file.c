@@ -16,8 +16,12 @@ typedef struct { int fd; char host[2048]; char guest[1024]; } file_t;
 
 static void note_miss(const char *guest, const char *host) {
     const char *dot = strrchr(guest, '.');
-    int archive = dot && (!strcasecmp(dot, ".big") || !strcasecmp(dot, ".gob") ||
-                          !strcasecmp(dot, ".viv") || !strcasecmp(dot, ".vp6"));
+    const char *base = strrchr(guest, '/') ? strrchr(guest, '/') + 1 : guest;
+    /* <32 hex digits>.<ext> names are the game's override probes for files whose canonical copy
+     * is inside data/data.gob (its index uses the same names); a miss just means "use the pack" */
+    int hashed = dot && dot - base == 32 && strspn(base, "0123456789abcdefABCDEF") == 32;
+    int archive = !hashed && dot && (!strcasecmp(dot, ".big") || !strcasecmp(dot, ".gob") ||
+                                     !strcasecmp(dot, ".viv") || !strcasecmp(dot, ".vp6"));
     /* archives are required content (checked by native.fs); other misses are ordinary probes */
     rt_log("%s: %s (host %s)", archive ? "FILE_NOT_FOUND" : "file probe miss", guest, host);
 }

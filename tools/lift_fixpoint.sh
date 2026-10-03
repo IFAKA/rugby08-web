@@ -36,6 +36,10 @@ print(len(new))
 PY
 )
   echo "round $round: $new new static targets" >> logs/lift_fixpoint.log
-  [ "$new" = 0 ] && { echo "lift_fixpoint: converged after $round rounds ($(jq length analysis/static_seeds.json) static seeds, $(jq '.entries|length' analysis/lift_catalog.json) entries)"; exit 0; }
+  if [ "$new" = 0 ]; then
+    # code inside the AEMS sound banks (run from the heap) -> gen/aems/aems.c
+    .venv/bin/python tools/aems_lift.py >> logs/lift_fixpoint.log 2>&1 || { echo "lift_fixpoint: aems_lift failed"; exit 1; }
+    echo "lift_fixpoint: converged after $round rounds ($(jq length analysis/static_seeds.json) static seeds, $(jq '.entries|length' analysis/lift_catalog.json) entries, $(tail -1 logs/lift_fixpoint.log | sed 's/^aems_lift: //'))"; exit 0
+  fi
 done
 echo "lift_fixpoint: not converged after 25 rounds"; exit 1

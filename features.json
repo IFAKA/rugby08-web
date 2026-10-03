@@ -113,8 +113,8 @@
       ],
       "desc": "Indirect-call dispatch: runtime records unresolved targets to logs/icall_miss.txt; regen loop; 0 misses through menu boot",
       "check": "tools/run_native.sh --frames 600 && test ! -s logs/icall_miss.txt",
-      "passes": false,
-      "notes": "Frames present now (D3D8 bridge). Remaining miss: NULL ICALL from 0x7D5340 (sound system calls into the missing DirectSound object), then a bad free in sub_0079A300 crashes the run. Protector dispatcher (0x1055006) targets are now seeded statically."
+      "passes": true,
+      "notes": "PASS 2026-10-03: 0 misses over 600 frames. Needed: protector dispatcher seeds, encrypted-call stub forms, flags carried across calls/tail jumps, AEMS sound-bank code lifted AOT (tools/aems_lift.py)."
     },
     {
       "id": "native.threads",
@@ -123,7 +123,8 @@
       ],
       "desc": "CreateThread/events/critical sections/TLS/timeSetEvent implemented on SDL threads; no deadlock for 600 frames",
       "check": "tools/run_native.sh --frames 600 --expect 'frame 600'",
-      "passes": false
+      "passes": true,
+      "notes": "PASS 2026-10-03: reaches frame 600 with the sound and loader threads running."
     },
     {
       "id": "native.fs",
@@ -132,7 +133,8 @@
       ],
       "desc": "CreateFile/ReadFile/FindFirstFile etc. map to Game Files/ with case-insensitive, backslash-aware paths; all .big/.gob opened without error",
       "check": "tools/run_native.sh --frames 600 && ! grep -q 'FILE_NOT_FOUND' logs/native_run.log",
-      "passes": false
+      "passes": true,
+      "notes": "PASS 2026-10-03: data.gob/audio .big mapped; 32-hex-digit names are override probes for files inside data.gob (verified present in its index), no longer reported as missing archives."
     },
     {
       "id": "native.d3d.present",
@@ -141,7 +143,8 @@
       ],
       "desc": "D3D8 via d3d8to9 \u2192 d3d9-webgl (desktop GL/ANGLE backend): device creates, first Present shows a non-black frame",
       "check": "tools/run_native.sh --frames 120 --screenshot logs/f120.png && python3 tools/img_stats.py logs/f120.png --not-blank",
-      "passes": false
+      "passes": true,
+      "notes": "PASS 2026-10-03: frame 120 shows the EA logo; frame 900 the legal screen with font rendering."
     },
     {
       "id": "native.d3d.complete",
@@ -168,7 +171,8 @@
       ],
       "desc": "DirectSound buffers \u2192 SDL audio; menu music audible (non-silent capture)",
       "check": "tools/run_native.sh --frames 900 --audio-capture logs/menu.wav && python3 tools/audio_stats.py logs/menu.wav --not-silent",
-      "passes": false
+      "passes": true,
+      "notes": "PASS 2026-10-03: DirectSound software mixer on SDL audio; intro captured at about -20 dBFS."
     },
     {
       "id": "native.input",
