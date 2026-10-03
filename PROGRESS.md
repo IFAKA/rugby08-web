@@ -107,3 +107,9 @@
 - native.video PASS: VP6 decompress method 0x7EFAF5 (vtable 0x90A7D8 slot 2) hooked as "vp6 frame decoded"; screenshots: frame 60 = EA SPORTS intro video frame, frame 100+ = legal screen. Next: native.d3d.complete (needs --replay + tests/replays, and the MojoShader draw path).
 - Multimedia timers fixed (one service thread; one-shot timers freed). The game now plays the full intro movie and reaches the title screen (~frame 8000). Replays support key taps and `click X Y`; a click + Return at the title gives a new screen at frame 8800 (79k colours, not yet inspected).
 - Caution: test runs open a real SDL window on the user's desktop and the replay click warps the real mouse cursor. Next session: run checks hidden/offscreen (SDL_HINT or SDL_WINDOW_HIDDEN under --frames) and drop SDL_WarpMouseInWindow. Then native.d3d.complete (MojoShader draw path), native.menu, native.input.
+
+## 2026-10-03 — handoff (21/29 items pass; next: native.d3d.complete)
+- Automated runs (--frames N or --replay) now use a virtual cursor: SetCursorPos and replay clicks no longer warp the user's real pointer (the game calls SetCursorPos every frame, which pinned the desktop mouse during checks). native.video re-checked: ok. The window still appears briefly during checks.
+- scripts/play.sh: play the native build by hand (no frame limit, real input; log in logs/play.log). Quit: close window / Ctrl-C / `pkill rugby08`.
+- Resume: native.d3d.complete = programmable VS draw path (d3d8_vshader.cpp already makes GLSL ES via MojoShader; SetVertexShader(handle) still UNIMPL in draws; 7 shaders fail: rel. addressing needs CTAB, m3x3 writemask) + fixed-function lights/stages/multi-stream; write tests/replays/menu_to_match.txt (title ~frame 8000; menu_nav.txt = click 8100 + Return 8400, screen at 8800 not inspected yet: logs/r8800.png).
+- Run checks in the foreground only and confirm `pgrep rugby08` is empty afterwards (background runs left stray windows before).

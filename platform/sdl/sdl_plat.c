@@ -186,13 +186,21 @@ void plat_gl_swap(void) {
 }
 
 /* ---- cursor --------------------------------------------------------------------------------- */
+/* Automated runs (--frames N or --replay) never move the user's real cursor: the game calls
+   SetCursorPos every frame, which pinned the desktop pointer during checks. They keep a virtual
+   cursor in screen coordinates instead; replay clicks set it. */
+static int g_vcur_x, g_vcur_y;
+static int virtual_cursor(void) { return rt_frame_limit > 0 || rt_replay_path[0]; }
+
 void plat_cursor_pos(int *x, int *y) {
+    if (virtual_cursor()) { *x = g_vcur_x; *y = g_vcur_y; return; }
     int gx = 0, gy = 0;
     if (g_inited) SDL_GetGlobalMouseState(&gx, &gy);
     *x = gx; *y = gy;
 }
 
 void plat_cursor_set_pos(int x, int y) {
+    if (virtual_cursor()) { g_vcur_x = x; g_vcur_y = y; return; }
     if (!g_win) return;
     int wx, wy;
     SDL_GetWindowPosition(g_win, &wx, &wy);
@@ -353,7 +361,7 @@ void plat_replay_tick(uint32_t frame) {
         SDL_Event e;
         memset(&e, 0, sizeof e);
         if (r->mouse) {
-            if (g_win && g_inited) SDL_WarpMouseInWindow(g_win, r->x, r->y);
+            if (g_win) { int wx, wy; SDL_GetWindowPosition(g_win, &wx, &wy); g_vcur_x = wx + r->x; g_vcur_y = wy + r->y; }
             e.type = r->down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
             e.button.windowID = g_win ? SDL_GetWindowID(g_win) : 0;
             e.button.button = SDL_BUTTON_LEFT;
