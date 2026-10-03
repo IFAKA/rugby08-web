@@ -14,6 +14,13 @@ os.chdir(ROOT)
 pe = json.load(open("analysis/pe_analysis.json"))
 BASE = pe["image_base"]
 exe = open(pe["filepath"], "rb").read()
+# the reference decodes what the lifter decodes: obfuscated call sites rewritten (tools/code_patch.py)
+import sys
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import code_patch
+from ranges import CODE_LO, CODE_HI
+_pcode, OBF = code_patch.patch(exe[CODE_LO - BASE:CODE_HI - BASE], CODE_LO, CODE_HI, exe[:CODE_LO - BASE])
+exe = exe[:CODE_LO - BASE] + _pcode + exe[CODE_HI - BASE:]
 cat = json.load(open("analysis/lift_catalog.json"))
 entries = set(cat["entries"])
 (t_lo, t_hi), other = cat["code_ranges"][0], cat["code_ranges"][1:]
@@ -45,6 +52,8 @@ for s, e in ref:
 fn_re = re.compile(r"^void sub_([0-9A-F]{8})\(void\)")
 ins_re = re.compile(r"/\* 0x([0-9A-F]{8}): ")
 tail_re = re.compile(r"RECOMP_ITAIL\(0x([0-9A-F]{8})u\)")
+label_re = re.compile(r"^\s*L_([0-9A-F]{8}):")
+labels = set()   # the generator writes no address comment on indirect jmps; their label marks them
 fn_insns = {}
 tails = []  # (from_fn, target)
 stubs = collections.Counter()
@@ -62,6 +71,8 @@ for path in sorted(glob.glob("gen/recomp/recomp_*.c")):
             continue
         for a in ins_re.findall(line):
             fn_insns[cur].append(int(a, 16))
+        for a in label_re.findall(line):
+            labels.add(int(a, 16))
         for t in tail_re.findall(line):
             tails.append((cur, int(t, 16)))
 
@@ -81,6 +92,9 @@ for v in entries:
     else:
         cls["in_.text_gap(no ghidra function)"] += 1
 ghidra_unlifted = [s for s in starts if s not in entries]
+# expected: encrypted-call stubs inside a patched site (tools/code_patch.py turns them into calls)
+in_site = {a for s, _, r in OBF for a in range(s + 1, code_patch.gap_end(s, r))}
+ghidra_unlifted_real = [s for s in ghidra_unlifted if s not in in_site]
 
 # lifted instruction vs reference boundaries (only addresses inside Ghidra extents)
 total_i = mis_i = 0
@@ -97,25 +111,55 @@ bad_fns = len(mis_by_fn)
 # fall-through chain targets that are not lifted functions
 tgt_missing = sorted({t for _, t in tails if t not in defined})
 tgt_empty_stub = sorted({t for _, t in tails if t in defined and not fn_insns[t]})
+# the ones real code can reach: emitted by a function that starts where Ghidra starts one
+real_dangling = sorted({(f, t) for f, t in tails if t not in defined and f in ref_start})
+# ...and only when the tail is reachable: dead ones sit under a label nothing jumps to, after an
+# unconditional jmp (the nop fill of a patched obfuscated-call site)
+def reachable(f, t):
+    for path in glob.glob("gen/recomp/recomp_*.c"):
+        src = open(path, errors="replace").read()
+        m = re.search(rf"^void sub_{f:08X}\(void\) {{.*?^}}", src, re.M | re.S)
+        if not m:
+            continue
+        body = m.group(0).splitlines()
+        k = next(i for i, l in enumerate(body) if f"RECOMP_ITAIL(0x{t:08X}u)" in l)
+        while k > 0 and not re.match(r"\s*L_[0-9A-F]{8}:", body[k]):
+            k -= 1
+        lab = body[k].strip().rstrip(":")
+        prev = next((l for l in reversed(body[:k]) if l.strip() and not l.strip().startswith("L_")), "")
+        falls_in = not re.search(r"^\s*(goto L_[0-9A-F]{8};|.*return; \})", prev)
+        return falls_in or f"goto {lab};" in m.group(0)
+    return True
+real_dangling = [(f, t) for f, t in real_dangling if reachable(f, t)]
 tail_total = len(tails)
 
 # byte coverage: Ghidra-function bytes whose reference instruction was lifted
 lifted_addrs = {a for addrs in fn_insns.values() for a in addrs}
 ref_bytes = ok_bytes = 0
+prev_ok = False
+fill = {a for s, _, r in OBF for a in range(s + 10, code_patch.gap_end(s, r))}   # unreachable nops
 for ins in (i for s, e in ref for i in md.disasm(exe[s - BASE:e - BASE], s)):
+    if ins.address in fill or ins.mnemonic == "int3":   # int3 = alignment padding
+        continue
     ref_bytes += ins.size
-    if ins.address in lifted_addrs:
+    indirect = ins.mnemonic in ("jmp", "call") and not ins.op_str.startswith("0x")
+    if ins.address in lifted_addrs or ins.address in labels or (indirect and prev_ok):
         ok_bytes += ins.size
+        prev_ok = True
+    else:
+        prev_ok = False
 
 rep = {
     "entries": len(entries), "ghidra_functions": len(ref),
     "entry_classes": dict(cls), "ghidra_functions_without_lifted_entry": len(ghidra_unlifted),
+    "ghidra_unlifted_outside_patched_sites": [hex(x) for x in ghidra_unlifted_real],
     "lifted_insns_in_ghidra_extents": total_i,
     "lifted_insns_off_reference_boundary": mis_i, "functions_with_off_boundary_insns": bad_fns,
     "ref_bytes": ref_bytes, "ref_bytes_lifted_pct": round(100 * ok_bytes / ref_bytes, 2),
     "fallthrough_itail_sites": tail_total,
     "fallthrough_targets_not_lifted": len(tgt_missing),
     "fallthrough_targets_empty_stub": len(tgt_empty_stub),
+    "dangling_from_ghidra_functions": [(hex(f), hex(t)) for f, t in real_dangling],
     "fault_stubs": dict(stubs),
     "examples": {"fragment_entries": [hex(x) for x in frag_examples],
                  "fallthrough_targets_not_lifted": [hex(x) for x in tgt_missing[:20]],
@@ -132,4 +176,5 @@ with open("logs/fidelity_report.log", "w") as f:
     json.dump(rep, f, indent=1)
 print(f"fidelity: entries={len(entries)} fragment_entries={cls['inside_ghidra_function(fragment)']} "
       f"off_boundary_insns={mis_i}/{total_i} ref_bytes_lifted={rep['ref_bytes_lifted_pct']}% "
-      f"fallthrough_targets_not_lifted={len(tgt_missing)} ghidra_unlifted={len(ghidra_unlifted)}")
+      f"fallthrough_targets_not_lifted={len(tgt_missing)} real_dangling={len(real_dangling)} "
+      f"ghidra_unlifted={len(ghidra_unlifted)} (outside patched sites: {len(ghidra_unlifted_real)})")
