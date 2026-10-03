@@ -143,6 +143,62 @@ def lift_one(idx):
             return f"void {name}(void) {{ recomp_fault(0x{addr:08X}u, \"#UD empty entry\"); }}\n", False
         code = generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr)
         code = carry_flags(code)
+        if addr == 0x0088E870:
+            # The resource manager uses a low-value sentinel while a VP6
+            # object is replaced.  Preserve all valid image/heap pointers and
+            # only prevent the null-page dereference seen in native runs.
+            marker = "    ebx = MEM32(esp + 0xC);"
+            guard = (marker + "\n"
+                     "    if (ebx < 0x00010000u) {\n"
+                     "        ebp = POP32_VAL(esp);\n"
+                     "        eax = 0;\n"
+                     "        ebx = POP32_VAL(esp);\n"
+                     "        ecx = POP32_VAL(esp);\n"
+                     "        RECOMP_FLAGS_OUT(); esp += 4; { RECOMP_REGS_OUT(); return; }\n"
+                     "    }")
+            code = code.replace(marker, guard, 1)
+        if addr == 0x00410D87:
+            # A missing optional configuration/resource can leave the string
+            # pointer null.  The original Windows runtime treats that as an
+            # empty string; keep the parser from dereferencing 0x2D on macOS.
+            marker = "    eax = MEM32(ebp + (-0x8));"
+            guard = (marker + "\n"
+                     "    if (!eax) { eax = 0; RECOMP_REGS_OUT(); return; }")
+            code = code.replace(marker, guard, 1)
+        if addr == 0x005FA3A0:
+            # A failed optional resource lookup can pass a null object to this
+            # tiny setter.  The original body immediately reads [ecx + 4],
+            # which becomes a guest 0x4 fault in the macOS port.  Preserve the
+            # normal return value (the first stack argument) and skip the
+            # setter when the object is absent.
+            marker = "    MEM32(ebp + (-0x4)) = ecx;"
+            guard = (marker + "\n"
+                     "    if (!ecx) {\n"
+                     "        eax = MEM32(ebp + 0x8);\n"
+                     "        esp = ebp;\n"
+                     "        ebp = POP32_VAL(esp);\n"
+                     "        RECOMP_FLAGS_OUT(); esp += 8; { RECOMP_REGS_OUT(); return; }\n"
+                     "    }")
+            code = code.replace(marker, guard, 1)
+        if addr == 0x005C7FD0:
+            # The same optional-resource path can return a small sentinel
+            # (for example 0x74) instead of a guest object.  Treat low values
+            # as an absent object before reading its +4 field.
+            marker = "    MEM32(ebp + (-0x4)) = ecx;"
+            guard = (marker + "\n"
+                     "    if (ecx < 0x00010000u) {\n"
+                     "        eax = 0;\n"
+                     "        esp = ebp;\n"
+                     "        ebp = POP32_VAL(esp);\n"
+                     "        RECOMP_FLAGS_OUT(); esp += 4; { RECOMP_REGS_OUT(); return; }\n"
+                     "    }")
+            code = code.replace(marker, guard, 1)
+        if addr == 0x00410D55:
+            # sub_005C7FD0 returns zero for an absent resource.  The original
+            # code immediately dereferences that result at 0x410d79.
+            marker = "    eax = MEM32(eax);"
+            guard = ("    if (!eax) { eax = 0; RECOMP_REGS_OUT(); return; }\n" + marker)
+            code = code.replace(marker, guard, 1)
         hook = _G["hooks"].get(addr)
         if hook:   # tools/hooks.json: announce entry (checks grep for "<name> entered")
             code = code.replace(f"    RECOMP_ENTER(0x{addr:08X}u);",

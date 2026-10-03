@@ -100,12 +100,45 @@ HLE_D3D(IDirect3DDevice8, Reset) {
     return D3D_OK_;
 }
 
+// Coarse 32x24 luma grid of the back buffer, to detect that an injected input changed the screen.
+static std::vector<float> screen_grid(int w, int h) {
+    std::vector<uint8_t> px((size_t)w * h * 4);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    std::vector<float> g(32 * 24, 0.f);
+    for (int gy = 0; gy < 24; gy++)
+        for (int gx = 0; gx < 32; gx++) {
+            double sum = 0; int n = 0;
+            for (int y = gy * h / 24; y < (gy + 1) * h / 24; y += 4)
+                for (int x = gx * w / 32; x < (gx + 1) * w / 32; x += 4) {
+                    const uint8_t *p = &px[((size_t)y * w + x) * 4];
+                    sum += 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]; n++;
+                }
+            g[(size_t)gy * 32 + gx] = n ? (float)(sum / n) : 0.f;
+        }
+    return g;
+}
+
+static void menu_change_probe(uint32_t frame, int w, int h) {
+    static uint32_t tracked; static bool armed; static std::vector<float> base;
+    uint32_t le = plat_replay_last_event();
+    if (le != tracked) { tracked = le; base = screen_grid(w, h); armed = true; return; }
+    if (armed && frame >= le + 90) {
+        std::vector<float> cur = screen_grid(w, h);
+        double d = 0; for (size_t i = 0; i < cur.size(); i++) d += fabs(cur[i] - base[i]);
+        d /= (double)cur.size();
+        if (d > 8.0) rt_trace("menu state changed (input at frame %u, screen diff %.1f)", le, d);
+        armed = false;
+    }
+}
+
 HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     Obj *o = d3d8_obj(a[0]);
     DevState *s = o->dev;
     dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
     s->frame++;
     plat_replay_tick(s->frame);
+    if (rt_replay_path[0]) menu_change_probe(s->frame, (int)o->w, (int)o->h);
     if (s->frame == 1 || s->frame % 60 == 0 || (int)s->frame == rt_frame_limit) rt_trace("frame %u", s->frame);
     if (rt_frame_limit > 0 && (int)s->frame >= rt_frame_limit) {
         if (rt_screenshot_path[0]) {

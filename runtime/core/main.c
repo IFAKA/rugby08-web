@@ -7,9 +7,11 @@
 
 char rt_game_dir[1024] = "Game Files";
 char rt_exe_path[1024] = "Rugby08_unpacked.exe";
+extern char rt_user_dir[1024];
 int rt_frame_limit = -1;          /* --frames N: exit after N presented frames (checks); <= 0: no limit */
 char rt_screenshot_path[1024];    /* --screenshot PATH: PNG of the last frame before --frames exits */
 char rt_audio_capture_path[1024]; /* --audio-capture PATH: WAV of the mixed audio output */
+int rt_log_input;
 char rt_replay_path[1024];        /* --replay PATH: scripted key input (tests/replays/) */
 
 void rt_log_open(const char *path);
@@ -25,8 +27,8 @@ void rt_platform_init(int argc, char **argv);   /* platform/<target>/ */
 static void on_fault(int sig, siginfo_t *si, void *ctx) {
     (void)ctx;
     uintptr_t a = (uintptr_t)si->si_addr, b = (uintptr_t)g_mem_base;
-    rt_log("FAULT: signal %d at host %p (guest 0x%08llX) in sub_%08X, esp=0x%08X", sig, si->si_addr,
-           (unsigned long long)(a - b), g_cur_func, g_esp);
+    rt_log("FAULT: signal %d at host %p (guest 0x%08llX) in sub_%08X, esp=0x%08X eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X", sig, si->si_addr,
+           (unsigned long long)(a - b), g_cur_func, g_esp, g_eax, g_ebx, g_ecx, g_edx, g_esi, g_edi, g_ebp);
     recomp_dump_trace("fault");
     _exit(139);
 }
@@ -43,7 +45,7 @@ static void install_fault_handler(void) {}
 #endif
 
 static void usage(void) {
-    fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--log FILE] [--frames N] [--screenshot PNG] [--audio-capture WAV] [--replay FILE] [-v]\n");
+    fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--user-dir DIR] [--log FILE] [--frames N] [--screenshot PNG] [--audio-capture WAV] [--replay FILE] [-v]\n");
     exit(2);
 }
 
@@ -52,11 +54,13 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--exe") && i + 1 < argc) snprintf(rt_exe_path, sizeof rt_exe_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--game-dir") && i + 1 < argc) snprintf(rt_game_dir, sizeof rt_game_dir, "%s", argv[++i]);
+        else if (!strcmp(argv[i], "--user-dir") && i + 1 < argc) snprintf(rt_user_dir, sizeof rt_user_dir, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--log") && i + 1 < argc) log_path = argv[++i];
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) rt_frame_limit = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) snprintf(rt_screenshot_path, sizeof rt_screenshot_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--audio-capture") && i + 1 < argc) snprintf(rt_audio_capture_path, sizeof rt_audio_capture_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc) snprintf(rt_replay_path, sizeof rt_replay_path, "%s", argv[++i]);
+        else if (!strcmp(argv[i], "--log-input")) rt_log_input = 1;
         else if (!strcmp(argv[i], "-v")) rt_verbose = 1;
         else if (!strncmp(argv[i], "--", 2)) { /* platform options are parsed by rt_platform_init */ }
         else usage();

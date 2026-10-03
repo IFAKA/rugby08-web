@@ -253,6 +253,15 @@ static uint32_t mk_buttons(void) {
 }
 
 static void translate(const SDL_Event *e) {
+    if (rt_log_input) {
+        if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP)
+            rt_log("input: key %s %s (vk 0x%02X)", SDL_GetScancodeName(e->key.keysym.scancode),
+                   e->type == SDL_KEYDOWN ? "down" : "up", g_keys[e->key.keysym.scancode].vk);
+        else if (e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEBUTTONUP)
+            rt_log("input: mouse button %d %s at %d,%d", e->button.button, e->type == SDL_MOUSEBUTTONDOWN ? "down" : "up", e->button.x, e->button.y);
+        else if (e->type == SDL_WINDOWEVENT && (e->window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e->window.event == SDL_WINDOWEVENT_FOCUS_LOST))
+            rt_log("input: window focus %s", e->window.event == SDL_WINDOWEVENT_FOCUS_GAINED ? "gained" : "lost");
+    }
     switch (e->type) {
     case SDL_QUIT: push(WM_CLOSE_, 0, 0); break;
     case SDL_WINDOWEVENT:
@@ -365,10 +374,14 @@ static void replay_load(void) {
     rt_log("replay: %d events from %s", g_nreplay, rt_replay_path);
 }
 
+static uint32_t g_replay_last;
+uint32_t plat_replay_last_event(void) { return g_replay_last; }
+
 void plat_replay_tick(uint32_t frame) {
     if (!g_replay_loaded) replay_load();
     for (; g_ireplay < g_nreplay && g_replay[g_ireplay].frame <= frame; g_ireplay++) {
         const replay_ev_t *r = &g_replay[g_ireplay];
+        g_replay_last = frame;
         SDL_Event e;
         memset(&e, 0, sizeof e);
         if (r->mouse) {

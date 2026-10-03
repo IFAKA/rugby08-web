@@ -65,6 +65,7 @@ typedef struct { const char *name; rt_hle_fn fn; uint16_t pop; } rt_method_t;
 uint32_t rt_com_vtable(const char *iface, const rt_method_t *m, int n);
 uint32_t rt_com_new(uint32_t vtbl, void *host);          /* returns guest `this` */
 void    *rt_com_host(uint32_t this_va);                  /* host pointer stored at this+4 */
+void     rt_com_free(uint32_t this_va);
 
 /* ---- thread state ---------------------------------------------------- */
 /* Initialise this host thread's CPU state for running guest code on stack [lo,hi). */
@@ -83,6 +84,7 @@ extern int rt_verbose;
 extern int rt_frame_limit;              /* --frames N (<= 0: run until the game exits) */
 extern char rt_screenshot_path[1024];   /* --screenshot PATH ("" = none) */
 extern char rt_audio_capture_path[1024]; /* --audio-capture PATH ("" = none) */
+extern int rt_log_input;                 /* --log-input: log host key/mouse events and what the game polls */
 extern char rt_replay_path[1024];        /* --replay PATH ("" = none) */
 /* PNG (RGBA8, rows top to bottom); 0 = ok. */
 int rt_png_write(const char *path, int w, int h, const uint8_t *rgba);

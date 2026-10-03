@@ -48,6 +48,7 @@ void plat_cursor_visible(int show);
  * comments. Called once per presented frame; due events become ordinary SDL key events, so they
  * reach the game as WM_KEY* messages and DirectInput state exactly like a real key. */
 void plat_replay_tick(uint32_t frame);
+uint32_t plat_replay_last_event(void);   /* frame of the most recent injected replay event (0 = none) */
 
 /* Audio output: 44.1 kHz stereo float. mix(out, frames) fills interleaved L/R frames; it runs on
  * the host's audio thread (or a pacing thread when no device opens), so it must take its own

@@ -66,6 +66,7 @@ static void destroy(Obj *o) {
     o->shadow = 0;
     o->lvl_shadow.clear();
     o->dead = true;
+    rt_com_free(o->guest);
 }
 
 extern "C" {

@@ -75,7 +75,29 @@ uint32_t rt_host_bridge(const char *name, rt_hle_fn fn, uint16_t pop) {
     return RT_BRIDGE_HOST + 16 * i;
 }
 
+/* 0x451C86 is a shared SEH landing block, not a function entry. The lifted
+   dispatch table therefore cannot reach it when an indirect tail jump from
+   the menu/game-state code targets it. Preserve its two instructions and
+   continue through the common cleanup block. */
+static void seh_landing_00451c86(void) {
+    MEM32(FS_BASE + 0) = g_ecx;
+    recomp_func_t fn = recomp_lookup(0x004F9C43u);
+    if (fn) fn();
+}
+
+/* 0x013A2D97 is an overlapping basic block: the lifted image also exposes
+   the same bytes as the body of sub_013A2D95.  An indirect tail jump can land
+   on the block, so dispatch the instructions represented at that address. */
+static void overlap_block_013a2d97(void) {
+    recomp_func_t fn = recomp_lookup(0x0049A0D0u);
+    if (fn) fn();
+    fn = recomp_lookup(0x013A2DA6u);
+    if (fn) fn();
+}
+
 recomp_func_t recomp_lookup_manual(uint32_t va) {
+    if (va == 0x00451C86u) return seh_landing_00451c86;
+    if (va == 0x013A2D97u) return overlap_block_013a2d97;
     if (va >= RT_BRIDGE_IMPORT && va < RT_BRIDGE_IMPORT + 16 * rt_import_count) {
         t_bridge_va = va;
         return import_trampoline;
@@ -113,16 +135,25 @@ uint32_t rt_com_vtable(const char *iface, const rt_method_t *m, int n) {
 /* Host pointers are 64-bit natively: keep them in a side table, store the index at this+4. */
 #define MAX_COM_OBJS 65536
 static void *g_com_host[MAX_COM_OBJS];
+static uint32_t g_com_guest[MAX_COM_OBJS];
+static uint32_t g_com_free[MAX_COM_OBJS];
 static uint32_t g_com_count = 1;
+static uint32_t g_com_free_count;
 static pthread_mutex_t g_com_mu = PTHREAD_MUTEX_INITIALIZER;
 
 uint32_t rt_com_new(uint32_t vtbl, void *host) {
-    pthread_mutex_lock(&g_com_mu);
-    if (g_com_count >= MAX_COM_OBJS) rt_fatal("COM object table full");
-    uint32_t idx = g_com_count++;
-    g_com_host[idx] = host;
-    pthread_mutex_unlock(&g_com_mu);
     uint32_t obj = gcalloc(16);
+    pthread_mutex_lock(&g_com_mu);
+    uint32_t idx;
+    if (g_com_free_count) {
+        idx = g_com_free[--g_com_free_count];
+    } else {
+        if (g_com_count >= MAX_COM_OBJS) rt_fatal("COM object table full");
+        idx = g_com_count++;
+    }
+    g_com_host[idx] = host;
+    g_com_guest[idx] = obj;
+    pthread_mutex_unlock(&g_com_mu);
     wr32(obj, vtbl);
     wr32(obj + 4, idx);
     return obj;
@@ -130,7 +161,21 @@ uint32_t rt_com_new(uint32_t vtbl, void *host) {
 
 void *rt_com_host(uint32_t this_va) {
     uint32_t idx = rd32(this_va + 4);
-    return idx < MAX_COM_OBJS ? g_com_host[idx] : NULL;
+    pthread_mutex_lock(&g_com_mu);
+    void *host = idx < MAX_COM_OBJS && g_com_guest[idx] == this_va ? g_com_host[idx] : NULL;
+    pthread_mutex_unlock(&g_com_mu);
+    return host;
+}
+
+void rt_com_free(uint32_t this_va) {
+    uint32_t idx = rd32(this_va + 4);
+    pthread_mutex_lock(&g_com_mu);
+    if (idx < MAX_COM_OBJS && g_com_guest[idx] == this_va) {
+        g_com_host[idx] = NULL;
+        g_com_guest[idx] = 0;
+        g_com_free[g_com_free_count++] = idx;
+    }
+    pthread_mutex_unlock(&g_com_mu);
 }
 
 /* ---- guest_call ------------------------------------------------------------ */
