@@ -104,7 +104,7 @@
       ],
       "desc": "RegisterClass/CreateWindowEx → SDL window; message pump works; reaches Direct3DCreate8",
       "check": "tools/run_native.sh --frames 0 --expect 'Direct3DCreate8'",
-      "passes": false
+      "passes": true
     },
     {
       "id": "native.icall",

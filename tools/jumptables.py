@@ -27,8 +27,8 @@ def table_arms(code, cs, i, lo, hi):
     arms, first, last, misses = [], None, None, 0
     for k in range(MAX_SLOTS):
         a = t + 4 * k
-        if a - cs < 0 or a + 4 - cs > len(code) or (arms and a >= min(arms)):
-            break                               # a table never runs into code it jumps to
+        if a - cs < 0 or a + 4 - cs > len(code) or any(t <= x <= a for x in arms):
+            break                               # a table never runs into an arm placed after it
         v = int.from_bytes(code[a - cs:a - cs + 4], "little")
         if lo <= v < hi:
             arms.append(v)

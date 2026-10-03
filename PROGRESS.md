@@ -85,3 +85,9 @@
 - (3) Inline jump tables (CRT memcpy/memmove) were decoded as code, so arms like 0x8720D4 had no label; tools/jumptables.py adds a recursive descent with table slots as data for bodies that dispatch through a table. (4) Stale analysis/static_seeds.json from older lifts cut bodies mid-instruction; lift_fixpoint.sh now starts with no seeds. (5) __xc/__xi slots are now catalog seeds (ranges.INITTERM).
 - tools/run_native.sh written (the native.boot check). difftest still 0 mismatches. lift.all/native.compile still pass.
 - After WinMain: UNIMPL Reg*/SystemParametersInfoA/Direct3DCreate8/RegisterClassExA, then ITAIL miss 0x75E178 from 0x75E150 and a null ICALL -> segfault. Next item: native.window (and native.icall for the misses).
+
+## 2026-10-03 — native.window PASS
+- runtime/include/plat.h + platform/sdl/sdl_plat.c (SDL2, shared native/web): one host window, SDL events -> WM_* messages, VK/scan-code tables, cursor. runtime/win32/user32.c: classes, HWNDs, CREATESTRUCT/WM_NCCREATE/WM_CREATE, message queue (Peek/Get/Dispatch/Post/Send), DefWindowProc, keyboard, metrics. advapi32.c: no registry keys (lookups logged). runtime/d3d8/d3d8.c: Direct3DCreate8 traced, returns NULL for now.
+- Also fixed in lift: jump-table end guard (tables placed after their arms were cut to one slot, e.g. switch at 0x75E150).
+- Game creates "EAGL PC" 1352x878 then loops creating "EAGL PC Caps Retrieval" windows (63, never destroyed) because D3D/DirectDraw caps fail (Direct3DCreate8 NULL, DirectDrawCreate UNIMPL), then null ICALL from 0x766950 -> segfault. Message pump not exercised yet.
+- Next: native.d3d.present (IDirect3D8 via d3d8to9 -> d3d9-webgl; DirectDrawCreate for caps).

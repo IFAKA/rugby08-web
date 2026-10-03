@@ -29,22 +29,26 @@ add_custom_command(OUTPUT ${ROOT}/gen/runtime/imports.c
   COMMAND ${Python3_EXECUTABLE} ${ROOT}/tools/gen_imports.py
   DEPENDS ${ROOT}/tools/gen_imports.py ${ROOT}/analysis/pe_analysis.json ${RT_ALL_SRCS}
   WORKING_DIRECTORY ${ROOT} COMMENT "gen_imports")
-file(GLOB RT_CORE_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/core/*.c ${ROOT}/runtime/win32/*.c)
+file(GLOB RT_CORE_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/core/*.c ${ROOT}/runtime/win32/*.c ${ROOT}/runtime/d3d8/*.c)
 add_library(rt_core STATIC ${RT_CORE_SRCS} ${ROOT}/gen/runtime/imports.c)
 target_include_directories(rt_core PUBLIC ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include ${ROOT}/runtime/win32)
 target_compile_options(rt_core PRIVATE -Wall -Wno-unused-function -fwrapv -fno-strict-aliasing)
 
 # ---- platform + executable -----------------------------------------------------------------
 if(EMSCRIPTEN)
-  file(GLOB PLATFORM_SRCS CONFIGURE_DEPENDS ${ROOT}/platform/web/*.c)
+  file(GLOB PLATFORM_SRCS CONFIGURE_DEPENDS ${ROOT}/platform/web/*.c ${ROOT}/platform/sdl/*.c)
 else()
-  file(GLOB PLATFORM_SRCS CONFIGURE_DEPENDS ${ROOT}/platform/native/*.c)
+  file(GLOB PLATFORM_SRCS CONFIGURE_DEPENDS ${ROOT}/platform/native/*.c ${ROOT}/platform/sdl/*.c)
 endif()
 add_executable(rugby08 ${PLATFORM_SRCS})
 target_link_libraries(rugby08 PRIVATE rt_core recomp_gen rt_core m)
 if(NOT EMSCRIPTEN)
   find_package(Threads REQUIRED)
   target_link_libraries(rugby08 PRIVATE Threads::Threads)
+  find_package(SDL2 REQUIRED CONFIG)
+  target_link_libraries(rugby08 PRIVATE SDL2::SDL2)
+else()
+  target_compile_options(rugby08 PRIVATE -sUSE_SDL=2)
 endif()
 
 if(EMSCRIPTEN)
