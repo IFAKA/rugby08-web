@@ -50,6 +50,9 @@ hobj_t  *h_get(uint32_t h, htype_t type);     /* NULL if not that type (H_FREE =
 void     h_close(uint32_t h);
 uint64_t rt_host_tid(void);
 
+/* user32.c: back hwnd with the host window (D3D CreateDevice binds its device window). */
+int user32_bind_host(uint32_t hwnd);
+
 /* Block until the object is signaled or timeout (ms, 0xFFFFFFFF = infinite). 0 = acquired,
  * WAIT_TIMEOUT_ otherwise. Consumes auto-reset/semaphore/mutex state. */
 uint32_t h_wait(hobj_t *o, uint32_t timeout_ms);

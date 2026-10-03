@@ -40,6 +40,16 @@ def table_arms(code, cs, i, lo, hi):
             break
     if not arms:
         return None
+    # memmove's "unwind down" tables are indexed by a negated count (`neg ecx; jmp [ecx*4 + T]`),
+    # so their arms sit in the slots before T (0x872548: slots -7..-1 -> 0x87254C..0x87257C).
+    if first == 0:
+        while first > -MAX_SLOTS and t + 4 * (first - 1) - cs >= 0:
+            a = t + 4 * (first - 1)
+            v = int.from_bytes(code[a - cs:a - cs + 4], "little")
+            if not (lo <= v < hi) or any(a <= x < t for x in arms + [v]):
+                break
+            arms.append(v)
+            first -= 1
     return t + 4 * first, t + 4 * (last + 1), set(arms)
 
 

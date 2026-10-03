@@ -105,6 +105,27 @@ for i in _mds.disasm(img[T_LO - base:T_HI - base], T_LO):
 prot_seeds = {v for v in prot_seeds if decodes_cleanly(v)}
 src["protector_seeds_new"] = len(prot_seeds - entries); entries |= prot_seeds
 
+# The protector's call dispatcher (0x1055000): `call $+5; pop ebx; add ebx, imm8; xor ecx, ecx;
+# cmp [ecx+ebx], eax` finds its own table, a static run of (key, target) pairs; the key is the
+# stack word above the return address and the dispatcher jumps to target. Every target is
+# reached only through `jmp [esp-0x28]`, so each one is an entry.
+import re as _re
+disp_seeds, disp_tables = set(), 0
+for mt in _re.finditer(rb"\xE8\x00\x00\x00\x00\x5B\x83\xC3(.)\x33\xC9\x39\x04\x19", img, _re.S):
+    va = base + mt.start()
+    if not in_code(va):
+        continue
+    t = va + 5 + mt.group(1)[0]
+    disp_tables += 1
+    while t + 8 - base <= len(img):
+        k, v = _st.unpack("<II", img[t - base:t - base + 8])
+        if not (in_code(k) and in_code(v)):
+            break
+        disp_seeds.add(v)
+        t += 8
+src["dispatcher_tables"] = disp_tables
+src["dispatcher_targets_new"] = len(disp_seeds - entries); entries |= disp_seeds
+
 # every _initterm slot (tools/ranges.py INITTERM): small initializers nothing else references
 init = {_st.unpack("<I", img[a - base:a - base + 4])[0] for lo_, hi_ in INITTERM for a in range(lo_, hi_, 4)}
 init = {v for v in init if in_code(v)}

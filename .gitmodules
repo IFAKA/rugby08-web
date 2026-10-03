@@ -10,3 +10,6 @@
 [submodule "third_party/xboxrecomp"]
 	path = third_party/xboxrecomp
 	url = https://github.com/sp00nznet/xboxrecomp
+[submodule "third_party/mojoshader"]
+	path = third_party/mojoshader
+	url = https://github.com/icculus/mojoshader

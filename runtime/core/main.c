@@ -6,7 +6,8 @@
 
 char rt_game_dir[1024] = "Game Files";
 char rt_exe_path[1024] = "Rugby08_unpacked.exe";
-int rt_frame_limit = -1;          /* --frames N: exit after N presented frames (checks) */
+int rt_frame_limit = -1;          /* --frames N: exit after N presented frames (checks); <= 0: no limit */
+char rt_screenshot_path[1024];    /* --screenshot PATH: PNG of the last frame before --frames exits */
 
 void rt_log_open(const char *path);
 void rt_mem_init(void);
@@ -15,7 +16,7 @@ void rt_bind_imports(void);
 void rt_platform_init(int argc, char **argv);   /* platform/<target>/ */
 
 static void usage(void) {
-    fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--log FILE] [--frames N] [-v]\n");
+    fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--log FILE] [--frames N] [--screenshot PNG] [-v]\n");
     exit(2);
 }
 
@@ -26,6 +27,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--game-dir") && i + 1 < argc) snprintf(rt_game_dir, sizeof rt_game_dir, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--log") && i + 1 < argc) log_path = argv[++i];
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) rt_frame_limit = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) snprintf(rt_screenshot_path, sizeof rt_screenshot_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "-v")) rt_verbose = 1;
         else if (!strncmp(argv[i], "--", 2)) { /* platform options are parsed by rt_platform_init */ }
         else usage();

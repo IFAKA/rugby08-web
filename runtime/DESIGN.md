@@ -53,7 +53,8 @@
 - Unimplemented imports: an auto-generated stub logs `UNIMPL <dll>!<name>` once, then returns 0.
 
 ## Graphics / audio / input / files
-- D3D8 → d3d8to9 (C++, compiled against d3d9-webgl's `d3d9.h`) → d3d9-webgl.
+- D3D8 → guest COM bridges (runtime/d3d8/) that translate each D3D8 call to D3D9 → d3d9-webgl.
+  - Not d3d8to9 itself: it does not compile against d3d9-webgl's `d3d9.h`, which is a subset (2,242 errors on 2026-10-03: no cube/volume textures, swap chains, IUnknown/resource base methods, ~40 device methods). The bridge layer has to convert every call for the guest anyway (32-bit structs, guest lock buffers), so it does the D3D8→D3D9 step too, using d3d8to9's sources as the reference for the conversion rules.
   - Web: WebGL2 as-is.
   - Native: an SDL2 GL 3.3 core context, with the shader header swapped from `#version 300 es` to `#version 330 core`, patched in `platform/native/`.
   - The game is fixed-function only (the exe has no shader strings), so d3d8to9's shader-assembly path is stubbed.

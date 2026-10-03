@@ -9,7 +9,16 @@
 /* ---- keys: SDL scancode -> Win32 virtual key + set-1 scan code -------------------------------- */
 typedef struct { uint8_t vk, scan, ext; } keymap_t;
 static keymap_t g_keys[SDL_NUM_SCANCODES];
-static uint8_t g_vk_down[256];
+static uint8_t g_vk_down[256], g_dik_down[256];
+static int g_mdx, g_mdy, g_mdw;
+static int g_inited;                  /* SDL video initialised (set in video_init) */
+
+uint8_t plat_dik_down(uint32_t dik) { return dik < 256 ? g_dik_down[dik] : 0; }
+void plat_mouse_delta(int *dx, int *dy, int *dw) { *dx = g_mdx; *dy = g_mdy; *dw = g_mdw; g_mdx = g_mdy = g_mdw = 0; }
+uint8_t plat_mouse_buttons(void) {
+    uint32_t b = g_inited ? SDL_GetMouseState(NULL, NULL) : 0;
+    return (uint8_t)((b & SDL_BUTTON_LMASK ? 1 : 0) | (b & SDL_BUTTON_RMASK ? 2 : 0) | (b & SDL_BUTTON_MMASK ? 4 : 0));
+}
 
 static void keymap_init(void) {
     static const char row1[] = "QWERTYUIOP", row2[] = "ASDFGHJKL", row3[] = "ZXCVBNM";
@@ -90,7 +99,7 @@ int plat_window_open(const char *title, int x, int y, int w, int h) {
     if (w <= 0 || h <= 0) { w = 800; h = 600; }
     (void)x; (void)y;     /* the host decides placement */
     g_win = SDL_CreateWindow(title ? title : "Rugby 08", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                             w, h, SDL_WINDOW_HIDDEN | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+                             w, h, SDL_WINDOW_HIDDEN | SDL_WINDOW_OPENGL);   /* 1:1 pixels: no HIGHDPI */
     if (!g_win) { rt_log("SDL_CreateWindow: %s", SDL_GetError()); return -1; }
     rt_log("plat: window %dx%d \"%s\"", w, h, title ? title : "");
     return 0;
@@ -124,6 +133,52 @@ void plat_desktop_size(int *w, int *h) {
     SDL_DisplayMode m;
     if (SDL_GetDesktopDisplayMode(0, &m) != 0) { m.w = 1024; m.h = 768; }
     *w = m.w; *h = m.h;
+}
+
+/* ---- GL ----------------------------------------------------------------------------------- */
+static SDL_GLContext g_gl;
+
+int plat_gl_create(void) {
+    if (g_gl) return 0;
+    if (!g_win) { rt_log("plat_gl_create: no window"); return -1; }
+#ifndef __EMSCRIPTEN__
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+#endif
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    g_gl = SDL_GL_CreateContext(g_win);
+    if (!g_gl) { rt_log("SDL_GL_CreateContext: %s", SDL_GetError()); return -1; }
+    SDL_GL_MakeCurrent(g_win, g_gl);
+    SDL_GL_SetSwapInterval(1);
+#ifndef __EMSCRIPTEN__
+    void (*gen)(int, unsigned *) = (void (*)(int, unsigned *))SDL_GL_GetProcAddress("glGenVertexArrays");
+    void (*bind)(unsigned) = (void (*)(unsigned))SDL_GL_GetProcAddress("glBindVertexArray");
+    unsigned vao = 0;
+    if (gen && bind) { gen(1, &vao); bind(vao); }
+#endif
+    int w, h;
+    SDL_GL_GetDrawableSize(g_win, &w, &h);
+    rt_log("plat: GL context %dx%d", w, h);
+    return 0;
+}
+
+void plat_gl_size(int *w, int *h) {
+    *w = 800; *h = 600;
+    if (g_win) SDL_GL_GetDrawableSize(g_win, w, h);
+}
+
+void plat_gl_set_size(int w, int h) {
+    if (g_win && w > 0 && h > 0) SDL_SetWindowSize(g_win, w, h);
+}
+
+void plat_gl_swap(void) {
+#ifndef __EMSCRIPTEN__
+    if (g_win && g_gl) SDL_GL_SwapWindow(g_win);
+#endif
 }
 
 /* ---- cursor --------------------------------------------------------------------------------- */
@@ -193,6 +248,7 @@ static void translate(const SDL_Event *e) {
         if (!k.vk) break;
         int down = e->type == SDL_KEYDOWN, alt = plat_vk_down(0x12) || k.vk == 0xA4 || k.vk == 0xA5;
         g_vk_down[k.vk] = (uint8_t)down;
+        g_dik_down[(k.scan | (k.ext ? 0x80 : 0)) & 0xFF] = (uint8_t)down;
         uint32_t vk = k.vk;               /* WM_KEY* carry the generic modifier codes */
         if (vk == 0xA0 || vk == 0xA1) vk = 0x10;
         else if (vk == 0xA2 || vk == 0xA3) vk = 0x11;
@@ -210,6 +266,7 @@ static void translate(const SDL_Event *e) {
             if (*s < 0x80) push(WM_CHAR_, *s, 1);
         break;
     case SDL_MOUSEMOTION:
+        g_mdx += e->motion.xrel; g_mdy += e->motion.yrel;
         push(WM_MOUSEMOVE_, mk_buttons(), ((uint32_t)(e->motion.y & 0xFFFF) << 16) | (uint32_t)(e->motion.x & 0xFFFF));
         break;
     case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: {
@@ -222,6 +279,7 @@ static void translate(const SDL_Event *e) {
         break;
     }
     case SDL_MOUSEWHEEL:
+        g_mdw += e->wheel.y * 120;
         push(WM_MOUSEWHEEL_, ((uint32_t)(uint16_t)(int16_t)(e->wheel.y * 120) << 16) | mk_buttons(), 0);
         break;
     }

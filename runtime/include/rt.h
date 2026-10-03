@@ -79,6 +79,12 @@ void rt_trace(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void rt_fatal(const char *fmt, ...) __attribute__((format(printf, 1, 2), noreturn));
 extern int rt_verbose;
 
+/* ---- checks ----------------------------------------------------------- */
+extern int rt_frame_limit;              /* --frames N (<= 0: run until the game exits) */
+extern char rt_screenshot_path[1024];   /* --screenshot PATH ("" = none) */
+/* PNG (RGBA8, rows top to bottom); 0 = ok. */
+int rt_png_write(const char *path, int w, int h, const uint8_t *rgba);
+
 /* ---- host paths ------------------------------------------------------- */
 extern char rt_game_dir[1024];     /* host path of "Game Files" */
 extern char rt_exe_path[1024];     /* host path of Rugby08_unpacked.exe */

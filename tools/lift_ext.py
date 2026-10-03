@@ -107,6 +107,13 @@ class Lifter(lift32.Lifter):
             finally:
                 insn.mnemonic = m
 
+        # `call $+5; pop reg` reads its own address (get-PC; the protector's call dispatcher at
+        # 0x1055006 finds its table this way). A real call there would push the dummy return
+        # address, so it is lifted as what it is: push the next address and fall through.
+        if m == "call" and ops and ops[0].type == lift32.X86_OP_IMM and \
+                (ops[0].imm & 0xFFFFFFFF) == insn.address + insn.size:
+            return [f"PUSH32(esp, 0x{insn.address + insn.size:08X}u); {comment}"]
+
         # --- aliases onto lift32's own implementations ---------------------
         alias = {"fucompp": "fcompp", "fcompi": "fcomip", "fucompi": "fucomip",
                  "fcomi": "fcom", "fucomi": "fucom", "fstpnce": "fstp"}.get(m)

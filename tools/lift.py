@@ -38,9 +38,9 @@ def _init():
     cat = json.load(open(root / "analysis/lift_catalog.json"))["entries"]
     _G["entries"] = cat
     _G["hooks"] = {int(k, 16): v for k, v in json.load(open(root / "tools/hooks.json")).items()}
-    _G["end"] = body_ends(cat, ranges.CODE_HI)
     md = Cs(CS_ARCH_X86, CS_MODE_32); md.detail = True
     _G["md"] = md
+    _G["end"] = body_ends(cat, ranges.CODE_HI)
     lifter = lift_ext.Lifter(iat_map=_G["iat"])
     lifter.lifted = set(cat)     # calls to anything else go through RECOMP_ICALL (logged miss)
     _G["lifter"] = lifter
@@ -54,7 +54,7 @@ def body_ends(entries, code_end):
     g = []
     for s, e in csv.reader(open(root / "analysis/ghidra_funcs.csv")):
         s, e = int(s, 16), int(e, 16)
-        if 0 < e - s <= 0x40000:
+        if 0 < e - s <= 0x40000 and not truncated_extent(s, e):
             g.append((s, e))
     g.sort()
     gs = [s for s, _ in g]
@@ -79,11 +79,37 @@ def body_ends(entries, code_end):
             ends[a] = e
     return ends
 
+def truncated_extent(s, e):
+    """Ghidra stopped some protector stubs after their first instruction (0xAC5440 is
+    `pushal` then [s+1, e) = nothing: the body was cut to one instruction and tail-jumped to an
+    address nobody lifts). A tiny extent whose last instruction does not end the flow (ret, jmp,
+    int3) is not a real extent; the entry then runs to the next top-level entry instead."""
+    if e - s > 8 or not (_G["code_start"] <= s and e <= _G["code_end"]):
+        return False
+    last = None
+    for i in _G["md"].disasm(_G["code"][s - _G["code_start"]:e - _G["code_start"]], s):
+        last = i
+    if last is None or last.address + last.size != e:
+        return True
+    return not (last.mnemonic.startswith("ret") or last.mnemonic == "jmp" or last.mnemonic == "int3")
+
+def straddle_end(addr, end):
+    """Catalog entries can start inside an instruction (seeds taken from garbage decodes): one at
+    0x4132B1 cut sub_004132AD's 5-byte jmp to 4 bytes, which decoded to nothing (#UD empty entry).
+    Extend the body over an instruction that straddles its end."""
+    code, cs = _G["code"], _G["code_start"]
+    for i in _G["md"].disasm(code[addr - cs:min(end + 16, _G["code_end"]) - cs], addr):
+        if i.address >= end:
+            break
+        if i.address + i.size > end:
+            return i.address + i.size
+    return end
+
 def lift_one(idx):
     """Lift catalog entry idx -> (C code, ok). Shared by main() and tools/difftest.py."""
     E, code, cs, ce = _G["entries"], _G["code"], _G["code_start"], _G["code_end"]
     addr = E[idx]
-    end = _G["end"][addr]
+    end = straddle_end(addr, _G["end"][addr])
     name = f"sub_{addr:08X}"
     try:
         insns, leaders = jumptables.sweep(_G["md"], code, cs, addr, end)
