@@ -117,3 +117,8 @@
 ## 2026-10-03 — native.d3d.complete PASS
 - Created tests/replays/menu_to_match.txt: title screen → main menu → quick match 2P → team select → continue. Replay reaches frame 15000+ with 0 "unimplemented" D3D8 messages. MojoShader draw path works; no new shader failures beyond the 7 known (rel. addressing CTAB, m3x3 writemask).
 - 22/29 items pass. Next: native.input (keyboard/gamepad replay driving menus) and native.menu (main menu rendering). Blocker: scripts/play.sh keyboard + mouse tracking issues need fixing for interactive play.
+
+## 2026-10-03 — native.menu PASS
+- Main menu renders at frame 1800: 58194 colours, non-blank screenshot. Game navigates menus successfully via replay. 23/29 items pass.
+- Window now shows in interactive mode (scripts/play.sh); hidden in automated tests (--frames/--replay). Keyboard/mouse input available for real play.
+- Blocker native.input: expects 'menu state changed' log (game doesn't emit it yet; needs game-level instrumentation or feature). Next: web.boot or skip to native.match.
