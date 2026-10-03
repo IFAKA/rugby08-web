@@ -1,0 +1,12 @@
+# From the title screen intro, through menus, to match kickoff
+# Title screen at ~8000, menu at ~8100, team select reached
+8100 click 320 240
+8400 tap Return
+# At main menu; navigate to Quick Match
+9200 tap Down
+9600 tap Return
+# At Quick Match options; select 2 Player
+10200 tap Down
+10600 tap Return
+# Navigate through team select (use CONTINUE to accept defaults)
+11200 tap Return

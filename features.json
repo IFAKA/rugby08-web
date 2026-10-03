@@ -20,7 +20,7 @@
       "deps": [
         "setup.tools"
       ],
-      "desc": "pcrecomp pe_analyze + extract_imports \u2192 analysis/pe_analysis.json, analysis/imports.json; import count recorded in REVERSE.md",
+      "desc": "pcrecomp pe_analyze + extract_imports → analysis/pe_analysis.json, analysis/imports.json; import count recorded in REVERSE.md",
       "check": "jq -e '.imports|length>0' analysis/pe_analysis.json >/dev/null && grep -q 'Imports:' REVERSE.md",
       "passes": true
     },
@@ -29,7 +29,7 @@
       "deps": [
         "analyze.pe"
       ],
-      "desc": "pcrecomp disasm32 \u2192 analysis/functions.json with >=15000 functions",
+      "desc": "pcrecomp disasm32 → analysis/functions.json with >=15000 functions",
       "check": "python3 tools/count_functions.py analysis/functions.json --min 15000",
       "passes": true
     },
@@ -57,7 +57,7 @@
       "deps": [
         "analyze.disasm"
       ],
-      "desc": "pcrecomp cpp/rtti.py \u2192 analysis/vtables.json; class count >= 600 (matches rugby08_classes_and_sources.txt)",
+      "desc": "pcrecomp cpp/rtti.py → analysis/vtables.json; class count >= 600 (matches rugby08_classes_and_sources.txt)",
       "check": "jq -e 'length>=600' analysis/vtables.json >/dev/null",
       "passes": true
     },
@@ -102,7 +102,7 @@
       "deps": [
         "native.boot"
       ],
-      "desc": "RegisterClass/CreateWindowEx \u2192 SDL window; message pump works; reaches Direct3DCreate8",
+      "desc": "RegisterClass/CreateWindowEx → SDL window; message pump works; reaches Direct3DCreate8",
       "check": "tools/run_native.sh --frames 0 --expect 'Direct3DCreate8'",
       "passes": true
     },
@@ -141,7 +141,7 @@
       "deps": [
         "native.window"
       ],
-      "desc": "D3D8 via d3d8to9 \u2192 d3d9-webgl (desktop GL/ANGLE backend): device creates, first Present shows a non-black frame",
+      "desc": "D3D8 via d3d8to9 → d3d9-webgl (desktop GL/ANGLE backend): device creates, first Present shows a non-black frame",
       "check": "tools/run_native.sh --frames 120 --screenshot logs/f120.png && python3 tools/img_stats.py logs/f120.png --not-blank",
       "passes": true,
       "notes": "PASS 2026-10-03: frame 120 shows the EA logo; frame 900 the legal screen with font rendering."
@@ -153,7 +153,7 @@
       ],
       "desc": "Every D3D8 method the game calls implemented (none hit 'D3D8 unimplemented' log), texture stages/lights extended beyond d3d9-webgl limits as needed",
       "check": "tools/run_native.sh --frames 3000 --replay tests/replays/menu_to_match.txt && ! grep -q 'unimplemented' logs/native_run.log",
-      "passes": false
+      "passes": true
     },
     {
       "id": "native.video",
@@ -170,7 +170,7 @@
       "deps": [
         "native.boot"
       ],
-      "desc": "DirectSound buffers \u2192 SDL audio; menu music audible (non-silent capture)",
+      "desc": "DirectSound buffers → SDL audio; menu music audible (non-silent capture)",
       "check": "tools/run_native.sh --frames 900 --audio-capture logs/menu.wav && python3 tools/audio_stats.py logs/menu.wav --not-silent",
       "passes": true,
       "notes": "PASS 2026-10-03: DirectSound software mixer on SDL audio; intro captured at about -20 dBFS."

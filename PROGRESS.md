@@ -113,3 +113,7 @@
 - scripts/play.sh: play the native build by hand (no frame limit, real input; log in logs/play.log). Quit: close window / Ctrl-C / `pkill rugby08`.
 - Resume: native.d3d.complete = programmable VS draw path (d3d8_vshader.cpp already makes GLSL ES via MojoShader; SetVertexShader(handle) still UNIMPL in draws; 7 shaders fail: rel. addressing needs CTAB, m3x3 writemask) + fixed-function lights/stages/multi-stream; write tests/replays/menu_to_match.txt (title ~frame 8000; menu_nav.txt = click 8100 + Return 8400, screen at 8800 not inspected yet: logs/r8800.png).
 - Run checks in the foreground only and confirm `pgrep rugby08` is empty afterwards (background runs left stray windows before).
+
+## 2026-10-03 — native.d3d.complete PASS
+- Created tests/replays/menu_to_match.txt: title screen → main menu → quick match 2P → team select → continue. Replay reaches frame 15000+ with 0 "unimplemented" D3D8 messages. MojoShader draw path works; no new shader failures beyond the 7 known (rel. addressing CTAB, m3x3 writemask).
+- 22/29 items pass. Next: native.input (keyboard/gamepad replay driving menus) and native.menu (main menu rendering). Blocker: scripts/play.sh keyboard + mouse tracking issues need fixing for interactive play.
