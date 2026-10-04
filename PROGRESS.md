@@ -163,3 +163,16 @@ Refactored features.json and session protocol to align with Burnout3/xboxrecomp 
 - Rationale: User direction (2026-10-04) was "fix root causes as whole classes, statically; no per-crash seeds, no game replays; user playtests." Old features.json was driving the game with replays and expecting behavioral logs. New version gates on lift quality and smoke tests only.
 - Ready: `./init.sh next` shows `lift.fidelity`; if thresholds not met, read fidelity_report.py output and fix the root cause from NEXT list above; iterate statically until PASS, then `native.smoke` is ready for user playtest.
 - Next session: run `./init.sh next`, proceed with static fixes (items 1–5 above), user playtests after native.smoke PASS.
+
+## 2026-10-04 (night) — web research: correct recomp approach
+Researched how successful projects (xboxrecomp, pcrecomp, PS2recomp) handle remaining blockers. Hard findings in docs/RESEARCH_FINDINGS.md.
+
+Key validated actions:
+1. **Mouse input:** SetCursorPos broken (Win10 Fall Creators). Use SDL_SetRelativeMouseMode (platform/sdl/sdl_plat.c).
+2. **Dispatcher table:** Runtime-filled at 0x1055000 emulated statically with Unicorn (extend tools/stubemu.py).
+3. **Switch arms:** Audit every `jmp [reg*scale+offset]`; ensure target is entry (51 sites, 90 slots).
+4. **ICALLs:** Already handled (dispatch table + runtime lookup + seeding).
+5. **Timeline:** Burnout 3 ~2 weeks empty→boots; Rugby 08 at ~70%, next session → "consistent crashes."
+
+Roadmap: Fix mouse (1–2 hrs) → resolve dispatcher (2–4 hrs) → playtest → iterate.
+Next: `./init.sh next` shows what to fix.
