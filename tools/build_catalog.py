@@ -162,6 +162,35 @@ def slot_target(op_str):
     v = _st.unpack("<I", img[p - base:p - base + 4])[0]
     return v if in_code(v) else None
 
+_SWITCH = _re.compile(r"dword ptr \[e[a-z]{2}\*4 \+ (0x[0-9a-f]+)\]$")
+
+def outside_arms(i):
+    """Arms of the switch table behind `jmp [reg*4 + T]` that lie outside the jmp's Ghidra extent.
+    Ghidra cut some switch functions short (0x4853A0 ends at 0x485A9E, its arms run to 0x4860D5;
+    0x47DFA3 is the bare jmp), so those arms were in no lifted body: the local dispatch found no
+    label, RECOMP_ITAIL no function, and the case was skipped. Each one becomes an entry (17 tables,
+    181 arms). Slots are read as jumptables.table_arms does: code pointers near the jmp, a short
+    biased run before slot 0, stop at the second non-pointer after the first arm."""
+    m = _SWITCH.match(i.op_str)
+    if not m:
+        return set()
+    t = int(m.group(1), 16)
+    j = bisect.bisect_right(g_starts, i.address) - 1
+    g_lo, g_hi = (ghidra[j] if j >= 0 and ghidra[j][0] <= i.address < ghidra[j][1] else (i.address, i.address + 1))
+    arms, misses = set(), 0
+    for k in range(256):
+        s = t + 4 * k
+        if not base <= s < base + len(img) - 4:
+            break
+        v = _st.unpack("<I", img[s - base:s - base + 4])[0]
+        if in_code(v) and abs(v - i.address) < 0x10000:
+            arms.add(v); misses = 0
+            continue
+        misses += 1
+        if (arms and misses >= 2) or (not arms and misses >= 4):
+            break
+    return {v for v in arms if not g_lo <= v < g_hi}
+
 # direct-call closure; `jmp/call [slot]` targets are resolved here too, decoding from each entry's
 # own start (the .text sweep above loses alignment on the protector's junk bytes and misses stubs,
 # and only took targets inside the protector region: 0x45CE10 `jmp [0x1384804]` -> 0x4310A0)
@@ -186,6 +215,8 @@ while True:
             elif i.mnemonic in ("call", "jmp") and (t := slot_target(i.op_str)) is not None:
                 if t not in entries and decodes_cleanly(t):
                     new.add(t)
+            elif i.mnemonic == "jmp" and i.op_str.startswith("dword ptr [e"):
+                new |= {t for t in outside_arms(i) if t not in entries and decodes_cleanly(t)}
             elif i.mnemonic.startswith("j") and i.op_str.startswith("0x") and not (a >= PROT[0]):
                 t = int(i.op_str, 16)
                 if PROT[0] <= t < PROT[1] and t not in entries and decodes_cleanly(t):
