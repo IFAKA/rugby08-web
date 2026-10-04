@@ -6,7 +6,7 @@ RECOMP_LOCAL_REGS-safe bodies, local switch dispatch) -- only the entry list is 
 generate.py finds entries heuristically and the translator re-runs discovery.
 Parallel over chunks (multiprocessing). Prints one line; details -> logs/lift.log.
 """
-import json, os, pathlib, sys, time
+import json, os, pathlib, re, sys, time
 from multiprocessing import Pool
 
 root = pathlib.Path(__file__).resolve().parent.parent
@@ -35,8 +35,11 @@ def _init():
     _G["code_start"] = ranges.CODE_LO
     _G["code_end"] = ranges.CODE_HI
     _G["iat"] = build_iat_map(info)
-    cat = json.load(open(root / "analysis/lift_catalog.json"))["entries"]
+    catj = json.load(open(root / "analysis/lift_catalog.json"))
+    cat = catj["entries"]
     _G["entries"] = cat
+    _G["eh_cont"] = set(catj.get("eh_continuations", []))
+    _G["seh_prolog"] = catj.get("seh_prolog", [])
     _G["hooks"] = {int(k, 16): v for k, v in json.load(open(root / "tools/hooks.json")).items()}
     md = Cs(CS_ARCH_X86, CS_MODE_32); md.detail = True
     _G["md"] = md
@@ -118,6 +121,68 @@ def carry_flags(code):
         code = code.replace(m, "RECOMP_FLAGS_OUT(); " + m)
     return code
 
+RET_RE = re.compile(r"esp \+= (\d+); \{ RECOMP_REGS_OUT\(\); return; \} (/\* 0x[0-9A-F]{8}: ret)")
+
+def ret_jumps(code):
+    """A lifted call pushes RECOMP_RETADDR, so a `ret` that pops anything else is a computed jump:
+    the protector's `push T; ret`, `xchg [esp], reg; ret` and `pushfd; add [esp+4], K; popfd` + a jmp
+    into the `ret` byte of that add (0x1042FA5 -> 0x1042FAA -> 0xB01CBE). Before, every ret returned
+    to the host caller and the computed target never ran; now it is a tail jump to that target."""
+    return RET_RE.sub(lambda m: (f"{{ uint32_t _ra = MEM32(esp); esp += {m.group(1)}; if (_ra != RECOMP_RETADDR) "
+                                 f"{{ RECOMP_ITAIL(_ra); {{ RECOMP_REGS_OUT(); return; }} }} }} "
+                                 f"{{ RECOMP_REGS_OUT(); return; }} {m.group(2)}"), code)
+
+def reachable(insns, addr, end, arms):
+    """The instructions of [addr, end) control flow reaches. After ret or an unconditional jmp the
+    next bytes are reachable only through a label: the entry, a table arm, or a branch target of a
+    kept instruction. Every other way in is a catalog entry of its own (tools/build_catalog.py:
+    switch arms outside the body, EH funclets, catch and __except continuations, pointer tables).
+    Not the sweep's leaders: pcrecomp marks every byte after a jmp a leader, so the protector's junk
+    there was lifted and its fall-throughs became seeds (0x4600CD -> 0x4600D2 cut `jmp [0x1380008]`;
+    with the EH funclets in the protector region, 13k junk seeds)."""
+    labels = {addr} | arms
+    while True:
+        trimmed, dead = [], False
+        for i in insns:
+            if i.mnemonic == "int3":
+                break
+            if dead:
+                if i.address not in labels:
+                    continue
+                dead = False
+            trimmed.append(i)
+            if i.is_ret or i.is_uncond_jump:
+                dead = True
+        new = {t for i in trimmed if i.is_jump and (t := i.get_branch_target()) is not None
+               and addr <= t < end} - labels
+        if not new:
+            return trimmed
+        labels |= new
+
+EH_INSTALL = "MEM32(FS_BASE + (0)) = esp;"
+
+def eh_wrap(code, name, addr):
+    """A body that installs an EH frame (`mov fs:[0], esp`) runs under a landing pad (RECOMP_EH_WRAP,
+    tools/vendor_recomp_types.py): the pad records ebp at the install, and a catch's continuation
+    (analysis/lift_catalog.json eh_continuations) resumes at its label here, or tail-jumps to it when
+    another fragment of the function holds it."""
+    seh = [c for c in (f"RECOMP_CALL(sub_{v:08X});" for v in _G["seh_prolog"]) if c in code]
+    if EH_INSTALL not in code and not seh:
+        return code
+    head = f"void {name}(void) {{"
+    body = f"{name}_eh"
+    code = code.replace(head, f"static void {body}(void) {{\n    RECOMP_EH_BODY_ENTER();", 1)
+    code = code.replace(EH_INSTALL, EH_INSTALL + " _eh_pad->ebp = ebp;")
+    for c in seh:       # CRT __try: __SEH_prolog installs the frame and returns with ebp set to it
+        code = code.replace(c, c + " _eh_pad->ebp = ebp;")
+    labels = set(re.findall(r"^L_([0-9A-F]{8}):", code, re.M))
+    cases = "".join(f" case 0x{l}u: goto L_{l};" for l in sorted(labels) if int(l, 16) in _G["eh_cont"])
+    resume = (f"    if (_eh_resume) {{ RECOMP_REGS_IN(); switch (_eh_resume) {{{cases} default: "
+              f"RECOMP_FLAGS_OUT(); RECOMP_ITAIL(_eh_resume); {{ RECOMP_REGS_OUT(); return; }} }} }}")
+    enter = f"    RECOMP_ENTER(0x{addr:08X}u);"
+    code = code.replace(enter, enter + "\n" + resume, 1)
+    return code + f"void {name}(void) {{ RECOMP_EH_WRAP({body}); }}\n"
+
 def lift_one(idx):
     """Lift catalog entry idx -> (C code, ok). Shared by main() and tools/difftest.py."""
     E, code, cs, ce = _G["entries"], _G["code"], _G["code_start"], _G["code_end"]
@@ -125,85 +190,18 @@ def lift_one(idx):
     end = straddle_end(addr, _G["end"][addr])
     name = f"sub_{addr:08X}"
     try:
-        insns, leaders = jumptables.sweep(_G["md"], code, cs, addr, end)
-        trimmed, seen_ret = [], False
-        for i in insns:
-            if i.mnemonic == "int3":
-                break
-            if seen_ret:
-                if i.address not in leaders:
-                    continue
-                seen_ret = False
-            trimmed.append(i)
-            # after ret or an unconditional jmp (direct, or a switch's jmp [table]) the next bytes
-            # are reachable only through a label: skip them until one (protector junk, tables)
-            if i.is_ret or i.is_uncond_jump:
-                seen_ret = True
+        arms = set()
+        insns, leaders = jumptables.sweep(_G["md"], code, cs, addr, end, arms)
+        trimmed = reachable(insns, addr, end, arms)
         if not trimmed:
             return f"void {name}(void) {{ recomp_fault(0x{addr:08X}u, \"#UD empty entry\"); }}\n", False
         code = generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr)
-        code = carry_flags(code)
-        if addr == 0x0088E870:
-            # The resource manager uses a low-value sentinel while a VP6
-            # object is replaced.  Preserve all valid image/heap pointers and
-            # only prevent the null-page dereference seen in native runs.
-            marker = "    ebx = MEM32(esp + 0xC);"
-            guard = (marker + "\n"
-                     "    if (ebx < 0x00010000u) {\n"
-                     "        ebp = POP32_VAL(esp);\n"
-                     "        eax = 0;\n"
-                     "        ebx = POP32_VAL(esp);\n"
-                     "        ecx = POP32_VAL(esp);\n"
-                     "        RECOMP_FLAGS_OUT(); esp += 4; { RECOMP_REGS_OUT(); return; }\n"
-                     "    }")
-            code = code.replace(marker, guard, 1)
-        if addr == 0x00410D87:
-            # A missing optional configuration/resource can leave the string
-            # pointer null.  The original Windows runtime treats that as an
-            # empty string; keep the parser from dereferencing 0x2D on macOS.
-            marker = "    eax = MEM32(ebp + (-0x8));"
-            guard = (marker + "\n"
-                     "    if (!eax) { eax = 0; RECOMP_REGS_OUT(); return; }")
-            code = code.replace(marker, guard, 1)
-        if addr == 0x005FA3A0:
-            # A failed optional resource lookup can pass a null object to this
-            # tiny setter.  The original body immediately reads [ecx + 4],
-            # which becomes a guest 0x4 fault in the macOS port.  Preserve the
-            # normal return value (the first stack argument) and skip the
-            # setter when the object is absent.
-            marker = "    MEM32(ebp + (-0x4)) = ecx;"
-            guard = (marker + "\n"
-                     "    if (!ecx) {\n"
-                     "        eax = MEM32(ebp + 0x8);\n"
-                     "        esp = ebp;\n"
-                     "        ebp = POP32_VAL(esp);\n"
-                     "        RECOMP_FLAGS_OUT(); esp += 8; { RECOMP_REGS_OUT(); return; }\n"
-                     "    }")
-            code = code.replace(marker, guard, 1)
-        if addr == 0x005C7FD0:
-            # The same optional-resource path can return a small sentinel
-            # (for example 0x74) instead of a guest object.  Treat low values
-            # as an absent object before reading its +4 field.
-            marker = "    MEM32(ebp + (-0x4)) = ecx;"
-            guard = (marker + "\n"
-                     "    if (ecx < 0x00010000u) {\n"
-                     "        eax = 0;\n"
-                     "        esp = ebp;\n"
-                     "        ebp = POP32_VAL(esp);\n"
-                     "        RECOMP_FLAGS_OUT(); esp += 4; { RECOMP_REGS_OUT(); return; }\n"
-                     "    }")
-            code = code.replace(marker, guard, 1)
-        if addr == 0x00410D55:
-            # sub_005C7FD0 returns zero for an absent resource.  The original
-            # code immediately dereferences that result at 0x410d79.
-            marker = "    eax = MEM32(eax);"
-            guard = ("    if (!eax) { eax = 0; RECOMP_REGS_OUT(); return; }\n" + marker)
-            code = code.replace(marker, guard, 1)
+        code = carry_flags(ret_jumps(code))
         hook = _G["hooks"].get(addr)
         if hook:   # tools/hooks.json: announce entry (checks grep for "<name> entered")
             code = code.replace(f"    RECOMP_ENTER(0x{addr:08X}u);",
                                 f"    RECOMP_ENTER(0x{addr:08X}u);\n    rt_hook_enter(0x{addr:08X}u, \"{hook}\");", 1)
-        return code, True
+        return eh_wrap(code, name, addr), True
     except Exception as e:  # keep going; the report counts these
         return f"/* LIFT_ERROR {name}: {e} */\nvoid {name}(void) {{ }}\n", False
 
@@ -236,7 +234,11 @@ def main():
     (OUT / "recomp_dispatch.c").write_text('#include "recomp_types.h"\n#include "recomp_funcs.h"\n\n'
         "const recomp_dispatch_entry_t recomp_dispatch_table[] = {\n" +
         "".join(f"    {{ 0x{a:08X}u, sub_{a:08X} }},\n" for a in E) +
-        f"}};\n\nconst uint32_t recomp_dispatch_count = {len(E)};\n")
+        f"}};\n\nconst uint32_t recomp_dispatch_count = {len(E)};\n"
+        # catch continuations, sorted: only these may divert to a landing pad (runtime/win32/k32_eh.c)
+        "\nconst uint32_t recomp_eh_cont[] = {" +
+        ", ".join([f"0x{a:08X}u" for a in sorted(_G["eh_cont"])] + ["0"]) +
+        f"}};\nconst uint32_t recomp_eh_cont_count = {len(_G['eh_cont'])};\n")
     size = sum(f.stat().st_size for f in OUT.glob("*.c"))
     print(f"lift: {len(E)} functions in {len(jobs)} files, {errs} errors, {size/1048576:.0f} MB C, {time.time()-t:.0f}s")
 

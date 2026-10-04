@@ -64,6 +64,27 @@ for a, b in (('fprintf(stderr, "ICALL: unresolved VA 0x%08X from 0x%08X\\n", _va
     t = t.replace(a, b)
 t = t.replace("/* Lookup functions */", "void recomp_miss(int tail, uint32_t va, uint32_t from);\n/* Lookup functions */", 1)
 
+# Guest C++ exceptions (runtime/win32/k32_eh.c). The guest SEH chain at fs:[0] and the CRT's own
+# __CxxFrameHandler are faithful, so only the final jump to a catch's continuation needs the host: a
+# lifted function that installs an EH frame runs as body(resume, pad) under a setjmp landing pad that
+# records ebp when the frame goes in; the continuation jump longjmps to the pad whose ebp matches and
+# the body resumes at that label (or tail-jumps there when another fragment holds it).
+t = t.replace("/* Lookup functions */", """#include <setjmp.h>
+typedef struct rt_ehpad { struct rt_ehpad *prev; jmp_buf jb; uint32_t ebp, resume; } rt_ehpad_t;
+extern RECOMP_TLS rt_ehpad_t *g_eh_top;
+extern RECOMP_TLS int g_eh_active;                 /* > 0 while RaiseException runs guest handlers */
+extern RECOMP_TLS uint32_t g_eh_resume;            /* wrapper -> body: continuation VA, 0 on entry */
+void rt_eh_jump(uint32_t va);                      /* longjmps to the pad of the frame g_ebp names, if any */
+/* The body stays void(void) so its tail jumps remain musttail; the pad lives in this wrapper frame. */
+#define RECOMP_EH_WRAP(body) do { \\
+    rt_ehpad_t _p; _p.prev = g_eh_top; _p.ebp = 0; _p.resume = 0; g_eh_top = &_p; \\
+    if (setjmp(_p.jb)) g_eh_resume = _p.resume; else g_eh_resume = 0; \\
+    body(); \\
+    g_eh_top = _p.prev; \\
+} while (0)
+#define RECOMP_EH_BODY_ENTER() uint32_t _eh_resume = g_eh_resume; rt_ehpad_t *_eh_pad = g_eh_top; g_eh_resume = 0
+/* Lookup functions */""", 1)
+
 # A jmp to another lifted function is a jump, not a call: x86 does not grow the stack, so neither may
 # the host. As a plain call, a loop whose back-edge crosses an entry recursed once per iteration: the
 # protector split the byte-copy loop at 0x71BA50 into 0x71BA6D/0x71BA76, and copying the 482616-byte
@@ -74,6 +95,12 @@ itail_new = "    if (_fn) { RECOMP_REGS_OUT(); RECOMP_TAIL_RETURN(_fn); } \\\n  
 if t.count(itail_old) != 1:
     sys.exit("vendor_recomp_types: RECOMP_ITAIL call not found exactly once")
 t = t.replace(itail_old, itail_new)
+# While an exception is dispatched, _JumpToContinuation's `jmp eax` (ebp already the catching frame's)
+# lands in that frame's host landing pad instead (runtime/win32/k32_eh.c, RECOMP_EH_WRAP below).
+itail_head = "#define RECOMP_ITAIL(target_va) do { \\\n    uint32_t _va = (uint32_t)(target_va); \\\n"
+if t.count(itail_head) != 1:
+    sys.exit("vendor_recomp_types: RECOMP_ITAIL head not found exactly once")
+t = t.replace(itail_head, itail_head + "    if (g_eh_active) { RECOMP_REGS_OUT(); rt_eh_jump(_va); } \\\n")
 t = t.replace("/* Indirect tail call (jmp through dispatch) */",
               "#if defined(__has_attribute) && __has_attribute(musttail) && (!defined(__wasm__) || defined(__wasm_tail_call__))\n"
               "#define RECOMP_TAIL_RETURN(fn) __attribute__((musttail)) return (fn)()\n"

@@ -53,7 +53,7 @@ def table_arms(code, cs, i, lo, hi):
     return t + 4 * first, t + 4 * (last + 1), set(arms)
 
 
-def sweep(md, code, cs, lo, hi):
+def sweep(md, code, cs, lo, hi, arms=None):
     """generate.linear_disassemble_function, plus, when the body dispatches through a jump table,
     a recursive descent from the entry over branches, fallthroughs and table arms. The descent's
     instructions win; linear-sweep instructions are kept only where they overlap neither those
@@ -84,6 +84,8 @@ def sweep(md, code, cs, lo, hi):
                         data.append((r[0], r[1]))
                         leaders |= r[2]
                         work.extend(r[2])
+                        if arms is not None:        # tools/lift.py reachable(): table-only labels
+                            arms |= r[2]
                 leaders.add(li.end_address)
                 if li.is_uncond_jump:
                     break

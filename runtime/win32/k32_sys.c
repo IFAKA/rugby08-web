@@ -197,27 +197,7 @@ static uint32_t g_unhandled_filter;
 HLE(SetUnhandledExceptionFilter) { uint32_t o = g_unhandled_filter; g_unhandled_filter = a[0]; return o; }
 HLE(UnhandledExceptionFilter) { (void)a; rt_log("UnhandledExceptionFilter called"); return 1; }
 
-/* C++ exceptions and SEH unwinding: not emulated yet. Fail loudly with the exception so the
- * first real use is diagnosed (0xE06D7363 = MSVC C++ throw; a[3] points at its arguments). */
-HLE(RaiseException) {
-    uint32_t code = a[0], nargs = a[2], args = a[3];
-    if (code == 0x406D1388u) {
-        /* MS_VC_EXCEPTION: SetThreadName for an attached debugger. The raiser wraps it in
-         * __try/__except(EXCEPTION_EXECUTE_HANDLER) and does nothing in the handler, so without a
-         * debugger it is a no-op. THREADNAME_INFO: dwType(0x1000) szName dwThreadID dwFlags. */
-        if (nargs >= 2 && rd32(args) == 0x1000u && rd32(args + 4))
-            rt_log("SetThreadName(0x%X, \"%s\")", rd32(args + 8), gstr(rd32(args + 4)));
-        return 0;
-    }
-    if (code == 0xE06D7363u && nargs >= 3) {
-        uint32_t tinfo = rd32(args + 8), ctarr = tinfo ? rd32(tinfo + 12) : 0;
-        uint32_t ct = ctarr ? rd32(ctarr + 4) : 0, td = ct ? rd32(ct + 4) : 0;
-        rt_fatal("C++ exception thrown (type %s) from sub_%08X -- SEH not emulated yet",
-                 td ? gstr(td + 8) : "?", g_cur_func);
-    }
-    rt_fatal("RaiseException(0x%08X) from sub_%08X -- SEH not emulated yet", code, g_cur_func);
-}
-HLE(RtlUnwind) { (void)a; rt_fatal("RtlUnwind from sub_%08X -- SEH not emulated yet", g_cur_func); }
+/* RaiseException / RtlUnwind: k32_eh.c */
 
 /* ---- code pages ---------------------------------------------------------------------------------- */
 HLE(GetACP) { (void)a; return 1252; }

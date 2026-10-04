@@ -29,7 +29,8 @@ OUT_VA, RET_VA = 0x2FFF0000, 0x7FFE0000
 # fp_ld80/fp_st80: the model's x87 is 53-bit (runtime/DESIGN.md); an 80-bit load of random data
 # keeps 64 mantissa bits on hardware, so those bodies would differ by design, not by bug.
 # `ret imm16` with an absurd pop only occurs in junk and trips a Unicorn quirk (16-bit wrap).
-SKIP_RET = re.compile(r"esp \+= (\d+); \{ RECOMP_REGS_OUT\(\); return; \} /\* 0x[0-9A-F]+: ret")
+SKIP_RET = re.compile(r"esp \+= (\d+);(?: \{ RECOMP_REGS_OUT\(\); return; \} /\* 0x[0-9A-F]+: ret| if \(_ra != )")
+RET_JUMP = re.compile(r"if \(_ra != RECOMP_RETADDR\) \{ (?:RECOMP_FLAGS_OUT\(\); )?RECOMP_ITAIL\(_ra\);")   # tools/lift.py ret_jumps
 SKIP = re.compile(r"RECOMP_CALL|RECOMP_ICALL|RECOMP_ITAIL|recomp_fault|CPUID|__rdtsc|LIFT_ERROR|fp_ld80|fp_st80|"
                   r"\b(sin|cos|tan|atan2|atan|pow|log|log2|exp|exp2)\(")
 
@@ -52,7 +53,7 @@ def main():
     for idx in order:
         code, ok = lift.lift_one(idx)
         big_ret = any(int(n) > 0x404 for n in SKIP_RET.findall(code))
-        if ok and not SKIP.search(code) and not big_ret and code.count("\n") < 4000 and \
+        if ok and not SKIP.search(RET_JUMP.sub("", code)) and not big_ret and code.count("\n") < 4000 and \
                 (want is None or want.search(code)):
             chosen.append(idx); bodies.append(code)
         if len(chosen) >= a.sample * 2:
@@ -65,7 +66,8 @@ def main():
     src.append("const fn_t dt_funcs[] = {" + ", ".join(f"sub_{E[i]:08X}" for i in chosen) + "};")
     (B / "funcs.c").write_text("\n".join(src) + "\n")
     exe = B / "harness"
-    cc = ["clang", "-O1", "-w", "-fwrapv", "-fno-strict-aliasing", "-DRECOMP_LOCAL_REGS", "-I", str(root / "runtime/include/recomp"),
+    cc = ["clang", "-O1", "-w", "-fwrapv", "-fno-strict-aliasing", "-DRECOMP_LOCAL_REGS", "-DRECOMP_RETADDR=0x7FFE0000u",   # = RET_VA: lifted rets tell returns from jumps by it
+           "-I", str(root / "runtime/include/recomp"),
           "-I", str(root / "runtime/include"), str(root / "tools/difftest_harness.c"), str(B / "funcs.c"),
           str(root / "runtime/core/cpu_ext.c"), "-o", str(exe), "-lm"]
     r = subprocess.run(cc, capture_output=True, text=True)
@@ -207,6 +209,8 @@ def main():
         k, st = int(f[0]), int(f[1])
         rv, depth, h = ref[k]
         name = f"sub_{E[chosen[k]]:08X}"
+        if st == 5:     # computed jump out of the body (difftest_harness.c recomp_miss)
+            excluded["computed jump"] = excluded.get("computed jump", 0) + 1; continue
         if st != 0:
             fails.append(f"{name}: lifted status {st} (1=signal 2=timeout 3=fault) but reference returned")
             mism += 1; compared += 1; continue

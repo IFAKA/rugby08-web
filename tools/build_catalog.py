@@ -131,6 +131,69 @@ init = {_st.unpack("<I", img[a - base:a - base + 4])[0] for lo_, hi_ in INITTERM
 init = {v for v in init if in_code(v)}
 src["initterm_new"] = len(init - entries); entries |= init
 
+# C++ exception handling (runtime/win32/k32_eh.c). MSVC 7.1 FuncInfo (magic 0x1993052x): the CRT's
+# __CxxFrameHandler calls the unwind actions and catch handlers through `call eax` (_CallSettingFrame),
+# and a catch handler returns its continuation in eax (`mov eax, offset $L; ret`), which
+# _JumpToContinuation jumps to. All of them, and every handler a frame installs at fs:[0], are entries.
+def _u32(va):
+    return _st.unpack("<I", img[va - base:va - base + 4])[0] if base <= va <= base + len(img) - 4 else None
+
+eh, eh_cont = set(), set()
+for mt in _re.finditer(rb"[\x20-\x22]\x05\x93\x19", img):
+    if mt.start() % 4:
+        continue
+    fi = base + mt.start()
+    max_state, p_unwind, n_try, p_try = (_u32(fi + 4), _u32(fi + 8), _u32(fi + 12), _u32(fi + 16))
+    if max_state is None or n_try is None or max_state > 5000 or n_try > 500 \
+            or (max_state and _u32(p_unwind) is None) or (n_try and _u32(p_try) is None):
+        continue
+    acts = [_u32(p_unwind + 8 * s + 4) for s in range(max_state)]
+    handlers, good = [], all(a is not None and (a == 0 or in_code(a)) for a in acts)
+    for t in range(n_try if good else 0):
+        n_catch, p_h = _u32(p_try + 20 * t + 12), _u32(p_try + 20 * t + 16)
+        if n_catch is None or n_catch > 64 or _u32(p_h) is None:
+            good = False
+            break
+        handlers += [_u32(p_h + 16 * c + 12) for c in range(n_catch)]
+    if not good or not all(h is not None and in_code(h) for h in handlers):
+        continue
+    eh |= {a for a in acts if a} | set(handlers)
+    for h in handlers:                          # the continuation the catch block returns
+        last = None
+        for i in md.disasm(img[h - base:h - base + 0x400], h):
+            if i.mnemonic == "mov" and i.op_str.startswith("eax, 0x"):
+                last = int(i.op_str[5:], 16)
+            if i.mnemonic in ("ret", "jmp", "int3"):
+                break
+        if last is not None and in_code(last):
+            eh.add(last); eh_cont.add(last)
+for mt in _re.finditer(rb"\x68(....)(?:\x64\xA1\x00\x00\x00\x00|\x50\x64\x89\x25\x00\x00\x00\x00)", img, _re.S):
+    h = _st.unpack("<I", mt.group(1))[0]       # push handler; mov eax, fs:[0] | push eax; mov fs:[0], esp
+    if in_code(base + mt.start()) and in_code(h):
+        eh.add(h)
+# CRT __try (SEH): `push N; push scopetable; call __SEH_prolog` installs _except_handler3 and sets the
+# caller's ebp. Scope entries {enclosing, filter, handler}: filters and __finally blocks are called,
+# an __except block is jumped to like a catch continuation.
+seh_prolog = []
+for mt in _re.finditer(rb"\x68....\x64\xA1\x00\x00\x00\x00\x50\x8B\x44\x24\x10\x89\x6C\x24\x10\x8D\x6C\x24\x10", img, _re.S):
+    if in_code(base + mt.start()):
+        seh_prolog.append(base + mt.start())
+for mt in _re.finditer(rb"(?:\x6A.|\x68....)\x68(....)\xE8(....)", img, _re.S):
+    call_va = base + mt.end() - 5
+    if not in_code(call_va) or call_va + 5 + _st.unpack("<i", mt.group(2))[0] not in seh_prolog:
+        continue
+    st = _st.unpack("<I", mt.group(1))[0]
+    for k in range(64):
+        lvl, flt, hnd = _u32(st + 12 * k), _u32(st + 12 * k + 4), _u32(st + 12 * k + 8)
+        if lvl is None or not (lvl == 0xFFFFFFFF or lvl < k) or hnd is None or not in_code(hnd) \
+                or (flt and not in_code(flt)):
+            break
+        eh.add(hnd)
+        if flt:
+            eh.add(flt); eh_cont.add(hnd)
+eh = {a for a in eh if decodes_cleanly(a)}
+src["eh_new"] = len(eh - entries); entries |= eh
+
 inv_ok = inv_bad = inv_noref = split = 0
 for f in json.load(open(A / "functions.json"))["functions"]:
     a = f["address"]
@@ -162,6 +225,8 @@ def slot_target(op_str):
     v = _st.unpack("<I", img[p - base:p - base + 4])[0]
     return v if in_code(v) else None
 
+import stubemu                                              # noqa: E402
+_emu = stubemu.StubEmu(base, pe.get_memory_mapped_image())  # unpatched image: what the game runs
 _SWITCH = _re.compile(r"dword ptr \[e[a-z]{2}\*4 \+ (0x[0-9a-f]+)\]$")
 
 def outside_arms(i):
@@ -177,7 +242,7 @@ def outside_arms(i):
     t = int(m.group(1), 16)
     j = bisect.bisect_right(g_starts, i.address) - 1
     g_lo, g_hi = (ghidra[j] if j >= 0 and ghidra[j][0] <= i.address < ghidra[j][1] else (i.address, i.address + 1))
-    arms, misses = set(), 0
+    arms, via, misses = set(), set(), 0
     for k in range(256):
         s = t + 4 * k
         if not base <= s < base + len(img) - 4:
@@ -186,10 +251,28 @@ def outside_arms(i):
         if in_code(v) and abs(v - i.address) < 0x10000:
             arms.add(v); misses = 0
             continue
+        # the protector points slots at stubs that rebuild the case address from image constants
+        # (0x402AAC[1] -> 0x45E637 -> 0x4029A9): the stub and the case it reaches are both entries
+        r = _emu.target(v) if in_code(v) else None
+        if r is not None and abs(r - i.address) < 0x10000:
+            via |= {v, r}; misses = 0
+            continue
         misses += 1
         if (arms and misses >= 2) or (not arms and misses >= 4):
             break
-    return {v for v in arms if not g_lo <= v < g_hi}
+    return {v for v in arms if not g_lo <= v < g_hi} | via
+
+# Computed jumps that only the image's constants decide (tools/stubemu.py): run every entry on the
+# static image and take each indirect jmp/call and each ret that pops no return address of its own.
+# Normal functions return to the empty stack's 0 and stop; protector stubs reach their targets.
+emu_new = set()
+todo = set(entries)
+while todo:
+    found = set()
+    for va in todo:
+        found |= {t for t in _emu.transfers(va) if in_code(t) and t not in entries and decodes_cleanly(t)}
+    emu_new |= found; entries |= found; todo = found
+src["emulated_targets_new"] = len(emu_new)
 
 # direct-call closure; `jmp/call [slot]` targets are resolved here too, decoding from each entry's
 # own start (the .text sweep above loses alignment on the protector's junk bytes and misses stubs,
@@ -242,6 +325,7 @@ src["dropped_inside_obf_sites"] = len(entries & _inside_site)
 entries -= _inside_site
 
 out = sorted(entries)
-json.dump({"code_ranges": [TEXT, PROT], "sources": src, "entries": out}, open(A / "lift_catalog.json", "w"))
+json.dump({"code_ranges": [TEXT, PROT], "sources": src, "entries": out,
+           "eh_continuations": sorted(eh_cont), "seh_prolog": seh_prolog}, open(A / "lift_catalog.json", "w"))
 print(json.dumps(src), file=log)
 print(f"build_catalog: {len(out)} entries {src}")

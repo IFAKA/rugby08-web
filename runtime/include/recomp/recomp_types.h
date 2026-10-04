@@ -899,6 +899,20 @@ extern uint32_t g_icall_trace_idx;
 extern uint32_t g_icall_count;
 
 void recomp_miss(int tail, uint32_t va, uint32_t from);
+#include <setjmp.h>
+typedef struct rt_ehpad { struct rt_ehpad *prev; jmp_buf jb; uint32_t ebp, resume; } rt_ehpad_t;
+extern RECOMP_TLS rt_ehpad_t *g_eh_top;
+extern RECOMP_TLS int g_eh_active;                 /* > 0 while RaiseException runs guest handlers */
+extern RECOMP_TLS uint32_t g_eh_resume;            /* wrapper -> body: continuation VA, 0 on entry */
+void rt_eh_jump(uint32_t va);                      /* longjmps to the pad of the frame g_ebp names, if any */
+/* The body stays void(void) so its tail jumps remain musttail; the pad lives in this wrapper frame. */
+#define RECOMP_EH_WRAP(body) do { \
+    rt_ehpad_t _p; _p.prev = g_eh_top; _p.ebp = 0; _p.resume = 0; g_eh_top = &_p; \
+    if (setjmp(_p.jb)) g_eh_resume = _p.resume; else g_eh_resume = 0; \
+    body(); \
+    g_eh_top = _p.prev; \
+} while (0)
+#define RECOMP_EH_BODY_ENTER() uint32_t _eh_resume = g_eh_resume; rt_ehpad_t *_eh_pad = g_eh_top; g_eh_resume = 0
 /* Lookup functions */
 recomp_func_t recomp_lookup(uint32_t va);          /* binary search in dispatch table */
 recomp_func_t recomp_lookup_manual(uint32_t va);    /* manual overrides */
@@ -955,6 +969,7 @@ recomp_func_t recomp_lookup_import(uint32_t va);    /* import bridges */
 /* Indirect tail call (jmp through dispatch) */
 #define RECOMP_ITAIL(target_va) do { \
     uint32_t _va = (uint32_t)(target_va); \
+    if (g_eh_active) { RECOMP_REGS_OUT(); rt_eh_jump(_va); } \
     g_icall_trace[g_icall_trace_idx & (ICALL_TRACE_SIZE-1)] = _va; \
     g_icall_from[g_icall_trace_idx & (ICALL_TRACE_SIZE-1)] = g_cur_func; \
     g_icall_trace_idx++; \

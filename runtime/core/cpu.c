@@ -75,29 +75,7 @@ uint32_t rt_host_bridge(const char *name, rt_hle_fn fn, uint16_t pop) {
     return RT_BRIDGE_HOST + 16 * i;
 }
 
-/* 0x451C86 is a shared SEH landing block, not a function entry. The lifted
-   dispatch table therefore cannot reach it when an indirect tail jump from
-   the menu/game-state code targets it. Preserve its two instructions and
-   continue through the common cleanup block. */
-static void seh_landing_00451c86(void) {
-    MEM32(FS_BASE + 0) = g_ecx;
-    recomp_func_t fn = recomp_lookup(0x004F9C43u);
-    if (fn) fn();
-}
-
-/* 0x013A2D97 is an overlapping basic block: the lifted image also exposes
-   the same bytes as the body of sub_013A2D95.  An indirect tail jump can land
-   on the block, so dispatch the instructions represented at that address. */
-static void overlap_block_013a2d97(void) {
-    recomp_func_t fn = recomp_lookup(0x0049A0D0u);
-    if (fn) fn();
-    fn = recomp_lookup(0x013A2DA6u);
-    if (fn) fn();
-}
-
 recomp_func_t recomp_lookup_manual(uint32_t va) {
-    if (va == 0x00451C86u) return seh_landing_00451c86;
-    if (va == 0x013A2D97u) return overlap_block_013a2d97;
     if (va >= RT_BRIDGE_IMPORT && va < RT_BRIDGE_IMPORT + 16 * rt_import_count) {
         t_bridge_va = va;
         return import_trampoline;

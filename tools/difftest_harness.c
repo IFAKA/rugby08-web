@@ -27,9 +27,16 @@ recomp_func_t recomp_lookup(uint32_t va) { (void)va; return 0; }
 recomp_func_t recomp_lookup_manual(uint32_t va) { (void)va; return 0; }
 recomp_func_t recomp_lookup_import(uint32_t va) { (void)va; return 0; }
 uint64_t recomp_host_rdtsc(void) { return 0; }
+RECOMP_TLS rt_ehpad_t *g_eh_top;
+RECOMP_TLS int g_eh_active;
+RECOMP_TLS uint32_t g_eh_resume;
+void rt_eh_jump(uint32_t va) { (void)va; }
 
 static sigjmp_buf g_case_env;
 static volatile int g_status;
+/* a computed jump (a ret popping something other than RET_VA): the reference runs on into the
+   target, the harness has no other functions -- not comparable (difftest.py excludes status 5) */
+void recomp_miss(int tail, uint32_t va, uint32_t from) { (void)tail; (void)va; (void)from; g_status = 5; }
 void rt_fatal(const char *fmt, ...) { (void)fmt; g_status = 3; siglongjmp(g_case_env, 1); }
 void rt_log(const char *fmt, ...) { (void)fmt; g_status = 4; }   /* soft fault: reference raised #DE */
 static void on_signal(int sig) { g_status = sig == SIGALRM ? 2 : 1; siglongjmp(g_case_env, 1); }
