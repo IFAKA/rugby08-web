@@ -153,3 +153,13 @@ NEXT (in order):
 3. EH is implemented but never exercised by a run: if the user's playtest shows "EH: continuation ... has no landing pad" or "unhandled C++ exception", fix the class in k32_eh.c / lift.py eh_wrap.
 4. GDI imports without handlers (CreateFontA, ExtTextOutA, GetDIBits, BitBlt, ... 17) return 0: D3DX font text. Implement if text is missing.
 5. ~2 large aligned-stack SSE routines (0x801FDC, 0x7FFB5D) are never lifted (CPUID reports no SSE, so they are not selected).
+
+## 2026-10-04 (evening) — strategy refactor: static-first, playtest-driven
+Refactored features.json and session protocol to align with Burnout3/xboxrecomp state of the art:
+- Added `lift.fidelity` and `lift.reachability` (static checks, no game runs)
+- Replaced `native.input`, `native.match`, `web.boot`, `web.video_audio`, `web.match`, `e2e` with `native.smoke` and `web.smoke` (minimal smoke tests, no replays or screenshots)
+- Token savings: static checks ~10–20 tokens vs old ~100+ per check; user playtest is manual (scripts/play.sh), not automated
+- Docs: docs/REFACTOR_STRATEGY.md explains the pattern and migration
+- Rationale: User direction (2026-10-04) was "fix root causes as whole classes, statically; no per-crash seeds, no game replays; user playtests." Old features.json was driving the game with replays and expecting behavioral logs. New version gates on lift quality and smoke tests only.
+- Ready: `./init.sh next` shows `lift.fidelity`; if thresholds not met, read fidelity_report.py output and fix the root cause from NEXT list above; iterate statically until PASS, then `native.smoke` is ready for user playtest.
+- Next session: run `./init.sh next`, proceed with static fixes (items 1–5 above), user playtests after native.smoke PASS.
