@@ -64,6 +64,24 @@ for a, b in (('fprintf(stderr, "ICALL: unresolved VA 0x%08X from 0x%08X\\n", _va
     t = t.replace(a, b)
 t = t.replace("/* Lookup functions */", "void recomp_miss(int tail, uint32_t va, uint32_t from);\n/* Lookup functions */", 1)
 
+# A jmp to another lifted function is a jump, not a call: x86 does not grow the stack, so neither may
+# the host. As a plain call, a loop whose back-edge crosses an entry recursed once per iteration: the
+# protector split the byte-copy loop at 0x71BA50 into 0x71BA6D/0x71BA76, and copying the 482616-byte
+# motion sequence table overflowed the 64 MB host stack (play 2026-10-04 11:14). musttail makes every
+# tail jump reuse the frame; REGS_IN then REGS_OUT after the callee was a no-op copy, so it is exact.
+itail_old = "    if (_fn) { RECOMP_REGS_OUT(); _fn(); RECOMP_REGS_IN(); } \\\n    else if (_va == RECOMP_RETADDR)"
+itail_new = "    if (_fn) { RECOMP_REGS_OUT(); RECOMP_TAIL_RETURN(_fn); } \\\n    else if (_va == RECOMP_RETADDR)"
+if t.count(itail_old) != 1:
+    sys.exit("vendor_recomp_types: RECOMP_ITAIL call not found exactly once")
+t = t.replace(itail_old, itail_new)
+t = t.replace("/* Indirect tail call (jmp through dispatch) */",
+              "#if defined(__has_attribute) && __has_attribute(musttail) && (!defined(__wasm__) || defined(__wasm_tail_call__))\n"
+              "#define RECOMP_TAIL_RETURN(fn) __attribute__((musttail)) return (fn)()\n"
+              "#else   /* no guaranteed tail calls: the old nested call (stack grows per tail jump) */\n"
+              "#define RECOMP_TAIL_RETURN(fn) do { (fn)(); RECOMP_REGS_IN(); } while (0)\n"
+              "#endif\n"
+              "/* Indirect tail call (jmp through dispatch) */", 1)
+
 n_cur = t.count("extern uint32_t g_cur_func;")
 t = t.replace("extern uint32_t g_cur_func;", "extern RECOMP_TLS uint32_t g_cur_func;")
 

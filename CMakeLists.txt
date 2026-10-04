@@ -89,7 +89,8 @@ if(EMSCRIPTEN)
     OUTPUT_NAME rugby08 SUFFIX .html
     RUNTIME_OUTPUT_DIRECTORY ${ROOT}/build/web)
   target_compile_options(rt_core PRIVATE -pthread)
-  target_compile_options(recomp_gen PRIVATE -pthread)
+  # wasm tail calls: RECOMP_ITAIL is musttail (tools/vendor_recomp_types.py), so a jmp never grows the stack
+  target_compile_options(recomp_gen PRIVATE -pthread -mtail-call)
   # -O0 at link skips the wasm-opt -O3 pass (>1h and >24 GB on the 91 MB module); revisit for release builds.
   target_link_options(rugby08 PRIVATE -O0 -pthread -sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=4 -sEXIT_RUNTIME=1

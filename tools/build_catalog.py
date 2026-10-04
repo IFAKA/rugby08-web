@@ -146,7 +146,25 @@ for f in json.load(open(A / "functions.json"))["functions"]:
         inv_bad += 1
 src.update(invented_added=inv_ok, invented_rejected=inv_bad, invented_unreferenced=inv_noref, split_excluded=split)
 
-# direct-call closure
+# Import address table: its slots hold import RVAs until the loader binds them, never code
+_idata = [s for s in pe.sections if s.Name.rstrip(b"\0") == b".idata"][0]
+IAT_LO = base + _idata.VirtualAddress
+IAT_HI = IAT_LO + _idata.Misc_VirtualSize
+
+def slot_target(op_str):
+    """Code address held by the static pointer slot of `dword ptr [0xP]`, else None. The protector's
+    stubs (`jmp [0x1380008]` -> 0x13A5C90) reach relocated game functions in either code range."""
+    if not (op_str.startswith("dword ptr [0x") and op_str.endswith("]")):
+        return None
+    p = int(op_str[len("dword ptr ["):-1], 16)
+    if IAT_LO <= p < IAT_HI or not base <= p < base + len(img) - 4:
+        return None
+    v = _st.unpack("<I", img[p - base:p - base + 4])[0]
+    return v if in_code(v) else None
+
+# direct-call closure; `jmp/call [slot]` targets are resolved here too, decoding from each entry's
+# own start (the .text sweep above loses alignment on the protector's junk bytes and misses stubs,
+# and only took targets inside the protector region: 0x45CE10 `jmp [0x1384804]` -> 0x4310A0)
 rounds, added_total = 0, 0
 while True:
     rounds += 1
@@ -156,10 +174,17 @@ while True:
         end = min(order[k + 1] if k + 1 < len(order) else CODE_HI, a + 0x10000)
         if a < T_HI <= end:
             end = T_HI
-        for i in md.disasm(img[a - base:end - base], a):
+        # an instruction that straddles `end` is decoded whole, as tools/lift.py straddle_end lifts
+        # it: a junk-derived seed at 0x4600D2 must not hide the stub `jmp [0x1380008]` at 0x4600D0
+        for i in md.disasm(img[a - base:min(end + 16, CODE_HI) - base], a):
+            if i.address >= end:
+                break
             if i.mnemonic == "call" and i.op_str.startswith("0x"):
                 t = int(i.op_str, 16)
                 if in_text(t) and t not in entries:
+                    new.add(t)
+            elif i.mnemonic in ("call", "jmp") and (t := slot_target(i.op_str)) is not None:
+                if t not in entries and decodes_cleanly(t):
                     new.add(t)
             elif i.mnemonic.startswith("j") and i.op_str.startswith("0x") and not (a >= PROT[0]):
                 t = int(i.op_str, 16)

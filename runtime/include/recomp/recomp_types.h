@@ -947,6 +947,11 @@ recomp_func_t recomp_lookup_import(uint32_t va);    /* import bridges */
     } \
 } while(0)
 
+#if defined(__has_attribute) && __has_attribute(musttail) && (!defined(__wasm__) || defined(__wasm_tail_call__))
+#define RECOMP_TAIL_RETURN(fn) __attribute__((musttail)) return (fn)()
+#else   /* no guaranteed tail calls: the old nested call (stack grows per tail jump) */
+#define RECOMP_TAIL_RETURN(fn) do { (fn)(); RECOMP_REGS_IN(); } while (0)
+#endif
 /* Indirect tail call (jmp through dispatch) */
 #define RECOMP_ITAIL(target_va) do { \
     uint32_t _va = (uint32_t)(target_va); \
@@ -957,7 +962,7 @@ recomp_func_t recomp_lookup_import(uint32_t va);    /* import bridges */
     recomp_func_t _fn = recomp_lookup_manual(_va); \
     if (!_fn) _fn = recomp_lookup(_va); \
     if (!_fn) _fn = recomp_lookup_import(_va); \
-    if (_fn) { RECOMP_REGS_OUT(); _fn(); RECOMP_REGS_IN(); } \
+    if (_fn) { RECOMP_REGS_OUT(); RECOMP_TAIL_RETURN(_fn); } \
     else if (_va == RECOMP_RETADDR) { /* setjmp and friends return by jumping \
         to the saved return address; that is a return, not a missing target. */ } \
     else { recomp_miss(1, _va, g_cur_func); } \
