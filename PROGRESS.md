@@ -240,3 +240,9 @@ Next: `./init.sh next` shows what to fix.
 - Tools: RT_TRACE_DRAWS_FRAME=N (per-draw state), --log-input (DI mouse polls per device), replay `shot`/`press N`, tests/replays/play_now_match.txt reaches kickoff ~21000.
 - Wine oracle still stalls on LOADING (not activation, not audio).
 - Web: rebuilt with -sJSPI + -sSUPPORT_LONGJMP=wasm -fwasm-exceptions (finished, untested).
+
+## 2026-10-11 — controls ground truth (docs/CONTROLS.md); pause/mouse root cause
+- Authoritative keyboard map from the game: FUN_00821AF0 (device type 8) + reader FUN_0081FD80; EA manual (archive.org PS2 scan) for what each button does. START = Left Ctrl, Esc = logical 4, numpad = right stick. docs/CONTROLS.md.
+- "Mouse frozen after Team Select" + "Esc doesn't pause": the device moved at Team Select becomes the match controller. Only the mouse can move its icon in our build, so the mouse becomes the pad (no cursor) and keyboard input is not the team's. Real bug: keyboard Left/Right reach the game (bits 0x40/0x80, FE messages 6/4) but never move the keyboard icon. Not found yet: the per-device stick -> icon code (input actions are data-driven, handler table at 0x90E7B0).
+- Tools added: RT_COVERAGE="from-to:file" (functions entered per frame window, diff mouse vs keyboard), hooks "args:"/"ctl:" in tools/hooks.json, RT_TRACE_DRAWS_FRAME.
+- Intermittent early crash (3 of ~9 runs, frame 1 or ~1740): sub_0088E870 null+4 in the VP6 stream ring reader while the movie stream restarts on another thread. Likely a guest-thread race; candidate fix: a global guest lock (one guest thread runs lifted code at a time), released around imports.

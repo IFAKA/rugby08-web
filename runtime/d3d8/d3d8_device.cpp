@@ -1,6 +1,7 @@
 // d3d8_device.cpp -- IDirect3DDevice8 on d3d9-webgl. d3d9-webgl has few Get* methods, so the
 // device shadows what the game sets and answers Get* from the shadow.
 #include "d3d8_int.hpp"
+extern "C" void rt_coverage_frame(uint32_t frame);
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -153,6 +154,7 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
     s->frame++;
     plat_replay_tick(s->frame);
+    rt_coverage_frame(s->frame);
     if (rt_replay_path[0]) menu_change_probe(s->frame, (int)o->w, (int)o->h);
     if (s->frame == 1 || s->frame % 60 == 0 || (int)s->frame == rt_frame_limit) rt_trace("frame %u", s->frame);
     if (rt_frame_limit > 0 && (int)s->frame >= rt_frame_limit) {
