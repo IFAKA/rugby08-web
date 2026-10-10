@@ -1,6 +1,9 @@
 // d3d8_device.cpp -- IDirect3DDevice8 on d3d9-webgl. d3d9-webgl has few Get* methods, so the
 // device shadows what the game sets and answers Get* from the shadow.
 #include "d3d8_int.hpp"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include "plat.h"
 #include <GLES3/gl3.h>
 #include <cstdlib>
@@ -159,6 +162,9 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     }
     if (rt_shot_path[0]) { save_frame_png(o, rt_shot_path); rt_shot_path[0] = 0; }
     plat_gl_swap();
+#ifdef __EMSCRIPTEN__
+    emscripten_sleep(0);   // JSPI: hand the frame to the browser (present, input, timers), then resume
+#endif
     return D3D_OK_;
 }
 
