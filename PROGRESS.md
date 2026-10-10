@@ -196,3 +196,9 @@ Next: `./init.sh next` shows what to fix.
 - Learned: Unicorn reloads every segment cache when one selector is written, so fs-only GDT left cs with limit 0 (#GP on the first ret); a flat code/data GDT fixes it. QEMU ignores x87 underflow and reads the physical register, so empty registers are written as 0 like the lifted model. FS_BASE is a no-op in 32-bit mode.
 - difftest.py --interp (harness DT_MODE): every case native / fully interpreted / via an interpreted call thunk that hands off; 834 x 3, 0 mismatches. Thunk compares the live stack (callee-popped args leave other dead slots by construction). RT_INTERP_TRACE=1 prints interpreted blocks.
 - Next: diagnostic native run (hidden, muted), then deprotect.exe (P3) / lift.reachability.
+
+## 2026-10-10 — lift.fidelity PASS; lift.reachability 305 -> 54 (in progress)
+- lift.fidelity check regex fixed to its description (ghidra_unlifted <= 20; old regex rejected 10-19). Passes.
+- fidelity_report missed every EH function (`static void sub_X_eh` + `}void sub_X` wrapper): 305 -> 64. lift.py now writes the wrapper on its own line.
+- build_catalog decodes_cleanly walks direct control flow: rejects candidates branching outside the image / into the PE header / zero fill; int3 ends a path. "Outside the code ranges" is NOT junk: SecuROM's runtime library lives in the dump's merged .data (0xC84600, 0xC85020 _chkstk; callers in PROT). Clean boundary: 0x9C0000-0xAC0000 all zero, code 0xAC0000-0xE65000.
+- Remaining 54: 28 into SecuROM runtime (unlifted range), 25 zero-fill fall-throughs after noreturn calls, 1 junk. Next: add 0xAC0000-0xE65000 as a code range; lifter treats `00 00` targets as non-code.

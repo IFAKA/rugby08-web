@@ -181,7 +181,8 @@ def eh_wrap(code, name, addr):
               f"RECOMP_FLAGS_OUT(); RECOMP_ITAIL(_eh_resume); {{ RECOMP_REGS_OUT(); return; }} }} }}")
     enter = f"    RECOMP_ENTER(0x{addr:08X}u);"
     code = code.replace(enter, enter + "\n" + resume, 1)
-    return code + f"void {name}(void) {{ RECOMP_EH_WRAP({body}); }}\n"
+    sep = "" if code.endswith("\n") else "\n"   # the wrapper on its own line: tools parse ^void sub_
+    return code + sep + f"void {name}(void) {{ RECOMP_EH_WRAP({body}); }}\n"
 
 def lift_one(idx):
     """Lift catalog entry idx -> (C code, ok). Shared by main() and tools/difftest.py."""

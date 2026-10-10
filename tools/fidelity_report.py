@@ -49,7 +49,9 @@ for s, e in ref:
         bounds.add(ins.address)
 
 # lifted instruction addresses and fall-through tails from gen/
-fn_re = re.compile(r"^void sub_([0-9A-F]{8})\(void\)")
+# EH functions (tools/lift.py eh_wrap) are a `static void sub_X_eh` body plus a `void sub_X` wrapper,
+# which older lifts wrote right after the body's closing brace: both count as sub_X
+fn_re = re.compile(r"^\}?(?:static )?void sub_([0-9A-F]{8})(?:_eh)?\(void\)")
 ins_re = re.compile(r"/\* 0x([0-9A-F]{8}): ")
 tail_re = re.compile(r"RECOMP_ITAIL\(0x([0-9A-F]{8})u\)")
 label_re = re.compile(r"^\s*L_([0-9A-F]{8}):")
@@ -63,7 +65,7 @@ for path in sorted(glob.glob("gen/recomp/recomp_*.c")):
         m = fn_re.match(line)
         if m:
             cur = int(m.group(1), 16)
-            fn_insns[cur] = []
+            fn_insns.setdefault(cur, [])    # an EH wrapper line follows its body: keep the body's insns
             if "recomp_fault(" in line:
                 stubs[line.split('"')[1] if '"' in line else "fault"] += 1
             continue
