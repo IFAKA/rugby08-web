@@ -199,6 +199,25 @@ def zero_fill_tails(code):
         return m.group(0)
     return _TAIL_LABEL.sub(sub, code)
 
+def overlap_fallthroughs(trimmed):
+    """(b, end) for consecutive instructions a, b where a can fall through but b does not start at
+    a's end: the protector's overlapping decodes (0x432D10 `jmp 0x432D02` into the middle of the
+    7-byte `mov byte [ebp-0x8A1], 0` at 0x432CFD, whose last bytes read `inc dword [eax]`). Emitted
+    in address order, the mov fell into the inc the CPU never runs on that path; a's fall-through
+    goes to its own end instead."""
+    return [(b.address, a.end_address) for a, b in zip(trimmed, trimmed[1:])
+            if not (a.is_ret or a.is_uncond_jump) and a.end_address != b.address]
+
+def overlap_gotos(code, falls, starts):
+    for b, end in falls:
+        lab = f"\nL_{b:08X}:"
+        if lab not in code:
+            continue
+        jump = (f"    goto L_{end:08X};" if end in starts else
+                f"    RECOMP_FLAGS_OUT(); RECOMP_ITAIL(0x{end:08X}u); {{ RECOMP_REGS_OUT(); return; }}")
+        code = code.replace(lab, f"\n{jump} /* fall-through of an overlapping decode */{lab}", 1)
+    return code
+
 def lift_one(idx):
     """Lift catalog entry idx -> (C code, ok). Shared by main() and tools/difftest.py."""
     E, code, cs, ce = _G["entries"], _G["code"], _G["code_start"], _G["code_end"]
@@ -211,7 +230,11 @@ def lift_one(idx):
         trimmed = reachable(insns, addr, end, arms)
         if not trimmed:
             return f"void {name}(void) {{ recomp_fault(0x{addr:08X}u, \"#UD empty entry\"); }}\n", False
+        falls = overlap_fallthroughs(trimmed)
+        starts = {i.address for i in trimmed}
+        leaders = set(leaders) | {b for b, _ in falls} | {e for _, e in falls if e in starts}
         code = generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr)
+        code = overlap_gotos(code, falls, starts)
         code = zero_fill_tails(carry_flags(ret_jumps(code)))
         hook = _G["hooks"].get(addr)
         if hook:   # tools/hooks.json: announce entry (checks grep for "<name> entered")
