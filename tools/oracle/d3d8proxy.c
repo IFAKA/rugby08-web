@@ -85,6 +85,7 @@ static unsigned char g_keys[256];   /* DIK state (scan | 0x80 when extended) */
 static unsigned char g_vkdown[256];
 static int g_mdx, g_mdy, g_mbuttons, g_cx = 320, g_cy = 240;
 static char g_shot[64];
+static int g_force_active;           /* background run: GetForegroundWindow/GetActiveWindow -> the game */
 
 static int str_eq(const char *a, const char *b) { while (*a && *a == *b) a++, b++; return *a == *b; }
 static const char *skip_ws(const char *p) { while (*p == ' ' || *p == '\t') p++; return p; }
@@ -207,6 +208,11 @@ __declspec(dllexport) void d3d8proxy_input(unsigned char *keys, int *tx, int *ty
     if (ty) *ty = g_mdy;
     if (buttons) *buttons = g_mbuttons;
 }
+typedef void *(WINAPI *wnd_fn)(void);
+static wnd_fn g_fg, g_active, g_focus;
+static void *WINAPI fg_hook(void) { return g_force_active && g_hwnd ? g_hwnd : g_fg(); }
+static void *WINAPI active_hook(void) { return g_force_active && g_hwnd ? g_hwnd : g_active(); }
+static void *WINAPI focus_hook(void) { return g_force_active && g_hwnd ? g_hwnd : g_focus(); }
 typedef short (WINAPI *keystate_fn)(int);
 static keystate_fn g_async, g_keystate;
 static short WINAPI async_hook(int vk) { return (short)((vk >= 0 && vk < 256 && g_vkdown[vk]) ? 0x8000 : 0) | g_async(vk); }
@@ -225,6 +231,9 @@ static void patch_imports(void) {
             const char *fn = (const char *)(b + names[i] + 2);
             if (str_eq(fn, "GetAsyncKeyState")) patch_slot((void **)iat, i, (void *)async_hook, (void **)&g_async);
             else if (str_eq(fn, "GetKeyState")) patch_slot((void **)iat, i, (void *)keystate_hook, (void **)&g_keystate);
+            else if (str_eq(fn, "GetForegroundWindow")) patch_slot((void **)iat, i, (void *)fg_hook, (void **)&g_fg);
+            else if (str_eq(fn, "GetActiveWindow")) patch_slot((void **)iat, i, (void *)active_hook, (void **)&g_active);
+            else if (str_eq(fn, "GetFocus")) patch_slot((void **)iat, i, (void *)focus_hook, (void **)&g_focus);
         }
     }
 }
@@ -286,6 +295,11 @@ static HRESULT WINAPI create_device_hook(void *d3d, unsigned adapter, unsigned t
     if (GetEnvironmentVariableA("RUGBY08_ORACLE_BACKGROUND", 0, 0)) {
         if (pp[PP_HWND]) ShowWindow((void *)pp[PP_HWND], 7 /* SW_SHOWMINNOACTIVE */);
         if (hwnd && hwnd != (void *)pp[PP_HWND]) ShowWindow(hwnd, 7);
+        /* Minimized without activation, the game counted itself inactive and stalled its loading
+           (as the native runtime's hidden window did): tell it it is the active app. */
+        PostMessageA(g_hwnd, 0x1C /* WM_ACTIVATEAPP */, 1, 0);
+        PostMessageA(g_hwnd, 0x06 /* WM_ACTIVATE */, 1 /* WA_ACTIVE */, 0);
+        g_force_active = 1;
     }
     return hr;
 }

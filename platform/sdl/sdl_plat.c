@@ -117,6 +117,7 @@ int plat_window_open(const char *title, int x, int y, int w, int h) {
     g_win = SDL_CreateWindow(title ? title : "Rugby 08", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                              w, h, flags);
     if (!g_win) { rt_log("SDL_CreateWindow: %s", SDL_GetError()); return -1; }
+    SDL_StopTextInput();   /* no macOS text input: holding a key opened the accent popup (WM_CHAR comes from TranslateMessage) */
     rt_log("plat: window %dx%d \"%s\"", w, h, title ? title : "");
     return 0;
 }
@@ -313,14 +314,8 @@ static void translate(const SDL_Event *e) {
         if (!down) lp |= 3u << 30;
         else if (e->key.repeat) lp |= 1u << 30;
         push(alt ? (down ? WM_SYSKEYDOWN_ : WM_SYSKEYUP_) : (down ? WM_KEYDOWN_ : WM_KEYUP_), vk, lp);
-        if (down && !e->key.repeat && (vk == 0x0D || vk == 0x08 || vk == 0x1B || vk == 0x09))
-            push(WM_CHAR_, vk, lp);       /* SDL sends no text event for these */
-        break;
+        break;                            /* WM_CHAR: the game's TranslateMessage (user32.c) */
     }
-    case SDL_TEXTINPUT:
-        for (const unsigned char *s = (const unsigned char *)e->text.text; *s; s++)
-            if (*s < 0x80) push(WM_CHAR_, *s, 1);
-        break;
     case SDL_MOUSEMOTION:
         g_mdx += e->motion.xrel; g_mdy += e->motion.yrel;
         if (!g_rel && plat_window_focused()) rel_set(1);

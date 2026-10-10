@@ -17,7 +17,17 @@ static const uint8_t GUID_SysKeyboard[16] = { 0x61, 0x2B, 0x1D, 0x6F, 0xA0, 0xD5
 static const uint8_t GUID_SysMouse[16]    = { 0x60, 0x2B, 0x1D, 0x6F, 0xA0, 0xD5, 0xCF, 0x11, 0xBF, 0xC7, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00 };
 
 enum { DEV_KEYBOARD = 1, DEV_MOUSE = 2 };
-typedef struct { int kind; uint32_t refs; } didev_t;
+typedef struct { int kind; uint32_t refs; int id; uint32_t mx, my, mw; } didev_t;
+
+/* Mouse motion since process start. Every device instance reports its own delta against the
+ * total it last saw, as real DirectInput does: the game keeps two mouse devices, and draining one
+ * shared delta per read starved whichever device polled second. */
+static uint32_t g_mx, g_my, g_mw;
+static void mouse_drain(void) {
+    int dx, dy, dw;
+    plat_mouse_delta(&dx, &dy, &dw);
+    g_mx += (uint32_t)dx; g_my += (uint32_t)dy; g_mw += (uint32_t)dw;
+}
 
 /* DIDEVICEINSTANCEA (580 bytes): dwSize guidInstance guidProduct dwDevType tszInstanceName[260]
  * tszProductName[260] guidFFDriver wUsagePage wUsage */
@@ -70,10 +80,15 @@ static uint32_t dv_GetDeviceState(const uint32_t *a) {   /* (this, cbData, lpvDa
             if (on && seen < 8) { seen++; rt_log("DirectInput keyboard: DIK 0x%02X down", k); }
         }
     } else if (n >= 16) {                                      /* DIMOUSESTATE: lX lY lZ rgbButtons[4] */
-        int dx, dy, dw;
-        plat_mouse_delta(&dx, &dy, &dw);
+        mouse_drain();
+        int dx = (int)(g_mx - d->mx), dy = (int)(g_my - d->my), dw = (int)(g_mw - d->mw);
+        d->mx = g_mx; d->my = g_my; d->mw = g_mw;
         uint8_t b = plat_mouse_buttons();
-        { static int n; if (rt_log_input && (dx || dy) && n < 300) { n++; rt_log("input: DI mouse delta %d,%d", dx, dy); } }
+        { static unsigned polls[8];       /* --log-input: which mouse device the game reads, and how often */
+          if (rt_log_input && d->id < 8 && ++polls[d->id] % 300 == 0) rt_log("input: DI mouse%d polled %u times", d->id, polls[d->id]); }
+        { static int n, k;
+          if (rt_log_input && (dx || dy) && n < 300) { n++; rt_log("input: DI mouse%d delta %d,%d", d->id, dx, dy); }
+          if (rt_log_input && (dx || dy) && ++k % 40 == 0) rt_log("input: DI mouse%d total %d,%d", d->id, (int)g_mx, (int)g_my); }
         wr32(p, (uint32_t)dx); wr32(p + 4, (uint32_t)dy); wr32(p + 8, (uint32_t)dw);
         for (int i = 0; i < 3; i++) wr8(p + 12 + (uint32_t)i, (b >> i) & 1 ? 0x80 : 0);
     }
@@ -110,7 +125,9 @@ static uint32_t new_device(int kind) {
     static uint32_t vt;
     if (!vt) vt = rt_com_vtable("IDirectInputDevice7A", dev_methods, (int)(sizeof dev_methods / sizeof dev_methods[0]));
     didev_t *d = calloc(1, sizeof *d);
-    d->kind = kind; d->refs = 1;
+    static int ids;
+    d->kind = kind; d->refs = 1; d->id = ++ids;
+    if (kind == DEV_MOUSE) { mouse_drain(); d->mx = g_mx; d->my = g_my; d->mw = g_mw; }   /* no motion from before creation */
     return rt_com_new(vt, d);
 }
 
