@@ -182,3 +182,11 @@ Next: `./init.sh next` shows what to fix.
 - Plan: docs/plans/2026-10-08-oracle-fallback-deprotect.md. New items: oracle.wine (P1), interp.fallback (P2, Unicorn on shared guest memory; native.smoke now depends on it), deprotect.exe (P3), web.interp (P4).
 - User approved installs: brew wine-stable (cask) and brew unicorn.
 - Next: oracle.wine (tools/run_wine.sh).
+
+## 2026-10-10 — oracle.wine PASS: the unpacked exe is good; crashes are ours
+- Wine 11.0 (Gcenx wine-stable tarball unpacked to build/wine-dl; Homebrew here belongs to another macOS user, so no brew installs). Unicorn C lib + headers already ship in .venv (unicorn 2.1.4): use those for P2.
+- The game asks for 640x480 16-bit fullscreen (fmt 23, same as native), which macOS cannot set. tools/oracle/d3d8proxy.c (built by tools/oracle/build_proxy.sh: Apple clang i686-windows + emscripten's lld) patches IDirect3D8::CreateDevice/Reset to windowed. Game code untouched. Rugby08_unpacked.exe then runs 60 s with no exception, so the unpack is sound.
+- Wine flake: 50-75% of launches die ~3 s in, right after NtQuerySystemInformation(SYSTEM_PERFORMANCE_INFORMATION), stack corrupted (likely SecuROM timing under Rosetta; protector = SecuROM 7: Software\SecuROM, UaService7.exe). run_wine.sh --tries reruns. Win32u EmulateModeset=Y does not help.
+- Runs no longer disturb the user: Wine minimized/no focus (RUGBY08_ORACLE_BACKGROUND), no pointer grab/warp (prefix registry), muted (winecoreaudio.drv=d); run_native.sh muted via SDL_AUDIODRIVER=dummy (native.audio still PASS).
+- Found: userdata/game/ has directories named with XML fragments (`8" `, `<mix value="32767"`), so the lifted game passes a wrong string to CreateDirectory/CreateFile. Real lift/runtime bug; fix as a class later.
+- Next: interp.fallback (P2).

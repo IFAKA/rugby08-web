@@ -18,8 +18,8 @@ What changes:
 Each phase is a features.json item with an exit-0 check, so any later session can resume it through the normal session protocol.
 
 ## Resume here (status)
-- [ ] P0 persist plan (docs + features.json + PROGRESS)
-- [ ] P1 `oracle.wine`
+- [x] P0 persist plan (docs + features.json + PROGRESS)
+- [x] P1 `oracle.wine` (passes; see PROGRESS 2026-10-10)
 - [ ] P2 `interp.fallback` → then `native.smoke`
 - [ ] P3 `deprotect.exe`
 - [ ] P4 `web.interp` → then `web.smoke`

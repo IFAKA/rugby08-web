@@ -3,6 +3,8 @@
 #   tools/run_native.sh [--frames N] [--timeout S] [--expect 'TEXT'] [extra rugby08 args...]
 # Without --expect, the run must reach its last frame ('frame N').
 # Game log: logs/native_run.log; stdout/stderr of the run: logs/run_native.log.
+# Muted: SDL's dummy audio driver still runs the mixer callback in real time but plays nothing
+# (set SDL_AUDIODRIVER to override; scripts/play.sh is the interactive run with sound).
 cd "$(dirname "$0")/.." || exit 1
 FRAMES=0 TMO=120 EXPECT= EXTRA=
 while [ $# -gt 0 ]; do
@@ -17,7 +19,7 @@ done
 [ -n "$EXPECT" ] || [ "$FRAMES" -gt 0 ] || { echo "run_native: --expect or --frames required"; exit 2; }
 [ -n "$EXPECT" ] || EXPECT="frame $FRAMES"
 [ -x build/native/rugby08 ] || { echo "run_native: FAIL (build/native/rugby08 missing; ./init.sh build-native)"; exit 1; }
-timeout "$TMO" build/native/rugby08 --frames "$FRAMES" --log logs/native_run.log $EXTRA "$@" >logs/run_native.log 2>&1
+SDL_AUDIODRIVER=${SDL_AUDIODRIVER:-dummy} timeout "$TMO" build/native/rugby08 --frames "$FRAMES" --log logs/native_run.log $EXTRA "$@" >logs/run_native.log 2>&1
 RC=$?
 if grep -qF -- "$EXPECT" logs/run_native.log; then
   echo "run_native: ok ('$EXPECT' seen, exit $RC)"; exit 0
