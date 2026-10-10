@@ -85,6 +85,7 @@ extern int rt_frame_limit;              /* --frames N (<= 0: run until the game 
 extern char rt_screenshot_path[1024];   /* --screenshot PATH ("" = none) */
 extern char rt_audio_capture_path[1024]; /* --audio-capture PATH ("" = none) */
 extern int rt_log_input;                 /* --log-input: log host key/mouse events and what the game polls */
+extern char rt_shot_path[1024];          /* replay `<frame> shot PATH`: PNG of that frame (then "") */
 extern char rt_replay_path[1024];        /* --replay PATH ("" = none) */
 /* PNG (RGBA8, rows top to bottom); 0 = ok. */
 int rt_png_write(const char *path, int w, int h, const uint8_t *rgba);

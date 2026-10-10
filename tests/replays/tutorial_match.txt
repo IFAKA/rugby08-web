@@ -1,0 +1,31 @@
+# Main menu -> tutorial match: S, Up+S = PLAY TUTORIAL, mouse right moves the keyboard/mouse icon onto the team, S continues. 2026-10-10
+8100 click 320 240
+8400 tap Return
+9000 tap S
+9300 down Up
+9310 up Up
+9500 tap S
+10200 move 40 0
+10230 move 40 0
+10260 move 40 0
+10400 shot logs/film/t10400.png
+10600 tap S
+11000 tap S
+11300 tap S
+11600 tap S
+11900 tap S
+12200 tap S
+12500 tap S
+11000 shot logs/film/t11000.png
+11500 shot logs/film/t11500.png
+12000 shot logs/film/t12000.png
+12500 shot logs/film/t12500.png
+13000 shot logs/film/t13000.png
+13500 shot logs/film/t13500.png
+14000 shot logs/film/t14000.png
+14500 shot logs/film/t14500.png
+15000 shot logs/film/t15000.png
+15500 shot logs/film/t15500.png
+16000 shot logs/film/t16000.png
+16500 shot logs/film/t16500.png
+17000 shot logs/film/t17000.png

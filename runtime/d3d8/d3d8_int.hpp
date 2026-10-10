@@ -61,9 +61,12 @@ struct Vs8 {
     uint32_t fvf = 0;                    // fixed-function: equivalent FVF, when one exists
     bool programmable = false, fvf_ok = false;
     const MOJOSHADER_parseData *pd = nullptr;
+    D3D9WProgVS *gl = nullptr;           // its GL program (d3d9-webgl), built on first use
+    bool gl_tried = false;
 };
 bool vs8_parse_decl(uint32_t decl_va, Vs8 *vs);
 bool vs8_translate(uint32_t func_va, Vs8 *vs, int id);
+D3D9WProgVS *vs8_gl(Vs8 *vs, int id);
 
 #define HLE_D3D(iface, method) uint32_t d3d8_##iface##_##method(const uint32_t *a)
 extern "C" uint32_t d3d8_IUnknown_Release(const uint32_t *a);

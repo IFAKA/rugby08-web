@@ -132,6 +132,18 @@ static void menu_change_probe(uint32_t frame, int w, int h) {
     }
 }
 
+
+// The presented frame (still in the back buffer, before the swap) as a PNG: --screenshot, replay shots.
+static void save_frame_png(Obj *o, const char *path) {
+    int w = (int)o->w, h = (int)o->h;
+    std::vector<uint8_t> px((size_t)w * h * 4), flip(px.size());
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    for (int y = 0; y < h; y++) memcpy(&flip[(size_t)y * w * 4], &px[(size_t)(h - 1 - y) * w * 4], (size_t)w * 4);
+    int rc = rt_png_write(path, w, h, flip.data());
+    rt_trace("screenshot %s %dx%d (%s)", path, w, h, rc == 0 ? "ok" : "failed");
+}
+
 HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     Obj *o = d3d8_obj(a[0]);
     DevState *s = o->dev;
@@ -141,18 +153,11 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     if (rt_replay_path[0]) menu_change_probe(s->frame, (int)o->w, (int)o->h);
     if (s->frame == 1 || s->frame % 60 == 0 || (int)s->frame == rt_frame_limit) rt_trace("frame %u", s->frame);
     if (rt_frame_limit > 0 && (int)s->frame >= rt_frame_limit) {
-        if (rt_screenshot_path[0]) {
-            int w = (int)o->w, h = (int)o->h;
-            std::vector<uint8_t> px((size_t)w * h * 4), flip(px.size());
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-            glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
-            for (int y = 0; y < h; y++) memcpy(&flip[(size_t)y * w * 4], &px[(size_t)(h - 1 - y) * w * 4], (size_t)w * 4);
-            int rc = rt_png_write(rt_screenshot_path, w, h, flip.data());
-            rt_trace("screenshot %s %dx%d (%s)", rt_screenshot_path, w, h, rc == 0 ? "ok" : "failed");
-        }
+        if (rt_screenshot_path[0]) save_frame_png(o, rt_screenshot_path);
         rt_trace("exit: frame limit %d reached", rt_frame_limit);
         exit(0);
     }
+    if (rt_shot_path[0]) { save_frame_png(o, rt_shot_path); rt_shot_path[0] = 0; }
     plat_gl_swap();
     return D3D_OK_;
 }
@@ -432,9 +437,26 @@ HLE_D3D(IDirect3DDevice8, SetVertexShader) {  // FVF codes, or a handle from Cre
         if (i >= g_vs.size()) return D3DERR_INVALIDCALL_;
         Vs8 *v = g_vs[i];
         for (const Vs8Const &c : v->consts) if (c.reg < 96) memcpy(s->vsc[c.reg], c.v, sizeof c.v);
-        if (v->programmable) { d3d8_unimpl("SetVertexShader(programmable)", 0); return D3D_OK_; }
+        if (v->programmable) {
+            /* The draw paths still read the FVF for texture and colour decisions: the declaration's
+               equivalent when it has one. The shader itself runs as a GL program (d3d8_vshader.cpp
+               vs8_gl, d3d9-webgl d3d9w_progvs_*). */
+            if (v->fvf_ok) D(a)->SetFVF(v->fvf);
+            static int off = getenv("RT_NO_PROGVS") != nullptr;   // A/B: draw without the GL program
+            D3D9WProgVS *gl = off ? nullptr : vs8_gl(v, (int)i);
+            d3d9w_progvs_use(gl, s->vsc);
+            if (!gl) d3d8_unimpl("SetVertexShader(programmable: GL program failed)", 0);
+            return D3D_OK_;
+        }
+        d3d9w_progvs_use(nullptr, nullptr);
         D(a)->SetFVF(v->fvf);
         return D3D_OK_;
+    }
+    d3d9w_progvs_use(nullptr, nullptr);
+    {   /* each distinct FVF once: position kinds the backend may not handle (XYZB1-5 blend weights) */
+        static uint32_t seen[64]; static int nseen;
+        int k = 0; while (k < nseen && seen[k] != a[1]) k++;
+        if (k == nseen && nseen < 64) { seen[nseen++] = a[1]; rt_log("SetVertexShader: FVF 0x%08X (position kind 0x%X)", a[1], a[1] & 0xE); }
     }
     D(a)->SetFVF(a[1]);
     return D3D_OK_;

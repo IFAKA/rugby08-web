@@ -12,6 +12,7 @@ int rt_frame_limit = -1;          /* --frames N: exit after N presented frames (
 char rt_screenshot_path[1024];    /* --screenshot PATH: PNG of the last frame before --frames exits */
 char rt_audio_capture_path[1024]; /* --audio-capture PATH: WAV of the mixed audio output */
 int rt_log_input;
+char rt_shot_path[1024];          /* set by the input replay's `shot` events (d3d8 Present writes it) */
 char rt_replay_path[1024];        /* --replay PATH: scripted key input (tests/replays/) */
 
 void rt_log_open(const char *path);

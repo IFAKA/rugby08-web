@@ -105,6 +105,8 @@ static void video_init(void) {
     g_inited = 1;
 }
 
+static int g_activate_pending;   /* plat_window_show in an automated run: WM_ACTIVATE* at the next pump */
+
 int plat_window_open(const char *title, int x, int y, int w, int h) {
     video_init();
     if (g_win) return 0;
@@ -124,6 +126,10 @@ int  plat_window_is_open(void) { return g_win != NULL; }
 void *plat_window_handle(void) { return g_win; }
 void plat_window_show(int show) {
     if (!g_win) return;
+    if (show && virtual_cursor()) {         /* automated runs stay hidden even when the game calls ShowWindow, */
+        g_activate_pending = 1;             /* but are active as a shown window is on Windows: a hidden window */
+        return;                             /* never gains focus, and the game ignored device input until it did */
+    }
     if (show) {
         SDL_ShowWindow(g_win);
     } else {
@@ -342,10 +348,15 @@ static void translate(const SDL_Event *e) {
 int plat_poll(plat_msg_t *m, int wait_ms) {
     if (!g_inited) return 0;
     SDL_Event e;
+    if (g_activate_pending) { g_activate_pending = 0; push(WM_ACTIVATEAPP_, 1, 0); push(WM_ACTIVATE_, 1, 0); }
     while (!g_npending) {
         int got = wait_ms > 0 ? SDL_WaitEventTimeout(&e, wait_ms) : SDL_PollEvent(&e);
         if (!got) return 0;
         wait_ms = 0;
+        if (virtual_cursor() && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP || e.type == SDL_TEXTINPUT ||
+            e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
+            e.type == SDL_MOUSEWHEEL))
+            continue;                     /* automated runs: only the replay drives input, never the user's devices */
         translate(&e);
     }
     *m = g_pending[0];
@@ -354,7 +365,7 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
 }
 
 /* ---- input replay (plat.h plat_replay_tick) ---------------------------------------------------- */
-typedef struct { uint32_t frame; uint8_t down, mouse; SDL_Scancode sc; int x, y; } replay_ev_t;
+typedef struct { uint32_t frame; uint8_t down, mouse; SDL_Scancode sc; int x, y; char *path; } replay_ev_t;   /* mouse 3: shot */
 static replay_ev_t *g_replay;
 static int g_nreplay, g_ireplay, g_replay_loaded;
 
@@ -383,6 +394,25 @@ static void replay_load(void) {
             g_replay[g_nreplay++] = (replay_ev_t){ frame + 3, 0, 1, SDL_SCANCODE_UNKNOWN, mx, my };
             continue;
         }
+        mx = 0;
+        unsigned hold = 3;                                                 /* `press [frames held]` */
+        if (sscanf(line, "%u press%n %u", &frame, &mx, &hold) >= 1 && mx > 0) {   /* left click wherever the cursor is */
+            g_replay = realloc(g_replay, (size_t)(g_nreplay + 2) * sizeof *g_replay);
+            g_replay[g_nreplay++] = (replay_ev_t){ frame, 1, 1, SDL_SCANCODE_UNKNOWN, -1, -1 };
+            g_replay[g_nreplay++] = (replay_ev_t){ frame + (hold ? hold : 3), 0, 1, SDL_SCANCODE_UNKNOWN, -1, -1 };
+            continue;
+        }
+        char shot[512];
+        if (sscanf(line, "%u shot %511s", &frame, shot) == 2) {          /* PNG of that presented frame */
+            g_replay = realloc(g_replay, (size_t)(g_nreplay + 1) * sizeof *g_replay);
+            g_replay[g_nreplay++] = (replay_ev_t){ frame, 0, 3, SDL_SCANCODE_UNKNOWN, 0, 0, strdup(shot) };
+            continue;
+        }
+        if (sscanf(line, "%u move %d %d", &frame, &mx, &my) == 3) {    /* relative mouse motion (DirectInput) */
+            g_replay = realloc(g_replay, (size_t)(g_nreplay + 1) * sizeof *g_replay);
+            g_replay[g_nreplay++] = (replay_ev_t){ frame, 0, 2, SDL_SCANCODE_UNKNOWN, mx, my };
+            continue;
+        }
         if (line[0] == '#' || sscanf(line, "%u %15s %63[^\n]", &frame, act, key) != 3) continue;
         SDL_Scancode sc = SDL_GetScancodeFromName(key);
         if (sc == SDL_SCANCODE_UNKNOWN) { rt_log("replay: unknown key '%s'", key); continue; }
@@ -405,17 +435,34 @@ void plat_replay_tick(uint32_t frame) {
         g_replay_last = frame;
         SDL_Event e;
         memset(&e, 0, sizeof e);
+        if (r->mouse == 3) { snprintf(rt_shot_path, sizeof rt_shot_path, "%s", r->path); continue; }
+        if (r->mouse == 2) {              /* like a real mouse: DirectInput delta, cursor position and WM_MOUSEMOVE */
+            int wx = 0, wy = 0, ww = 640, wh = 480;
+            if (g_win) { SDL_GetWindowPosition(g_win, &wx, &wy); SDL_GetWindowSize(g_win, &ww, &wh); }
+            int cx = g_vcur_x - wx + r->x, cy = g_vcur_y - wy + r->y;
+            cx = cx < 0 ? 0 : cx > ww - 1 ? ww - 1 : cx; cy = cy < 0 ? 0 : cy > wh - 1 ? wh - 1 : cy;
+            g_vcur_x = wx + cx; g_vcur_y = wy + cy;
+            e.type = SDL_MOUSEMOTION;
+            e.motion.windowID = g_win ? SDL_GetWindowID(g_win) : 0;
+            e.motion.x = cx; e.motion.y = cy; e.motion.xrel = r->x; e.motion.yrel = r->y;
+            if (g_inited) translate(&e);
+            rt_trace("replay: frame %u mouse move %d,%d", frame, r->x, r->y);
+            continue;
+        }
         if (r->mouse) {
-            if (g_win) { int wx, wy; SDL_GetWindowPosition(g_win, &wx, &wy); g_vcur_x = wx + r->x; g_vcur_y = wy + r->y; }
+            int wx = 0, wy = 0;
+            if (g_win) SDL_GetWindowPosition(g_win, &wx, &wy);
+            if (r->x >= 0) { g_vcur_x = wx + r->x; g_vcur_y = wy + r->y; }
+            int bx = g_vcur_x - wx, by = g_vcur_y - wy;
             e.type = r->down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
             e.button.windowID = g_win ? SDL_GetWindowID(g_win) : 0;
             e.button.button = SDL_BUTTON_LEFT;
             e.button.state = r->down ? SDL_PRESSED : SDL_RELEASED;
             e.button.clicks = 1;
-            e.button.x = r->x; e.button.y = r->y;
-            if (g_inited) SDL_PushEvent(&e);
+            e.button.x = bx; e.button.y = by;
+            if (g_inited) translate(&e);   /* direct: real input is filtered out in automated runs */
             g_replay_buttons = r->down ? 1 : 0;
-            rt_trace("replay: frame %u mouse %s at %d,%d", frame, r->down ? "down" : "up", r->x, r->y);
+            rt_trace("replay: frame %u mouse %s at %d,%d", frame, r->down ? "down" : "up", bx, by);
             continue;
         }
         e.type = r->down ? SDL_KEYDOWN : SDL_KEYUP;
@@ -423,7 +470,7 @@ void plat_replay_tick(uint32_t frame) {
         e.key.windowID = g_win ? SDL_GetWindowID(g_win) : 0;
         e.key.keysym.scancode = r->sc;
         e.key.keysym.sym = SDL_GetKeyFromScancode(r->sc);
-        if (g_inited) SDL_PushEvent(&e);
+        if (g_inited) translate(&e);   /* direct: real input is filtered out in automated runs */
         keymap_t k = g_keys[r->sc];          /* DirectInput state now, not when the pump runs */
         if (k.scan) g_dik_down[(k.scan | (k.ext ? 0x80 : 0)) & 0xFF] = r->down;
         rt_trace("replay: frame %u %s %s", frame, r->down ? "down" : "up", SDL_GetScancodeName(r->sc));

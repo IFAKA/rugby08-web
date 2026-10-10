@@ -114,3 +114,23 @@ bool vs8_translate(uint32_t func_va, Vs8 *vs, int id) {
            (tok[0] >> 8) & 0xFF, tok[0] & 0xFF, vs->pd->instruction_count, vs->elems.size(), vs->pd->output_len);
     return true;
 }
+
+// The GL program for a translated shader: its constant registers in vs_uniforms_vec4 slot order
+// (MojoShader packs the registers it reads in the order it lists them) and its declaration.
+D3D9WProgVS *vs8_gl(Vs8 *vs, int id) {
+    if (vs->gl_tried) return vs->gl;
+    vs->gl_tried = true;
+    const MOJOSHADER_parseData *pd = vs->pd;
+    if (!pd || pd->error_count || !pd->output) return nullptr;
+    std::vector<unsigned char> regs;
+    for (int i = 0; i < pd->uniform_count; i++)
+        if (pd->uniforms[i].type == MOJOSHADER_UNIFORM_FLOAT)
+            for (int k = 0; k < (pd->uniforms[i].array_count ? pd->uniforms[i].array_count : 1); k++)
+                regs.push_back((unsigned char)(pd->uniforms[i].index + k));
+    std::vector<D3D9WElem> el;
+    for (const Vs8Elem &e : vs->elems) el.push_back({ e.stream, e.reg, e.type, e.offset });
+    vs->gl = d3d9w_progvs_create(pd->output, regs.data(), (int)regs.size(), el.data(), (int)el.size());
+    rt_log("SetVertexShader #%d: GL program %s (%zu constants, %zu inputs)", id, vs->gl ? "linked" : "FAILED",
+           regs.size(), el.size());
+    return vs->gl;
+}
