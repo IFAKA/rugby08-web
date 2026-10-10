@@ -12,6 +12,7 @@ A case is EXCLUDED (not failed) when the reference itself faults (#DE, bad opcod
 
   tools/difftest.py --sample 500      exit 0 iff >= 500 compared and 0 mismatches
   tools/difftest.py --sample 20 --grep '_mm\['   only bodies using MMX
+  tools/difftest.py --interp --sample 500       also interpreted (runtime/core/interp.c) and handed off
 Prints one line; details -> logs/difftest.log.
 """
 import argparse, json, os, pathlib, random, re, struct, subprocess, sys
@@ -40,6 +41,9 @@ def main():
     ap.add_argument("--seed", type=int, default=8)
     ap.add_argument("--dump", help="sub_XXXXXXXX: write both machines' final scratch+stack and diff them")
     ap.add_argument("--grep", help="only bodies whose lifted C matches this regex (e.g. '_mm\\[' for MMX)")
+    ap.add_argument("--interp", action="store_true",
+                    help="also run every case through runtime/core/interp.c: the whole body interpreted, and "
+                         "an interpreted call that hands off to the lifted body (difftest_harness.c DT_MODE)")
     a = ap.parse_args()
     want = re.compile(a.grep) if a.grep else None
     B.mkdir(parents=True, exist_ok=True)
@@ -64,12 +68,19 @@ def main():
     src += bodies
     src.append("typedef void (*fn_t)(void);")
     src.append("const fn_t dt_funcs[] = {" + ", ".join(f"sub_{E[i]:08X}" for i in chosen) + "};")
+    if a.interp:
+        src.append("const uint32_t dt_vas[] = {" + ", ".join(f"0x{E[i]:08X}u" for i in chosen) + "};")
+        src.append(f"const unsigned dt_n = {len(chosen)};")
     (B / "funcs.c").write_text("\n".join(src) + "\n")
     exe = B / "harness"
     cc = ["clang", "-O1", "-w", "-fwrapv", "-fno-strict-aliasing", "-DRECOMP_LOCAL_REGS", "-DRECOMP_RETADDR=0x7FFE0000u",   # = RET_VA: lifted rets tell returns from jumps by it
            "-I", str(root / "runtime/include/recomp"),
           "-I", str(root / "runtime/include"), str(root / "tools/difftest_harness.c"), str(B / "funcs.c"),
           str(root / "runtime/core/cpu_ext.c"), "-o", str(exe), "-lm"]
+    if a.interp:
+        uc = next((root / ".venv/lib").glob("python3*/site-packages/unicorn"))
+        cc[1:1] = ["-DDT_INTERP", "-DRT_INTERP", "-I", str(uc / "include")]
+        cc += [str(root / "runtime/core/interp.c"), str(uc / "lib/libunicorn.a"), "-lpthread"]
     r = subprocess.run(cc, capture_output=True, text=True)
     if r.returncode:
         print(r.stderr[-4000:], file=log)
@@ -184,6 +195,8 @@ def main():
             hx ^= (fnv_c(mu.mem_read(pg, 0x1000)) + i) & 0xFFFFFFFFFFFFFFFF
         hashes = {"data": fnv_c(mu.mem_read(DATA_LO, IMG_HI - DATA_LO)), "scr": fnv_c(mu.mem_read(SCR_LO, SCR_SZ)),
                   "stk": fnv_c(mu.mem_read(STK_LO, STK_SZ)), "out": fnv_c(mu.mem_read(OUT_VA, 8)), "pages": hx}
+        live = rv[4] - STK_LO if STK_LO <= rv[4] <= STK_LO + STK_SZ else 0
+        hashes["live"] = fnv_c(canon(bytes(mu.mem_read(STK_LO, STK_SZ)))[live:])   # as the harness: after the whole stack
         ref[k] = (rv, depth, hashes)
         if a.dump == f"sub_{E[idx]:08X}":
             (B / "dump_uc.bin").write_bytes(bytes(mu.mem_read(SCR_LO, SCR_SZ)) + bytes(mu.mem_read(STK_LO, STK_SZ)))
@@ -192,8 +205,13 @@ def main():
                      " ".join(f"{v:08X}" for v in args) + f" {pre} {len(pages)} " +
                      " ".join(f"{p:08X}" for p in pages))
     (B / "cases.txt").write_text("\n".join(cases) + "\n")
-    r = subprocess.run([str(exe), str(B / "image.bin"), str(B / "scratch.bin"), str(B / "cases.txt")],
-                       capture_output=True, text=True, timeout=3600)
+    modes = [("native", "0")] + ([("interp", "1"), ("thunk", "2")] if a.interp else [])
+    runs = {}
+    for mname, mval in modes:
+        runs[mname] = subprocess.run([str(exe), str(B / "image.bin"), str(B / "scratch.bin"), str(B / "cases.txt")],
+                                     capture_output=True, text=True, timeout=3600,
+                                     env={**os.environ, "DT_MODE": mval})
+    r = runs["native"]
     if a.dump and (B / "dump_c.bin").exists() and (B / "dump_uc.bin").exists():
         c, u = (B / "dump_c.bin").read_bytes(), (B / "dump_uc.bin").read_bytes()
         for o in range(0, len(c), 4):
@@ -202,9 +220,29 @@ def main():
                 gc, gu = struct.unpack("<I", c[o:o + 4])[0], struct.unpack("<I", u[o:o + 4])[0]
                 print(f"dump {va:08X}: lifted {gc:08X} ({struct.unpack('<f', c[o:o+4])[0]:.9g})  "
                       f"ref {gu:08X} ({struct.unpack('<f', u[o:o+4])[0]:.9g})")
+    results = {mname: compare(runs[mname].stdout, ref, E, chosen, excluded if mname == "native" else {}, mname)
+               for mname, _ in modes}
+    for mname, (compared, mism, fails) in results.items():
+        for x in fails:
+            print(x, file=log)
+    print(json.dumps({"compared": {m: c for m, (c, _, _) in results.items()},
+                      "mismatches": {m: x for m, (_, x, _) in results.items()},
+                      "excluded": excluded, "candidates": len(chosen)}), file=log)
+    ok = all(c >= a.sample and x == 0 for c, x, _ in results.values())
+    if a.interp:
+        print("difftest --interp: " + " ".join(f"{m} {c}/{x}" for m, (c, x, _) in results.items()) +
+              f" (compared/mismatches) excluded={sum(excluded.values())} -> {'PASS' if ok else 'FAIL'}")
+    else:
+        compared, mism, _ = results["native"]
+        print(f"difftest: compared={compared} mismatches={mism} excluded={sum(excluded.values())} -> {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
+def compare(stdout, ref, E, chosen, excluded, mname):
+    """One harness run's lines against the reference: (compared, mismatches, failure lines)."""
     compared = mism = 0
     fails = []
-    for line in r.stdout.splitlines():
+    for line in stdout.splitlines():
         f = line.split()
         k, st = int(f[0]), int(f[1])
         rv, depth, h = ref[k]
@@ -212,7 +250,7 @@ def main():
         if st == 5:     # computed jump out of the body (difftest_harness.c recomp_miss)
             excluded["computed jump"] = excluded.get("computed jump", 0) + 1; continue
         if st != 0:
-            fails.append(f"{name}: lifted status {st} (1=signal 2=timeout 3=fault) but reference returned")
+            fails.append(f"{mname} {name}: status {st} (1=signal 2=timeout 3=fault) but reference returned")
             mism += 1; compared += 1; continue
         got = [int(x, 16) for x in f[2:10]]
         diffs = [n for n, g, w in zip("eax ecx edx ebx esp ebp esi edi".split(), got, rv) if g != w]
@@ -220,20 +258,16 @@ def main():
             diffs.append(f"fpdepth {f[10]}!={depth}")
         if int(f[11], 16) != h["data"]: diffs.append(".data")
         if int(f[12], 16) != h["scr"]: diffs.append("scratch")
-        if int(f[13], 16) != h["stk"]: diffs.append("stack")
+        if mname == "thunk":    # the thunk's own call/push leave other dead slots: live stack only
+            if int(f[16], 16) != h["live"]: diffs.append("live stack")
+        elif int(f[13], 16) != h["stk"]: diffs.append("stack")
         if int(f[14], 16) != h["pages"]: diffs.append("pages")
         if depth and int(f[15], 16) != h["out"]: diffs.append("st0")
         compared += 1
         if diffs:
             mism += 1
-            fails.append(f"{name}: " + " ".join(diffs) + f"  got {' '.join(f[2:10])} want {' '.join(f'{v:08X}' for v in rv)}")
-    for x in fails:
-        print(x, file=log)
-    print(json.dumps({"compared": compared, "mismatches": mism, "excluded": excluded,
-                      "candidates": len(chosen)}), file=log)
-    ok = compared >= a.sample and mism == 0
-    print(f"difftest: compared={compared} mismatches={mism} excluded={sum(excluded.values())} -> {'PASS' if ok else 'FAIL'}")
-    return 0 if ok else 1
+            fails.append(f"{mname} {name}: " + " ".join(diffs) + f"  got {' '.join(f[2:10])} want {' '.join(f'{v:08X}' for v in rv)}")
+    return compared, mism, fails
 
 _FNV_LIB = None
 def canon(b):

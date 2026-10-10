@@ -64,6 +64,35 @@ for a, b in (('fprintf(stderr, "ICALL: unresolved VA 0x%08X from 0x%08X\\n", _va
     t = t.replace(a, b)
 t = t.replace("/* Lookup functions */", "void recomp_miss(int tail, uint32_t va, uint32_t from);\n/* Lookup functions */", 1)
 
+# A miss is then run by the interpreter fallback (runtime/core/interp.c, Unicorn on the same guest
+# memory) until it returns to lifted code. ICALL pushes RECOMP_RETADDR as a hit does; rt_interp
+# returns 0 for a target outside guest memory, which keeps pcrecomp's old miss behaviour.
+for a, b in (("""        recomp_miss(0, _va, g_cur_func); \\
+        esp += 4; /* pop dummy ret addr */ \\
+        eax = 0; \\""",
+              """        uint32_t _caller = g_cur_func; \\
+        recomp_miss(0, _va, g_cur_func); \\
+        PUSH32(esp, RECOMP_RETADDR); \\
+        RECOMP_REGS_OUT(); \\
+        int _ran = rt_interp(_va); /* runtime/core/interp.c */ \\
+        RECOMP_REGS_IN(); \\
+        g_cur_func = _caller; \\
+        if (!_ran) { /* not guest code: the old miss behaviour */ \\
+            esp += 4; /* drop RECOMP_RETADDR */ \\
+            esp += 4; /* pop dummy ret addr */ \\
+            eax = 0; \\
+        } \\"""),
+             ("else { recomp_miss(1, _va, g_cur_func); }",
+              "else { recomp_miss(1, _va, g_cur_func); \\\n           RECOMP_REGS_OUT(); rt_interp(_va); RECOMP_REGS_IN(); }")):
+    if t.count(a) != 1:
+        sys.exit(f"vendor_recomp_types: interp pattern not found: {a!r}")
+    t = t.replace(a, b)
+t = t.replace("void recomp_miss(int tail, uint32_t va, uint32_t from);\n",
+              "void recomp_miss(int tail, uint32_t va, uint32_t from);\n"
+              "/* Run guest code with no lifted body until it returns to lifted code (runtime/core/interp.c).\n"
+              " * [esp] must hold RECOMP_RETADDR. Returns 0, doing nothing, when va is not guest memory. */\n"
+              "int rt_interp(uint32_t va);\n", 1)
+
 # Guest C++ exceptions (runtime/win32/k32_eh.c). The guest SEH chain at fs:[0] and the CRT's own
 # __CxxFrameHandler are faithful, so only the final jump to a catch's continuation needs the host: a
 # lifted function that installs an EH frame runs as body(resume, pad) under a setjmp landing pad that

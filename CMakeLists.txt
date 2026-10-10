@@ -65,6 +65,19 @@ if(NOT EMSCRIPTEN)
 endif()
 target_compile_options(rt_core PRIVATE -Wall -Wno-unused-function -fwrapv -fno-strict-aliasing)
 set_source_files_properties(${ROOT}/third_party/d3d9-webgl/d3d9.cpp PROPERTIES COMPILE_OPTIONS "-w")
+# Dispatch misses run in an interpreter (runtime/core/interp.c, Unicorn on the guest arena) instead of
+# returning 0. Native only for now; the web build is item web.interp
+# (docs/plans/2026-10-08-oracle-fallback-deprotect.md P4).
+if(NOT EMSCRIPTEN)
+  option(RUGBY_INTERP "interpret guest code that has no lifted body (Unicorn)" ON)
+endif()
+if(RUGBY_INTERP)
+  file(GLOB UNICORN_DEFAULT ${ROOT}/.venv/lib/python3*/site-packages/unicorn)
+  set(UNICORN_DIR "${UNICORN_DEFAULT}" CACHE PATH "Unicorn include/ and lib/libunicorn.a (default: the pip wheel in .venv)")
+  target_compile_definitions(rt_core PRIVATE RT_INTERP)
+  target_include_directories(rt_core PRIVATE ${UNICORN_DIR}/include)
+  target_link_libraries(rt_core PUBLIC ${UNICORN_DIR}/lib/libunicorn.a)
+endif()
 
 # ---- platform + executable -----------------------------------------------------------------
 if(EMSCRIPTEN)

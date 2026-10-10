@@ -1,9 +1,15 @@
 /* difftest_harness.c -- runs lifted leaf functions from a case file; one result line per case.
  * Built by tools/difftest.py together with the generated build/difftest/funcs.c.
- * Memory model identical to the runtime: 4 GiB reserved arena at g_mem_base, zero-filled. */
+ * Memory model identical to the runtime: 4 GiB reserved arena at g_mem_base, zero-filled.
+ * Built with -DDT_INTERP (tools/difftest.py --interp), DT_MODE picks how each case runs:
+ *   0 native  the lifted body;
+ *   1 interp  runtime/core/interp.c on the function's bytes, lifted bodies hidden;
+ *   2 thunk   interp.c on `pop [save]; call f; push [save]; ret`: the interpreter hands off to the
+ *             lifted f at its entry and resumes after the call (registers and flags pass through). */
 #define RECOMP_GENERATED_CODE
 #include "recomp_types.h"
 #include <setjmp.h>
+#include <stdarg.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -23,7 +29,23 @@ uint32_t g_icall_trace[ICALL_TRACE_SIZE], g_icall_from[ICALL_TRACE_SIZE];
 uint32_t g_icall_trace_idx, g_icall_count;
 const recomp_dispatch_entry_t recomp_dispatch_table[1];
 const uint32_t recomp_dispatch_count = 0;
+typedef void (*fn_t)(void);
+extern const fn_t dt_funcs[];
+#ifdef DT_INTERP
+extern const uint32_t dt_vas[];
+extern const unsigned dt_n;
+static int g_hide;                                  /* DT_MODE 1: every body is "not lifted" */
+uint32_t rt_guest_size = 0xFFFF0000u;               /* interp.c maps the whole arena */
+uint32_t gcalloc(uint32_t size) { (void)size; return 0x2FFD0000u; }   /* the interpreter's GDT */
+recomp_func_t recomp_lookup(uint32_t va) {
+    if (g_hide) return 0;
+    for (unsigned i = 0; i < dt_n; i++) if (dt_vas[i] == va) return dt_funcs[i];
+    return 0;
+}
+#else
+int rt_interp(uint32_t va) { (void)va; return 0; }
 recomp_func_t recomp_lookup(uint32_t va) { (void)va; return 0; }
+#endif
 recomp_func_t recomp_lookup_manual(uint32_t va) { (void)va; return 0; }
 recomp_func_t recomp_lookup_import(uint32_t va) { (void)va; return 0; }
 uint64_t recomp_host_rdtsc(void) { return 0; }
@@ -37,12 +59,12 @@ static volatile int g_status;
 /* a computed jump (a ret popping something other than RET_VA): the reference runs on into the
    target, the harness has no other functions -- not comparable (difftest.py excludes status 5) */
 void recomp_miss(int tail, uint32_t va, uint32_t from) { (void)tail; (void)va; (void)from; g_status = 5; }
-void rt_fatal(const char *fmt, ...) { (void)fmt; g_status = 3; siglongjmp(g_case_env, 1); }
+void rt_fatal(const char *fmt, ...) {          /* the message goes to stderr; difftest.py reads stdout */
+    va_list ap; va_start(ap, fmt); vfprintf(stderr, fmt, ap); va_end(ap); fputc('\n', stderr);
+    g_status = 3; siglongjmp(g_case_env, 1);
+}
 void rt_log(const char *fmt, ...) { (void)fmt; g_status = 4; }   /* soft fault: reference raised #DE */
 static void on_signal(int sig) { g_status = sig == SIGALRM ? 2 : 1; siglongjmp(g_case_env, 1); }
-
-typedef void (*fn_t)(void);
-extern const fn_t dt_funcs[];
 
 #define IMG_LO   0x00400000u
 #define DATA_LO  0x008CC000u
@@ -53,6 +75,26 @@ extern const fn_t dt_funcs[];
 #define STK_SZ   0x00010000u
 #define OUT_VA   0x2FFF0000u
 #define RET_VA   0x7FFE0000u
+#define THUNK_VA 0x2FFE0000u
+#define SAVE_VA  0x2FFE0100u
+
+#ifdef DT_INTERP
+static void run_interp(int mode, unsigned idx) {
+    uint32_t entry = dt_vas[idx];
+    if (mode == 2) {                                /* pop [save]; call f; push [save]; ret */
+        uint8_t *t = (uint8_t *)ADDR(THUNK_VA);
+        uint32_t rel = entry - (THUNK_VA + 11);
+        t[0] = 0x8F; t[1] = 0x05; memcpy(t + 2, &(uint32_t){SAVE_VA}, 4);
+        t[6] = 0xE8; memcpy(t + 7, &rel, 4);
+        t[11] = 0xFF; t[12] = 0x35; memcpy(t + 13, &(uint32_t){SAVE_VA}, 4);
+        t[17] = 0xC3;
+        entry = THUNK_VA;
+    }
+    g_hide = mode == 1;
+    if (!rt_interp(entry)) g_status = 3;
+    g_hide = 0;
+}
+#endif
 
 /* NaN payload/sign are outside the model (runtime/DESIGN.md): canonicalise before hashing, the
  * same way tools/difftest.py does -- 8-aligned double NaNs first, then 4-aligned float NaNs. */
@@ -85,6 +127,7 @@ static uint8_t *slurp(const char *path, size_t *n) {
 
 int main(int argc, char **argv) {
     if (argc < 4) { fprintf(stderr, "usage: harness image.bin scratch.bin cases.txt\n"); return 2; }
+    int mode = getenv("DT_MODE") ? atoi(getenv("DT_MODE")) : 0;
     void *arena = mmap(NULL, 1ull << 32, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
     if (arena == MAP_FAILED) { perror("mmap"); return 2; }
     g_mem_base = (ptrdiff_t)arena;
@@ -127,6 +170,9 @@ int main(int argc, char **argv) {
         g_status = 0;
         if (sigsetjmp(g_case_env, 1) == 0) {
             alarm(2);
+#ifdef DT_INTERP
+            if (mode) run_interp(mode, idx); else
+#endif
             dt_funcs[idx]();
             alarm(0);
         } else {
@@ -142,11 +188,16 @@ int main(int argc, char **argv) {
         }
         uint64_t hx = 1469598103934665603ull;
         for (unsigned i = 0; i < npages; i++) hx ^= fnv(pages[i], 4096) + i;
-        printf("%u %d %08X %08X %08X %08X %08X %08X %08X %08X %d %016llX %016llX %016llX %016llX %016llX\n",
+        /* The live stack (final esp to the top) after the whole stack: DT_MODE 2's thunk leaves other
+           values than a direct call in dead slots below esp (callee-popped args), so it compares this. */
+        uint64_t hstk = fnv(STK_LO, STK_SZ);
+        uint32_t live = g_esp >= STK_LO && g_esp <= STK_LO + STK_SZ ? g_esp : STK_LO;
+        uint64_t hlive = fnv(live, STK_LO + STK_SZ - live);
+        printf("%u %d %08X %08X %08X %08X %08X %08X %08X %08X %d %016llX %016llX %016llX %016llX %016llX %016llX\n",
                idx, g_status, g_eax, g_ecx, g_edx, g_ebx, g_esp, g_ebp, g_esi, g_edi, g_fp_top & 7,
                (unsigned long long)fnv(DATA_LO, IMG_HI - DATA_LO), (unsigned long long)fnv(SCR_LO, SCR_SZ),
-               (unsigned long long)fnv(STK_LO, STK_SZ), (unsigned long long)hx,
-               (unsigned long long)fnv(OUT_VA, 8));
+               (unsigned long long)hstk, (unsigned long long)hx,
+               (unsigned long long)fnv(OUT_VA, 8), (unsigned long long)hlive);
         fflush(stdout);
     }
     return 0;

@@ -223,7 +223,7 @@
       ],
       "desc": "Dispatch misses run in a Unicorn interpreter on the same guest memory (runtime/core/interp.c) instead of eax=0; exits back to lifted code on entry/RECOMP_RETADDR. difftest --interp: >=500 lifted functions (leaf and non-leaf) give identical state when interpreted. Plan P2.",
       "check": "source .venv/bin/activate && python3 tools/difftest.py --interp --sample 500",
-      "passes": false
+      "passes": true
     },
     {
       "id": "native.smoke",

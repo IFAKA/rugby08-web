@@ -899,6 +899,9 @@ extern uint32_t g_icall_trace_idx;
 extern uint32_t g_icall_count;
 
 void recomp_miss(int tail, uint32_t va, uint32_t from);
+/* Run guest code with no lifted body until it returns to lifted code (runtime/core/interp.c).
+ * [esp] must hold RECOMP_RETADDR. Returns 0, doing nothing, when va is not guest memory. */
+int rt_interp(uint32_t va);
 #include <setjmp.h>
 typedef struct rt_ehpad { struct rt_ehpad *prev; jmp_buf jb; uint32_t ebp, resume; } rt_ehpad_t;
 extern RECOMP_TLS rt_ehpad_t *g_eh_top;
@@ -955,9 +958,18 @@ recomp_func_t recomp_lookup_import(uint32_t va);    /* import bridges */
         RECOMP_REGS_IN(); \
         g_cur_func = _caller;  /* the callee RECOMP_ENTER clobbered it */ \
     } else { \
+        uint32_t _caller = g_cur_func; \
         recomp_miss(0, _va, g_cur_func); \
-        esp += 4; /* pop dummy ret addr */ \
-        eax = 0; \
+        PUSH32(esp, RECOMP_RETADDR); \
+        RECOMP_REGS_OUT(); \
+        int _ran = rt_interp(_va); /* runtime/core/interp.c */ \
+        RECOMP_REGS_IN(); \
+        g_cur_func = _caller; \
+        if (!_ran) { /* not guest code: the old miss behaviour */ \
+            esp += 4; /* drop RECOMP_RETADDR */ \
+            esp += 4; /* pop dummy ret addr */ \
+            eax = 0; \
+        } \
     } \
 } while(0)
 
@@ -980,7 +992,8 @@ recomp_func_t recomp_lookup_import(uint32_t va);    /* import bridges */
     if (_fn) { RECOMP_REGS_OUT(); RECOMP_TAIL_RETURN(_fn); } \
     else if (_va == RECOMP_RETADDR) { /* setjmp and friends return by jumping \
         to the saved return address; that is a return, not a missing target. */ } \
-    else { recomp_miss(1, _va, g_cur_func); } \
+    else { recomp_miss(1, _va, g_cur_func); \
+           RECOMP_REGS_OUT(); rt_interp(_va); RECOMP_REGS_IN(); } \
 } while(0)
 
 /* ============================================================

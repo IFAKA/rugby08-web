@@ -190,3 +190,9 @@ Next: `./init.sh next` shows what to fix.
 - Runs no longer disturb the user: Wine minimized/no focus (RUGBY08_ORACLE_BACKGROUND), no pointer grab/warp (prefix registry), muted (winecoreaudio.drv=d); run_native.sh muted via SDL_AUDIODRIVER=dummy (native.audio still PASS).
 - Found: userdata/game/ has directories named with XML fragments (`8" `, `<mix value="32767"`), so the lifted game passes a wrong string to CreateDirectory/CreateFile. Real lift/runtime bug; fix as a class later.
 - Next: interp.fallback (P2).
+
+## 2026-10-10 — interp.fallback PASS: dispatch misses are interpreted, not dropped
+- runtime/core/interp.c: Unicorn (static lib from the .venv wheel, CMake RUGBY_INTERP, native only) on the guest arena via uc_mem_map_ptr. ICALL/ITAIL/guest_callv misses push/keep RECOMP_RETADDR and interpret until a ret pops it; blocks that start a lifted body with a return address at [esp] (RETADDR or after a call insn) and bridge addresses (unmapped fetch >= RT_BRIDGE_HOST) hand off to native, then resume. Header change lives in tools/vendor_recomp_types.py.
+- Learned: Unicorn reloads every segment cache when one selector is written, so fs-only GDT left cs with limit 0 (#GP on the first ret); a flat code/data GDT fixes it. QEMU ignores x87 underflow and reads the physical register, so empty registers are written as 0 like the lifted model. FS_BASE is a no-op in 32-bit mode.
+- difftest.py --interp (harness DT_MODE): every case native / fully interpreted / via an interpreted call thunk that hands off; 834 x 3, 0 mismatches. Thunk compares the live stack (callee-popped args leave other dead slots by construction). RT_INTERP_TRACE=1 prints interpreted blocks.
+- Next: diagnostic native run (hidden, muted), then deprotect.exe (P3) / lift.reachability.

@@ -160,7 +160,7 @@ void rt_com_free(uint32_t this_va) {
 uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
     recomp_func_t fn = recomp_lookup_manual(va);
     if (!fn) fn = recomp_lookup(va);
-    if (!fn) {
+    if (!fn && (va < 0x10000u || va >= rt_guest_size)) {
         rt_log("guest_call: no function at 0x%08X", va);
         return 0;
     }
@@ -168,7 +168,8 @@ uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
     uint32_t sv_cur = g_cur_func;
     for (int i = n - 1; i >= 0; i--) { g_esp -= 4; wr32(g_esp, args[i]); }
     g_esp -= 4; wr32(g_esp, RECOMP_RETADDR);
-    fn();
+    if (fn) fn();
+    else { recomp_miss(0, va, sv_cur); rt_interp(va); }   /* no lifted body: interpret it */
     uint32_t ret = g_eax;
     g_esp = sv_esp; g_ebx = sv_ebx; g_esi = sv_esi; g_edi = sv_edi; g_ebp = sv_ebp;
     g_cur_func = sv_cur;
