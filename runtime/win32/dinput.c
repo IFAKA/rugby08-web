@@ -153,7 +153,12 @@ static uint32_t di_CreateDevice(const uint32_t *a) {   /* (this, rguid, lplpDevi
 static uint32_t di_EnumDevices(const uint32_t *a) {    /* (this, dwDevType, callback, pvRef, flags) */
     uint32_t type = a[1] & 0xFF;
     uint32_t inst = gcalloc(580);
-    for (int k = DEV_KEYBOARD; k <= DEV_MOUSE; k++) {
+    /* Windows order (Wine dinput.c enum_devices: mouse, keyboard, joysticks). The game's controller
+       list follows it and Team Select only offers entries 1..4 (FUN_0081A5A0): keyboard first made
+       it entry 0, never assignable, so only the mouse could take a team (and became the pad). */
+    static const int order[] = { DEV_MOUSE, DEV_KEYBOARD };
+    for (int j = 0; j < 2; j++) {
+        int k = order[j];
         if (type && type != (k == DEV_KEYBOARD ? 3u : 2u)) continue;   /* DIDEVTYPE_KEYBOARD / _MOUSE */
         wr32(inst, 580);
         fill_instance(inst, k);

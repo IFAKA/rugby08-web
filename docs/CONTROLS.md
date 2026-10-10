@@ -51,7 +51,7 @@ second-row run Q/E.
 Line-outs: throw / intercept to front/middle/back S/E/W, angle the throw Left/Right.
 Kicking (hold to power, arrows to direct): punt S, grubber W, up-and-under Q, drop goal E.
 Place kicks: aim arrows, start/stop the gauge S. Tap kicks: S/Q/E.
-Pause: START (Left Ctrl) on the keyboard; the readme and forum players say Esc (logical 4, bit 0x4).
+Pause: Esc (verified: opens GAME PAUSED). START is Left Ctrl.
 
 ## Mouse (device type 9)
 
@@ -60,11 +60,13 @@ Menus: the mouse drives the pointer.
 
 ## Devices and team selection
 
-Team Select assigns the device you move left/right to a team. The device you assign is your match
-controller: assign with the mouse and the mouse is your "pad" (no free cursor, no keyboard pause);
-assign with the keyboard to use the keys above.
+Team Select: move the keyboard icon with Left/Right (home/away). The device you assign is your match
+controller. The mouse is a menu pointer only (it is controller entry 0, which Team Select never offers).
 
-Known bug (2026-10-10, open): in our build the keyboard's Left/Right reach the game (controller bits
-0x40/0x80 and front-end messages 6/4) but never move the keyboard icon at Team Select, so only the
-mouse can be assigned. Up/Down call TeamSelectToggleTeamUp/Down (they return "not handled" while
-the icon is in the middle column). See PROGRESS.md.
+Fixed 2026-10-11: our DirectInput enumerated the keyboard before the mouse. The controller list
+follows the enumeration order and Team Select only offers entries 1..4 (FUN_0081A5A0), so the
+keyboard (entry 0) could never take a team: only the mouse could, which turned the mouse into the
+pad (frozen cursor) and left Esc without effect. Windows enumerates mouse, keyboard, joysticks
+(Wine dinput.c enum_devices). With that order: Left/Right move the keyboard icon to home/away, the
+mouse stays the menu pointer, and Esc opens GAME PAUSED (Resume, Replay, Management, Match
+Statistics, Camera Settings, Options, Reassign Controllers, Quit Match).

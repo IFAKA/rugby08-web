@@ -110,6 +110,17 @@ void recomp_dump_trace(const char *why) {
 /* tools/hooks.json: a name starting with "args:" logs the first three stack arguments and ecx
  * (the caller's state at entry: globals are current until the body's first REGS_OUT). */
 void rt_hook_enter(uint32_t va, const char *name) {
+    if (!strncmp(name, "list:", 5)) {  /* controller manager (ecx): count +0xc, list +0x1c, each entry's type; once */
+        static int done;
+        if (done++) return;
+        uint32_t n = rd32(g_ecx + 0xc), l = rd32(g_ecx + 0x1c);
+        rt_trace("%s mgr=%08X count=%u list=%08X", name + 5, g_ecx, n, l);
+        for (uint32_t i = 0; i <= n && i < 10 && l; i++) {
+            uint32_t c = rd32(l + 4 * i);
+            rt_trace("  [%u] %08X type=%u", i, c, c ? rd32(c + 0x2570) : 0);
+        }
+        return;
+    }
     if (!strncmp(name, "ctl:", 4)) {   /* controller object (ecx): device type, selectable, active; on change */
         static uint32_t seen[16][4]; static int n;
         uint32_t t = rd32(g_ecx + 0x2570), sel = rd32(g_ecx + 0x2580), act = rd32(g_ecx + 0x25a8);

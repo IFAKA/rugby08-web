@@ -1,4 +1,5 @@
 # Main menu -> PLAY NOW match: S accepts (skip tutorial, dialogs), mouse moves the controller icon at Team Select. 2026-10-10
+# 2026-10-11: keyboard takes the home team (Left at Team Select), as the game intends; the mouse stays a pointer
 8100 click 320 240
 8400 tap Return
 9000 tap S
@@ -7,9 +8,6 @@
 9900 tap S
 10400 tap S
 11200 tap S
-11700 move -40 0
-11730 move -40 0
-11760 move -40 0
 11900 shot logs/match/m11900.png
 12100 tap S
 12300 shot logs/match/m12300.png
@@ -27,3 +25,5 @@
 19000 shot logs/match/m19000.png
 20000 shot logs/match/m20000.png
 21000 shot logs/match/m21000.png
+11700 down Left
+11760 up Left
