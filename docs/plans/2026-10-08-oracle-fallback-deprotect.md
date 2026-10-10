@@ -22,7 +22,8 @@ Each phase is a features.json item with an exit-0 check, so any later session ca
 - [x] P1 `oracle.wine` (passes; see PROGRESS 2026-10-10)
 - [x] P2 `interp.fallback` (passes) → `native.smoke` (passes; needed lift.reachability, see PROGRESS)
 - [ ] P3 `deprotect.exe`
-- [ ] P4 `web.interp` → then `web.smoke`
+- [ ] P4a web runtime: JSPI yield + lazy WasmFS fetch of game data (web.smoke passes; page stalls at frame 1)
+- [ ] P4 `web.interp`
 
 ## P0 — Persist (first thing on execution, ~5 min)
 - Copy this file to `docs/plans/2026-10-08-oracle-fallback-deprotect.md`.
@@ -78,6 +79,19 @@ Steps:
 - **Oracle check:** `tools/run_wine.sh build/deobf/Rugby08_deobf.exe --seconds 60` behaves like the P1 run (alive, d3d8 loaded, no exception). Then the user plays one match on it under Wine.
 - Point `tools/lift_fixpoint.sh` / `tools/build_catalog.py` at the deobf exe. Rerun the fidelity report: `lift.fidelity` and `lift.reachability` should improve sharply, and stubemu special cases become dead code. Remove them only after the checks pass.
 - Check `deprotect.exe`: patch_exe exits 0, the Wine run on the deobf exe passes, and `fidelity_report.py` shows `fallthrough_targets_not_lifted` lower than on the protected exe.
+
+## P4a — web runtime architecture (found 2026-10-10, before web.interp)
+web.smoke passes (WinMain in headless Chrome), but the page stops after frame 1:
+- The game's Windows loop runs on the browser main thread and never yields (no PROXY_TO_PTHREAD, no
+  ASYNCIFY/JSPI), so the browser cannot present or deliver input. Fix: link with `-sJSPI` and yield in
+  the d3d8 Present path (`emscripten_sleep(0)`); JSPI suspends wasm without Asyncify's size cost
+  (143 MB module). Fallback if JSPI misbehaves with pthreads/tail calls: `-sPROXY_TO_PTHREAD` +
+  OffscreenCanvas.
+- 1.7 GB of game data and no loader in platform/web (build/web/data + manifest.json are never read;
+  the runtime reports FILE_NOT_FOUND data/data.gob). Fix: WasmFS fetch backend
+  (`-sWASMFS`, `wasmfs_create_fetch_backend`) mounted at the game-files root, fetching on first read
+  from the local server (tools/serve.py needs Range support, or read the 8 MiB chunk files).
+- Check: web.menu — headless Chrome screenshot of the canvas shows the title/menu (as native.menu).
 
 ## P4 — `web.interp`: the web build
 - Try building Unicorn with emscripten (there are prior builds, e.g. unicorn.js). If it builds and the size is acceptable, enable `RT_INTERP` in the web build.
