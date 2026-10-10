@@ -161,6 +161,10 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
         exit(0);
     }
     if (rt_shot_path[0]) { save_frame_png(o, rt_shot_path); rt_shot_path[0] = 0; }
+    {   // RT_TRACE_DRAWS_FRAME=N: the backend prints every draw of frame N (the one after this Present)
+        static long want = getenv("RT_TRACE_DRAWS_FRAME") ? atol(getenv("RT_TRACE_DRAWS_FRAME")) : -1;
+        if (want >= 0) d3d9w_trace_draws((long)s->frame + 1 == want);
+    }
     plat_gl_swap();
 #ifdef __EMSCRIPTEN__
     emscripten_sleep(0);   // JSPI: hand the frame to the browser (present, input, timers), then resume

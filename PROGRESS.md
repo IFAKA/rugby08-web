@@ -231,3 +231,12 @@ Next: `./init.sh next` shows what to fix.
 - Camera stuck at ground level ("cinematic POV") during play: pcrecomp lift32.py lifted `fsincos` with sin/cos swapped (and `fprem1` as fmod). Fixed in third_party/pcrecomp (local commit). Broadcast camera now follows play (tests: build/match_play.txt shots 21000-28200). Note: difftest skips bodies with transcendental x87 ops, so these were never verified -- add a targeted x87 check.
 - Crash after a try (FAULT guest 0x7 in sub_00432CFD): the protector's overlapping decodes (jmp into the middle of an instruction) were emitted in address order, so a fall-through ran the overlapping instruction the CPU never executes (`inc dword [eax]`). tools/lift.py overlap_fallthroughs/overlap_gotos: 110 sites in 29 files get an explicit goto to the instruction's real end.
 - Open: mouse stops after assigning the controller to a team (user report); pause key; web: wasm exceptions rebuild done, untested.
+
+## 2026-10-10 (late) — controls spec + open input/render bugs (handoff)
+- Official behaviour (Rugby 08 PC readme, oldgamesdownload.com Rugby_08_Win_ReadMe_EN.txt): mouse navigates ALL menus; Team Select = move the device left/right; Esc opens the in-game pause menu; arrows run, Space sprint, S feed/throw/kick gauge, A/D pass, E/Q around ruck, W kick, Left Shift switch player, arrows aim placekicks.
+- Pause bug: GEVENT_GAME_PAUSE = event 0x34 (handler FUN_0048F1A0 vtable 0x8D4AA4, gated by char this+0x23A2 >= 0); never fires in our sessions. WM_KEYDOWN handler 0x79E040 writes key table 0xA70B18 (nothing reads it); key-event ring 0xA70A58 feeds only getchar-style 0x890740. In-match keys come from the DI keyboard buffer 0xAA67E4 (Esc = 0xAA67E5); only reader found so far: 0x890AD6 `lea edx,[eax+0xaa67e4]` -- follow that function next.
+- Mouse bug: after Team Select the game stops polling the DI mouse (logs: mouse2 polled until ~frame 11400, then never); cursor frozen. Same input system as pause -- likely same root cause.
+- Render bugs: grey translucent band over the pitch in set pieces (unknown draw; use RT_TRACE_DRAWS_FRAME=N on a frame showing it); ball drawn as a black disc.
+- Tools: RT_TRACE_DRAWS_FRAME=N (per-draw state), --log-input (DI mouse polls per device), replay `shot`/`press N`, tests/replays/play_now_match.txt reaches kickoff ~21000.
+- Wine oracle still stalls on LOADING (not activation, not audio).
+- Web: rebuilt with -sJSPI + -sSUPPORT_LONGJMP=wasm -fwasm-exceptions (finished, untested).

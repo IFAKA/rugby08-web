@@ -69,7 +69,7 @@ static uint32_t dv_notimpl(const uint32_t *a) { (void)a; return E_NOTIMPL_; }
 static uint32_t dv_GetDeviceState(const uint32_t *a) {   /* (this, cbData, lpvData) */
     didev_t *d = dev(a);
     static int logged[3];
-    if (!logged[d->kind]++) rt_log("DirectInput GetDeviceState(%s, %u bytes) first call", d->kind == DEV_KEYBOARD ? "keyboard" : "mouse", a[1]);
+    if (!logged[d->kind]++) rt_log("DirectInput GetDeviceState(%s, %u bytes) first call, buffer 0x%08X", d->kind == DEV_KEYBOARD ? "keyboard" : "mouse", a[1], a[2]);
     uint32_t n = a[1], p = a[2];
     memset(G2H(p), 0, n);
     if (d->kind == DEV_KEYBOARD) {
