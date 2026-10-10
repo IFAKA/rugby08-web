@@ -209,3 +209,10 @@ Next: `./init.sh next` shows what to fix.
 - build_catalog: closure call targets also pass decodes_cleanly (junk entries started mid-instruction, e.g. 0x417F14).
 - Rechecked after the full relift + rebuild: lift.fidelity, lift.difftest, interp.fallback, native.compile, native.menu, native.smoke all PASS; no dispatch misses to the menu.
 - Next: web.smoke (deps pass) / web.interp; deprotect.exe is now mostly a speed/cleanliness item since misses are interpreted.
+
+## 2026-10-10 — players render in matches (automated, no user playtest needed)
+- Research (FFXI xi-on-anything, ps3recomp, XenosRecomp, DKC1Recomp): translate the game's shaders to the GPU language + replay suites with screenshots. Done here: D3D8 vs.1.x -> MojoShader GLSL run as GL programs (d3d9-webgl d3d9w_progvs_*), multi-stream inputs.
+- Root causes of "empty pitch / cinematic POV": (1) D3DFVF_XYZB1 skinned meshes decoded as XYZRHW (shared bit 0x4) -> fvf_rhw/fvf_xyz/fvf_blend_weights + VERTEXBLEND with WORLDMATRIX(1); (2) stage-1 D3DTOP_BLENDTEXTUREALPHA (13) unimplemented -> kit decal texture multiplied players to black. Also typed (directional) lights and D3DMCS_COLOR1 material sources.
+- Replays: menus accept with S (not Return); tests/replays/tutorial_match.txt reaches gameplay (~frame 11000, players at 14000). New replay commands: `<f> shot PATH`, `<f> press N`. Hidden runs now get WM_ACTIVATE* like a shown window. Frame-based timing is fragile across loading screens: prefer routes that wait on input.
+- web.smoke check was vacuous (`|| exit 0`, missing script): now tools/web_check.sh (headless Playwright chromium). It FAILS (WinMain not seen in 180 s): next.
+- Open from the user's playtest: black shards in the match stadium, mouse cursor frozen in in-match menus (keys work), pause does not work.

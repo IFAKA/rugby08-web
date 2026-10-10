@@ -292,9 +292,9 @@
         "native.smoke"
       ],
       "desc": "Browser loads localhost, WASM initializes, WinMain entered (no crash on load)",
-      "check": "timeout 30 tools/web_check.sh --expect 'WinMain entered' >/dev/null 2>&1 || exit 0",
+      "check": "tools/web_check.sh --expect 'WinMain entered' --timeout 180",
       "passes": false,
-      "notes": "Minimal check: wasm loads and boots without crash. Full browser playtest is manual via localhost."
+      "notes": "2026-10-10: the old check (`timeout 30 tools/web_check.sh ... || exit 0`) always exited 0 and the script did not exist; replaced by a real headless-Chromium check."
     }
   ]
 }
