@@ -1,0 +1,29 @@
+# Main menu -> PLAY NOW match: S accepts (skip tutorial, dialogs), mouse moves the controller icon at Team Select. 2026-10-10
+8100 click 320 240
+8400 tap Return
+9000 tap S
+9300 tap S
+9600 tap S
+9900 tap S
+10400 tap S
+11200 tap S
+11700 move -40 0
+11730 move -40 0
+11760 move -40 0
+11900 shot logs/match/m11900.png
+12100 tap S
+12300 shot logs/match/m12300.png
+12600 tap S
+13000 tap S
+13400 tap S
+13800 tap S
+14200 tap S
+13000 shot logs/match/m13000.png
+14000 shot logs/match/m14000.png
+15000 shot logs/match/m15000.png
+16000 shot logs/match/m16000.png
+17000 shot logs/match/m17000.png
+18000 shot logs/match/m18000.png
+19000 shot logs/match/m19000.png
+20000 shot logs/match/m20000.png
+21000 shot logs/match/m21000.png

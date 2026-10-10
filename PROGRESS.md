@@ -216,3 +216,9 @@ Next: `./init.sh next` shows what to fix.
 - Replays: menus accept with S (not Return); tests/replays/tutorial_match.txt reaches gameplay (~frame 11000, players at 14000). New replay commands: `<f> shot PATH`, `<f> press N`. Hidden runs now get WM_ACTIVATE* like a shown window. Frame-based timing is fragile across loading screens: prefer routes that wait on input.
 - web.smoke check was vacuous (`|| exit 0`, missing script): now tools/web_check.sh (headless Playwright chromium). It FAILS (WinMain not seen in 180 s): next.
 - Open from the user's playtest: black shards in the match stadium, mouse cursor frozen in in-match menus (keys work), pause does not work.
+
+## 2026-10-10 — automated replay reaches a real match; Wine replay proxies
+- tests/replays/play_now_match.txt: PLAY NOW -> Team Select (mouse moves the controller icon; arrow keys change teams) -> Stadium Select -> pre-match (All Blacks rendered) -> kickoff at ~21000. No black shards: they were the XYZB1 meshes drawn as XYZRHW screen-space triangles (fixed earlier).
+- Wine 1:1 harness: tools/oracle/{d3d8,dinput,dsound}proxy.c play the same replay into the original (Present-counted frames, BMP shots, posted keys, DI state, GetAsyncKeyState/GetKeyState IAT hooks) and mute every sound buffer. run_wine.sh --replay FILE --shots DIR.
+- BLOCKER for the Wine comparison: the original under Wine stalls on its loading screen after "teaminfo.xml ... Backup 3" (both with no audio device and with muted real audio), so frames never line up. Unknown cause (minimized window? Wine/Rosetta timing?).
+- Open: in-match menu mouse cursor frozen (keys work); pause key unknown (Esc/P no effect in tutorial intro).

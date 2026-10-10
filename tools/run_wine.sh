@@ -1,8 +1,10 @@
 #!/bin/sh
 # oracle.wine / deprotect.exe: run a game exe under Wine (build/wine-dl, wine-stable 11.0 from
 # Gcenx/macOS_Wine_builds) as the reference for the original code. One summary line.
-#   tools/run_wine.sh EXE [--seconds N] [--tries N] [--show] [--sound] [--keep]
-# Muted by default (winecoreaudio.drv disabled for the run, so DirectSound has no device);
+#   tools/run_wine.sh EXE [--seconds N] [--tries N] [--show] [--sound] [--keep] [--replay FILE --shots DIR]
+# --replay: the same tests/replays/*.txt the native runtime takes, played into the original by the
+# d3d8/dinput proxies (tools/oracle/); its `shot` events land in DIR as <name>.bmp.
+# Muted by default (tools/oracle/dsoundproxy.c holds every sound buffer at minimum volume);
 # --sound or --keep (to play) keep the audio.
 # By default the game window is minimized without focus and Wine does not grab the mouse
 # (prefix: GrabPointer/GrabFullscreen=N, DirectInput MouseWarpOverride=disable), so runs do not
@@ -18,12 +20,14 @@
 cd "$(dirname "$0")/.." || exit 1
 ROOT=$(pwd)
 EXE=$1; shift
-SECS=60 KEEP=0 SHOW=0 TRIES=1 SOUND=0
+SECS=60 KEEP=0 SHOW=0 TRIES=1 SOUND=0 REPLAY= SHOTS=
 while [ $# -gt 0 ]; do
   case "$1" in
     --seconds) SECS=$2; shift 2;;
     --keep) KEEP=1; SHOW=1; SOUND=1; shift;;
     --sound) SOUND=1; shift;;
+    --replay) REPLAY=$2; shift 2;;
+    --shots) SHOTS=$2; shift 2;;
     --show) SHOW=1; shift;;
     --tries) TRIES=$2; shift 2;;
     *) echo "run_wine: unknown arg $1"; exit 2;;
@@ -32,8 +36,10 @@ done
 [ -f "$EXE" ] || { echo "run_wine: FAIL (no exe: $EXE)"; exit 2; }
 WBIN="$ROOT/build/wine-dl/Wine Stable.app/Contents/Resources/wine/bin"
 [ -x "$WBIN/wine" ] || { echo "run_wine: FAIL (Wine missing: see docs/plans/2026-10-08-oracle-fallback-deprotect.md P1)"; exit 2; }
-export PATH="$WBIN:$PATH" WINEPREFIX="$ROOT/build/wineprefix" WINEDLLOVERRIDES="mscoree,mshtml=;d3d8=n,b"
-[ -f build/oracle/d3d8.dll ] || tools/oracle/build_proxy.sh >/dev/null || { echo "run_wine: FAIL (proxy build; see logs/build_proxy.log)"; exit 2; }
+export PATH="$WBIN:$PATH" WINEPREFIX="$ROOT/build/wineprefix" WINEDLLOVERRIDES="mscoree,mshtml=;d3d8=n,b;dinput=n,b;dsound=n,b"
+[ -f build/oracle/d3d8.dll ] && [ -f build/oracle/dinput.dll ] &&
+  [ build/oracle/d3d8.dll -nt tools/oracle/d3d8proxy.c ] && [ build/oracle/dinput.dll -nt tools/oracle/dinputproxy.c ] &&
+  [ -f build/oracle/dsound.dll ] && [ build/oracle/dsound.dll -nt tools/oracle/dsoundproxy.c ] || tools/oracle/build_proxy.sh >/dev/null || { echo "run_wine: FAIL (proxy build; see logs/build_proxy.log)"; exit 2; }
 mkdir -p logs build/wine-game
 LOG=logs/wine.log
 if [ ! -f "$WINEPREFIX/system.reg" ]; then
@@ -42,10 +48,16 @@ fi
 # Game dir: every "Game Files" entry symlinked, plus the exe under its own name.
 for f in "$ROOT/Game Files"/*; do ln -sfn "$f" "build/wine-game/$(basename "$f")"; done
 ln -sfn "$ROOT/build/oracle/d3d8.dll" build/wine-game/d3d8.dll
+ln -sfn "$ROOT/build/oracle/dinput.dll" build/wine-game/dinput.dll
+ln -sfn "$ROOT/build/oracle/dsound.dll" build/wine-game/dsound.dll
+if [ -n "$REPLAY" ]; then
+  mkdir -p "${SHOTS:-logs/wine_shots}"
+  export RUGBY08_REPLAY="$(winepath -w "$ROOT/$REPLAY" 2>/dev/null)" RUGBY08_SHOTDIR="$(winepath -w "$ROOT/${SHOTS:-logs/wine_shots}" 2>/dev/null)"
+fi
 NAME=$(basename "$EXE")
 ln -sfn "$ROOT/$EXE" "build/wine-game/$NAME"
 [ $SHOW -eq 1 ] || export RUGBY08_ORACLE_BACKGROUND=1
-[ $SOUND -eq 1 ] || WINEDLLOVERRIDES="$WINEDLLOVERRIDES;winecoreaudio.drv=d"
+[ $SOUND -eq 1 ] && export RUGBY08_ORACLE_SOUND=1   # else the dsound proxy mutes every buffer
 t=0
 while [ $t -lt "$TRIES" ]; do
   t=$((t+1))
