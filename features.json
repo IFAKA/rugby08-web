@@ -293,7 +293,7 @@
       ],
       "desc": "Browser loads localhost, WASM initializes, WinMain entered (no crash on load)",
       "check": "tools/web_check.sh --expect 'WinMain entered' --timeout 180",
-      "passes": false,
+      "passes": true,
       "notes": "2026-10-10: the old check (`timeout 30 tools/web_check.sh ... || exit 0`) always exited 0 and the script did not exist; replaced by a real headless-Chromium check."
     }
   ]
