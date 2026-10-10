@@ -22,7 +22,7 @@ base = pe.OPTIONAL_HEADER.ImageBase
 img = pe.get_memory_mapped_image()
 sys.path.insert(0, str(root / "tools"))
 import code_patch                                           # noqa: E402
-from ranges import CODE_LO, CODE_HI, TEXT, PROT, INITTERM, in_code    # noqa: E402
+from ranges import CODE_LO, CODE_HI, CODE_RANGES, TEXT, PROT, INITTERM, in_code    # noqa: E402
 T_LO, T_HI = TEXT
 _pcode, OBF = code_patch.patch(img[CODE_LO - base:CODE_HI - base], CODE_LO, CODE_HI, img[:CODE_LO - base])
 img = img[:CODE_LO - base] + _pcode + img[CODE_HI - base:]  # decode what the lifter decodes
@@ -325,7 +325,8 @@ while True:
                 break
             if i.mnemonic == "call" and i.op_str.startswith("0x"):
                 t = int(i.op_str, 16)
-                if in_text(t) and t not in entries:
+                # junk entries call mid-instruction too (0x417F14 inside `mov eax, 0x2B48`)
+                if in_text(t) and t not in entries and decodes_cleanly(t):
                     new.add(t)
             elif i.mnemonic in ("call", "jmp") and (t := slot_target(i.op_str)) is not None:
                 if t not in entries and decodes_cleanly(t):
@@ -357,7 +358,7 @@ src["dropped_inside_obf_sites"] = len(entries & _inside_site)
 entries -= _inside_site
 
 out = sorted(entries)
-json.dump({"code_ranges": [TEXT, PROT], "sources": src, "entries": out,
+json.dump({"code_ranges": list(CODE_RANGES), "sources": src, "entries": out,
            "eh_continuations": sorted(eh_cont), "seh_prolog": seh_prolog}, open(A / "lift_catalog.json", "w"))
 print(json.dumps(src), file=log)
 print(f"build_catalog: {len(out)} entries {src}")

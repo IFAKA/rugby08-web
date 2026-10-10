@@ -184,6 +184,21 @@ def eh_wrap(code, name, addr):
     sep = "" if code.endswith("\n") else "\n"   # the wrapper on its own line: tools parse ^void sub_
     return code + sep + f"void {name}(void) {{ RECOMP_EH_WRAP({body}); }}\n"
 
+# a constant-target ITAIL is always a direct branch: an out-of-body label or the body's fall-through
+_TAIL_LABEL = re.compile(r"RECOMP_FLAGS_OUT\(\); RECOMP_ITAIL\(0x([0-9A-F]{8})u\);")
+
+def zero_fill_tails(code):
+    """A branch out of the body into zero fill (`00 00`) is not a tail call: compiled code never
+    starts there (tools/lift_fixpoint.sh does not seed it either). It is the fall-through after a
+    call that does not return, followed by padding; reaching it is a fault, not a jump."""
+    buf, cs = _G["code"], _G["code_start"]
+    def sub(m):
+        t = int(m.group(1), 16)
+        if 0 <= t - cs < len(buf) - 1 and buf[t - cs:t - cs + 2] == b"\0\0":
+            return f'recomp_fault(0x{t:08X}u, "jump into zero fill");'
+        return m.group(0)
+    return _TAIL_LABEL.sub(sub, code)
+
 def lift_one(idx):
     """Lift catalog entry idx -> (C code, ok). Shared by main() and tools/difftest.py."""
     E, code, cs, ce = _G["entries"], _G["code"], _G["code_start"], _G["code_end"]
@@ -197,7 +212,7 @@ def lift_one(idx):
         if not trimmed:
             return f"void {name}(void) {{ recomp_fault(0x{addr:08X}u, \"#UD empty entry\"); }}\n", False
         code = generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr)
-        code = carry_flags(ret_jumps(code))
+        code = zero_fill_tails(carry_flags(ret_jumps(code)))
         hook = _G["hooks"].get(addr)
         if hook:   # tools/hooks.json: announce entry (checks grep for "<name> entered")
             code = code.replace(f"    RECOMP_ENTER(0x{addr:08X}u);",

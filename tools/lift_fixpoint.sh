@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.." || exit 1
 # start from no static seeds: seeds found by an older lift (e.g. before a code_patch rewrite) can
 # land inside real instructions and cut bodies short ("#UD empty entry")
 rm -f analysis/static_seeds.json
-for round in $(seq 1 25); do
+for round in $(seq 1 60); do   # 60: the SecuROM runtime range (tools/ranges.py) needs ~30 rounds
   .venv/bin/python tools/build_catalog.py >> logs/lift_fixpoint.log 2>&1 || { echo "lift_fixpoint: catalog failed"; exit 1; }
   .venv/bin/python tools/lift.py >> logs/lift_fixpoint.log 2>&1 || { echo "lift_fixpoint: lift failed"; exit 1; }
   new=$(.venv/bin/python - <<'PY'
@@ -42,4 +42,4 @@ PY
     echo "lift_fixpoint: converged after $round rounds ($(jq length analysis/static_seeds.json) static seeds, $(jq '.entries|length' analysis/lift_catalog.json) entries, $(tail -1 logs/lift_fixpoint.log | sed 's/^aems_lift: //'))"; exit 0
   fi
 done
-echo "lift_fixpoint: not converged after 25 rounds"; exit 1
+echo "lift_fixpoint: not converged after 60 rounds"; exit 1

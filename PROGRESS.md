@@ -202,3 +202,10 @@ Next: `./init.sh next` shows what to fix.
 - fidelity_report missed every EH function (`static void sub_X_eh` + `}void sub_X` wrapper): 305 -> 64. lift.py now writes the wrapper on its own line.
 - build_catalog decodes_cleanly walks direct control flow: rejects candidates branching outside the image / into the PE header / zero fill; int3 ends a path. "Outside the code ranges" is NOT junk: SecuROM's runtime library lives in the dump's merged .data (0xC84600, 0xC85020 _chkstk; callers in PROT). Clean boundary: 0x9C0000-0xAC0000 all zero, code 0xAC0000-0xE65000.
 - Remaining 54: 28 into SecuROM runtime (unlifted range), 25 zero-fill fall-throughs after noreturn calls, 1 junk. Next: add 0xAC0000-0xE65000 as a code range; lifter treats `00 00` targets as non-code.
+
+## 2026-10-10 — lift.reachability PASS (305 -> 6), native.smoke PASS
+- tools/ranges.py: third code range SECUROM 0xAC0000-0xE65000 (SecuROM's runtime library inside the old .ROT section; protector code calls it). Fixpoint now needs ~37 rounds (cap raised to 60); 57,199 entries.
+- lift.py zero_fill_tails: a constant ITAIL into `00 00` (fall-through after a noreturn call) becomes recomp_fault("jump into zero fill").
+- build_catalog: closure call targets also pass decodes_cleanly (junk entries started mid-instruction, e.g. 0x417F14).
+- Rechecked after the full relift + rebuild: lift.fidelity, lift.difftest, interp.fallback, native.compile, native.menu, native.smoke all PASS; no dispatch misses to the menu.
+- Next: web.smoke (deps pass) / web.interp; deprotect.exe is now mostly a speed/cleanliness item since misses are interpreted.
