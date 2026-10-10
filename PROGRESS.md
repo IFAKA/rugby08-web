@@ -176,3 +176,9 @@ Key validated actions:
 
 Roadmap: Fix mouse (1–2 hrs) → resolve dispatcher (2–4 hrs) → playtest → iterate.
 Next: `./init.sh next` shows what to fix.
+
+## 2026-10-10 — strategy change: Wine oracle + interpreter fallback + deprotected exe
+- Diagnosis: nearly every open crash class is the copy protector (stubs, decrypt slots, 0x1055000 dispatcher, junk), and every dispatch miss is fatal (recomp_miss -> eax=0). Per-class reversal of the protector was not converging.
+- Plan: docs/plans/2026-10-08-oracle-fallback-deprotect.md. New items: oracle.wine (P1), interp.fallback (P2, Unicorn on shared guest memory; native.smoke now depends on it), deprotect.exe (P3), web.interp (P4).
+- User approved installs: brew wine-stable (cask) and brew unicorn.
+- Next: oracle.wine (tools/run_wine.sh).

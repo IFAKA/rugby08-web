@@ -208,10 +208,29 @@
       "passes": true
     },
     {
+      "id": "oracle.wine",
+      "deps": [
+        "setup.tools"
+      ],
+      "desc": "Reference run: the original Rugby08_unpacked.exe runs under Wine (wine-stable, WoW64) for 60 s with d3d8 loaded and no unhandled exception. Tells a bad unpack apart from lifter bugs. See docs/plans/2026-10-08-oracle-fallback-deprotect.md P1.",
+      "check": "tools/run_wine.sh Rugby08_unpacked.exe --seconds 60",
+      "passes": false
+    },
+    {
+      "id": "interp.fallback",
+      "deps": [
+        "native.menu"
+      ],
+      "desc": "Dispatch misses run in a Unicorn interpreter on the same guest memory (runtime/core/interp.c) instead of eax=0; exits back to lifted code on entry/RECOMP_RETADDR. difftest --interp: >=500 lifted functions (leaf and non-leaf) give identical state when interpreted. Plan P2.",
+      "check": "source .venv/bin/activate && python3 tools/difftest.py --interp --sample 500",
+      "passes": false
+    },
+    {
       "id": "native.smoke",
       "deps": [
         "native.menu",
-        "lift.reachability"
+        "lift.reachability",
+        "interp.fallback"
       ],
       "desc": "Native binary exits cleanly (status 0) after 600 frames: no crash, segfault, or abort; checks CRT init, boot, menu render",
       "check": "tools/run_native.sh --frames 600 >/dev/null 2>&1",
@@ -244,6 +263,26 @@
       "desc": "tools/serve.py serves build/web on localhost with COOP/COEP headers",
       "check": "tools/serve_check.sh",
       "passes": true
+    },
+    {
+      "id": "deprotect.exe",
+      "deps": [
+        "oracle.wine",
+        "lift.all"
+      ],
+      "desc": "tools/patch_exe.py --full writes a deprotected PE (obfuscated calls, pointer stubs, decrypt-stub switch slots, 0x1055000 dispatcher resolved to direct branches) that runs under Wine like the original; the lift then uses it. Plan P3.",
+      "check": "source .venv/bin/activate && python3 tools/patch_exe.py --full && tools/run_wine.sh build/deobf/Rugby08_deobf.exe --seconds 60",
+      "passes": false
+    },
+    {
+      "id": "web.interp",
+      "deps": [
+        "interp.fallback",
+        "web.compile"
+      ],
+      "desc": "Interpreter fallback in the web build (Unicorn via emscripten) or, if that is not viable, the web lift includes all logs/interp_entries.txt entries and misses stop cleanly. Plan P4.",
+      "check": "source .venv/bin/activate && python3 tools/difftest.py --interp --web --sample 100",
+      "passes": false
     },
     {
       "id": "web.smoke",
