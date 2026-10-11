@@ -55,11 +55,21 @@ HLE(LeaveCriticalSection) {
 }
 
 /* ---- events / mutexes / semaphores --------------------------------------------------------- */
+/* A Create* call on a name that already exists returns a handle to the existing object and sets
+ * ERROR_ALREADY_EXISTS, as Windows does. 0 = no such object: create it. */
+static uint32_t existing(htype_t type, uint32_t name_va) {
+    if (!name_va) return 0;
+    uint32_t h = h_open_named(type, gstr(name_va));
+    if (h) rt_last_error = ERROR_ALREADY_EXISTS_;
+    return h;
+}
 static uint32_t named(uint32_t h, uint32_t name_va) {
     if (name_va) snprintf(h_get(h, H_FREE)->name, 260, "%s", gstr(name_va));
     return h;
 }
 HLE(CreateEventA) {   /* (sa, manual, initial, name) */
+    uint32_t ex = existing(H_EVENT, a[3]);
+    if (ex) return ex;
     uint32_t h = h_new(H_EVENT);
     hobj_t *o = h_get(h, H_EVENT);
     o->manual_reset = a[1] != 0;
@@ -74,6 +84,8 @@ HLE(ResetEvent) {
     return TRUE_;
 }
 HLE(CreateMutexA) {   /* (sa, initialOwner, name) */
+    uint32_t ex = existing(H_MUTEX, a[2]);
+    if (ex) return ex;
     uint32_t h = h_new(H_MUTEX);
     hobj_t *o = h_get(h, H_MUTEX);
     if (a[1]) { o->owner = rt_host_tid(); o->count = 1; }
@@ -89,6 +101,8 @@ HLE(ReleaseMutex) {
     return TRUE_;
 }
 HLE(CreateSemaphoreA) {   /* (sa, initial, max, name) */
+    uint32_t ex = existing(H_SEMAPHORE, a[3]);
+    if (ex) return ex;
     uint32_t h = h_new(H_SEMAPHORE);
     hobj_t *o = h_get(h, H_SEMAPHORE);
     o->count = (int)a[1];
@@ -130,7 +144,13 @@ HLE(TlsAlloc) {
     pthread_mutex_unlock(&g_tlsmu);
     return 0xFFFFFFFFu;
 }
-HLE(TlsFree) { pthread_mutex_lock(&g_tlsmu); if (a[0] < 64) g_tls_used &= ~(1ull << a[0]); pthread_mutex_unlock(&g_tlsmu); return TRUE_; }
+HLE(TlsFree) {
+    pthread_mutex_lock(&g_tlsmu);
+    int ok = a[0] < 64 && (g_tls_used & (1ull << a[0]));
+    if (ok) { g_tls_used &= ~(1ull << a[0]); rt_thread_tls_set_all(a[0], 0); }   /* the next TlsAlloc of this slot starts at 0 */
+    pthread_mutex_unlock(&g_tlsmu);
+    return ok ? TRUE_ : set_err(ERROR_INVALID_PARAMETER_);
+}
 HLE(TlsGetValue) { rt_last_error = 0; return a[0] < 64 ? rd32(rt_thread_tib() + 0xE10 + 4 * a[0]) : 0; }
 HLE(TlsSetValue) { if (a[0] >= 64) return set_err(ERROR_INVALID_PARAMETER_); wr32(rt_thread_tib() + 0xE10 + 4 * a[0], a[1]); return TRUE_; }
 
@@ -202,7 +222,9 @@ HLE(SetThreadPriority) { (void)a; return TRUE_; }
 HLE(DuplicateHandle) {   /* (srcproc, src, dstproc, &dst, access, inherit, options) */
     uint32_t h = a[1];
     if (h == 0xFFFFFFFEu && t_self) h = t_self->handle;   /* GetCurrentThread() pseudo-handle */
-    if (a[3]) wr32(a[3], h);
+    uint32_t d = h_dup(h);
+    if (!d) d = h;   /* a pseudo-handle (GetCurrentProcess) or a handle we do not track stays itself */
+    if (a[3]) wr32(a[3], d);
     return TRUE_;
 }
 

@@ -327,8 +327,8 @@ HLE(UnmapViewOfFile) { gfree(a[0]); return TRUE_; }
 HLE(CloseHandle) {
     hobj_t *o = h_get(a[0], H_FREE);
     if (!o) return set_err(ERROR_INVALID_HANDLE_);
-    if (o->type == H_FILE && o->p) { close(((file_t *)o->p)->fd); free(o->p); o->p = NULL; }
     if (o->type == H_STD || o->type == H_THREAD) return TRUE_;   /* threads keep their object */
-    h_close(a[0]);
+    int left = h_close(a[0]);
+    if (o->type == H_FILE && o->p && left == 0) { close(((file_t *)o->p)->fd); free(o->p); o->p = NULL; }   /* the last handle */
     return TRUE_;
 }

@@ -72,6 +72,7 @@ void     rt_com_free(uint32_t this_va);
 /* Initialise this host thread's CPU state for running guest code on stack [lo,hi). */
 void rt_thread_enter(uint32_t stack_lo, uint32_t stack_hi, uint32_t tib_va);
 uint32_t rt_thread_tib(void);
+void rt_thread_tls_set_all(uint32_t slot, uint32_t v);   /* TLS slot of every thread (TlsFree clears it) */
 extern RECOMP_TLS uint32_t rt_last_error;
 
 /* ---- diagnostics ----------------------------------------------------- */

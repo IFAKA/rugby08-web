@@ -1,8 +1,15 @@
 /* thread.c -- per-thread guest state: stack, TIB (fs:), CPU registers. */
 #include "rt.h"
+#include <pthread.h>
 #include <string.h>
 
 static RECOMP_TLS uint32_t t_tib;
+
+/* Every TIB ever entered (threads' pages stay allocated), so a TlsFree can clear the slot in all. */
+#define MAX_TIBS 512
+static uint32_t g_tibs[MAX_TIBS];
+static int g_ntibs;
+static pthread_mutex_t g_tibmu = PTHREAD_MUTEX_INITIALIZER;
 
 /* NT_TIB / TEB fields the MSVC CRT and SEH prologues touch through fs: */
 #define TIB_EXCEPTION_LIST 0x00
@@ -25,6 +32,9 @@ void rt_thread_enter(uint32_t stack_lo, uint32_t stack_hi, uint32_t tib_va) {
     wr32(tib_va + TEB_TID, tib_va >> 12);
     wr32(tib_va + TEB_TLS_POINTER, tib_va + 0xE10);   /* TlsSlots live in the TEB page */
     t_tib = tib_va;
+    pthread_mutex_lock(&g_tibmu);
+    if (g_ntibs < MAX_TIBS) g_tibs[g_ntibs++] = tib_va;
+    pthread_mutex_unlock(&g_tibmu);
     g_fs_base = tib_va;
     g_esp = stack_hi - 16;
     g_ebp = 0;
@@ -34,3 +44,10 @@ void rt_thread_enter(uint32_t stack_lo, uint32_t stack_hi, uint32_t tib_va) {
 }
 
 uint32_t rt_thread_tib(void) { return t_tib; }
+
+/* Writes v into TLS slot `slot` of every thread's TEB page. */
+void rt_thread_tls_set_all(uint32_t slot, uint32_t v) {
+    pthread_mutex_lock(&g_tibmu);
+    for (int i = 0; i < g_ntibs; i++) wr32(g_tibs[i] + 0xE10 + 4 * slot, v);
+    pthread_mutex_unlock(&g_tibmu);
+}

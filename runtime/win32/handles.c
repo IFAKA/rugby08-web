@@ -11,6 +11,14 @@
 static hobj_t *g_h[MAX_HANDLES];
 static pthread_mutex_t g_hmu = PTHREAD_MUTEX_INITIALIZER;
 
+static uint32_t h_slot(hobj_t *o) {   /* a free table slot now refers to o; caller holds g_hmu */
+    for (uint32_t i = 1; i < MAX_HANDLES; i++) {
+        if (!g_h[i]) { g_h[i] = o; return H_BASE + 4 * i; }
+    }
+    pthread_mutex_unlock(&g_hmu);
+    rt_fatal("handle table full");
+}
+
 uint32_t h_new(htype_t type) {
     hobj_t *o = calloc(1, sizeof *o);
     o->type = type;
@@ -18,15 +26,34 @@ uint32_t h_new(htype_t type) {
     pthread_mutex_init(&o->mu, NULL);
     pthread_cond_init(&o->cv, NULL);
     pthread_mutex_lock(&g_hmu);
-    for (uint32_t i = 1; i < MAX_HANDLES; i++) {
-        if (!g_h[i]) {
-            g_h[i] = o;
-            pthread_mutex_unlock(&g_hmu);
-            return H_BASE + 4 * i;
-        }
+    uint32_t h = h_slot(o);
+    pthread_mutex_unlock(&g_hmu);
+    return h;
+}
+
+/* A second handle to the same object (DuplicateHandle, CreateEvent on an existing name). */
+uint32_t h_dup(uint32_t h) {
+    if (h < H_BASE || (h - H_BASE) % 4 || (h - H_BASE) / 4 >= MAX_HANDLES) return 0;
+    pthread_mutex_lock(&g_hmu);
+    hobj_t *o = g_h[(h - H_BASE) / 4];
+    uint32_t nh = 0;
+    if (o) { o->refs++; nh = h_slot(o); }
+    pthread_mutex_unlock(&g_hmu);
+    return nh;
+}
+
+/* Windows shares named events, mutexes and semaphores: the handle of the live object of that type
+ * and name, as a new handle, or 0 when there is none. */
+uint32_t h_open_named(htype_t type, const char *name) {
+    if (!name || !*name) return 0;
+    pthread_mutex_lock(&g_hmu);
+    uint32_t nh = 0;
+    for (uint32_t i = 1; i < MAX_HANDLES && !nh; i++) {
+        hobj_t *o = g_h[i];
+        if (o && o->type == type && !strcmp(o->name, name)) { o->refs++; nh = h_slot(o); }
     }
     pthread_mutex_unlock(&g_hmu);
-    rt_fatal("handle table full");
+    return nh;
 }
 
 hobj_t *h_get(uint32_t h, htype_t type) {
@@ -40,15 +67,17 @@ hobj_t *h_get(uint32_t h, htype_t type) {
     return o;
 }
 
-void h_close(uint32_t h) {
-    if (h < H_BASE || (h - H_BASE) % 4) return;
+/* Drops this handle; returns how many handles still refer to the object (0 = the last one went). */
+int h_close(uint32_t h) {
+    if (h < H_BASE || (h - H_BASE) % 4) return 0;
     uint32_t i = (h - H_BASE) / 4;
-    if (i >= MAX_HANDLES) return;
+    if (i >= MAX_HANDLES) return 0;
     pthread_mutex_lock(&g_hmu);
     hobj_t *o = g_h[i];
     g_h[i] = NULL;
+    int left = o ? --o->refs : 0;   /* the object itself is leaked: another thread may still be waiting on it */
     pthread_mutex_unlock(&g_hmu);
-    (void)o;   /* objects may still be waited on by another thread: leak rather than race */
+    return left;
 }
 
 uint64_t rt_host_tid(void) { return (uint64_t)(uintptr_t)pthread_self(); }

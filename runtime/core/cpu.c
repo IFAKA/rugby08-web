@@ -239,8 +239,9 @@ uint32_t guest_call(uint32_t va, int n, ...) {
 
 /* ---- dispatch misses ---------------------------------------------------------------------------- */
 #define MAX_MISSES 65536
-static uint32_t g_miss[MAX_MISSES];
-static int g_nmiss;
+#define MISS_SLOTS (2 * MAX_MISSES)             /* open-addressing set of VAs already reported; slot 0 = empty */
+static uint32_t g_miss[MISS_SLOTS];
+static int g_nmiss, g_miss_zero;                  /* g_miss_zero: VA 0 was reported (it cannot live in the set) */
 static pthread_mutex_t g_miss_mu = PTHREAD_MUTEX_INITIALIZER;
 static FILE *g_miss_f;
 
@@ -267,8 +268,15 @@ static void dyncode_capture(uint32_t va) {
 
 void recomp_miss(int tail, uint32_t va, uint32_t from) {
     pthread_mutex_lock(&g_miss_mu);
-    for (int i = 0; i < g_nmiss; i++) if (g_miss[i] == va) { pthread_mutex_unlock(&g_miss_mu); return; }
-    if (g_nmiss < MAX_MISSES) g_miss[g_nmiss++] = va;
+    if (va == 0) {
+        if (g_miss_zero) { pthread_mutex_unlock(&g_miss_mu); return; }
+        g_miss_zero = 1;
+    } else {
+        uint32_t h = (va * 2654435761u) >> 15 & (MISS_SLOTS - 1);
+        while (g_miss[h] && g_miss[h] != va) h = (h + 1) & (MISS_SLOTS - 1);
+        if (g_miss[h] == va) { pthread_mutex_unlock(&g_miss_mu); return; }
+        if (g_nmiss < MAX_MISSES) { g_miss[h] = va; g_nmiss++; }   /* full: report, but do not remember */
+    }
     if (!g_miss_f) g_miss_f = fopen("logs/icall_miss.txt", "w");
     if (g_miss_f) { fprintf(g_miss_f, "0x%08X %s from 0x%08X\n", va, tail ? "ITAIL" : "ICALL", from); fflush(g_miss_f); }
     pthread_mutex_unlock(&g_miss_mu);

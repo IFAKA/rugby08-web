@@ -47,7 +47,9 @@ struct hobj {
 };
 uint32_t h_new(htype_t type);                 /* returns the handle value */
 hobj_t  *h_get(uint32_t h, htype_t type);     /* NULL if not that type (H_FREE = any) */
-void     h_close(uint32_t h);
+int      h_close(uint32_t h);                 /* handles left on the object */
+uint32_t h_dup(uint32_t h);                   /* another handle to the same object, 0 if invalid */
+uint32_t h_open_named(htype_t type, const char *name);   /* shared named object, as a new handle, or 0 */
 uint64_t rt_host_tid(void);
 
 /* user32.c: back hwnd with the host window (D3D CreateDevice binds its device window). */
