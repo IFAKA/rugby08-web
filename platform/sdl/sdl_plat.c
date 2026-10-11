@@ -75,6 +75,11 @@ uint32_t plat_vk_to_scancode(uint32_t vk) {
     return 0;
 }
 
+uint8_t plat_vk_toggled(uint32_t vk) {
+    SDL_Keymod m = SDL_GetModState();
+    return vk == 0x14 ? (m & KMOD_CAPS) != 0 : vk == 0x90 ? (m & KMOD_NUM) != 0 : 0;
+}
+
 uint8_t plat_vk_down(uint32_t vk) {
     if (vk >= 256) return 0;
     switch (vk) {                         /* generic modifiers: either side */

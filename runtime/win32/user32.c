@@ -459,8 +459,8 @@ HLE(CallNextHookEx) { (void)a; return 0; }
 
 /* ---- keyboard ---------------------------------------------------------------------------------- */
 HLE(GetAsyncKeyState) { return plat_vk_down(a[0]) ? 0x8000u : 0; }
-HLE(GetKeyState) { return plat_vk_down(a[0]) ? 0xFF80u : 0; }
-HLE(GetKeyboardState) { for (uint32_t k = 0; k < 256; k++) wr8(a[0] + k, plat_vk_down(k) ? 0x80 : 0); return TRUE_; }
+HLE(GetKeyState) { return (plat_vk_down(a[0]) ? 0xFF80u : 0) | plat_vk_toggled(a[0]); }
+HLE(GetKeyboardState) { for (uint32_t k = 0; k < 256; k++) wr8(a[0] + k, (plat_vk_down(k) ? 0x80 : 0) | plat_vk_toggled(k)); return TRUE_; }
 HLE(GetKeyboardLayout) { (void)a; return 0x04090409u; }
 HLE(keybd_event) { (void)a; return 0; }
 

@@ -1,6 +1,9 @@
 // d3d8_core.cpp -- guest D3D8 object model, IUnknown, IDirect3D8, device creation and Present.
 // Conversion rules follow third_party/d3d8to9 (the reference for D3D8 -> D3D9 semantics).
 #include "d3d8_int.hpp"
+#include <array>
+#include <algorithm>
+#include <vector>
 #include "plat.h"
 #include <cstdio>
 #include <cstdlib>
@@ -121,16 +124,29 @@ HLE_D3D(IDirect3D8, GetAdapterIdentifier) {   // (this, adapter, flags, D3DADAPT
 }
 
 // Display modes: one list, offered in X8R8G8B8 and R5G6B5 (D3D8 enumerates all formats together).
-static const uint32_t kModes[][2] = { { 640, 480 }, { 800, 600 }, { 1024, 768 }, { 1152, 864 }, { 1280, 720 },
-                                      { 1280, 960 }, { 1280, 1024 }, { 1600, 1200 }, { 1920, 1080 } };
-static const uint32_t kNumModes = sizeof kModes / sizeof kModes[0];
+static const uint32_t kBaseModes[][2] = { { 640, 480 }, { 800, 600 }, { 1024, 768 }, { 1152, 864 }, { 1280, 720 },
+                                          { 1280, 960 }, { 1280, 1024 }, { 1600, 1200 }, { 1920, 1080 } };
+// kBaseModes plus the desktop's own size (so the Options menu can pick native resolution), ordered by area.
+static std::vector<std::array<uint32_t, 2>> &modes() {
+    static std::vector<std::array<uint32_t, 2>> m;
+    if (m.empty()) {
+        for (auto &b : kBaseModes) m.push_back({ b[0], b[1] });
+        int w, h;
+        plat_desktop_size(&w, &h);
+        std::array<uint32_t, 2> d = { (uint32_t)w, (uint32_t)h };
+        if (w >= 640 && h >= 480 && std::find(m.begin(), m.end(), d) == m.end()) m.push_back(d);
+        std::stable_sort(m.begin(), m.end(), [](auto &x, auto &y) { return (uint64_t)x[0] * x[1] < (uint64_t)y[0] * y[1]; });
+    }
+    return m;
+}
 
-HLE_D3D(IDirect3D8, GetAdapterModeCount) { return a[1] == 0 ? 2 * kNumModes : 0; }
+HLE_D3D(IDirect3D8, GetAdapterModeCount) { return a[1] == 0 ? 2 * (uint32_t)modes().size() : 0; }
 
 HLE_D3D(IDirect3D8, EnumAdapterModes) {       // (this, adapter, mode, D3DDISPLAYMODE*)
-    if (a[1] != 0 || a[2] >= 2 * kNumModes) return D3DERR_INVALIDCALL_;
-    uint32_t i = a[2] % kNumModes, f = a[2] < kNumModes ? D3DFMT_X8R8G8B8 : D3DFMT_R5G6B5;
-    wr32(a[3], kModes[i][0]); wr32(a[3] + 4, kModes[i][1]); wr32(a[3] + 8, 60); wr32(a[3] + 12, f);
+    uint32_t n = (uint32_t)modes().size();
+    if (a[1] != 0 || a[2] >= 2 * n) return D3DERR_INVALIDCALL_;
+    uint32_t i = a[2] % n, f = a[2] < n ? D3DFMT_X8R8G8B8 : D3DFMT_R5G6B5;
+    wr32(a[3], modes()[i][0]); wr32(a[3] + 4, modes()[i][1]); wr32(a[3] + 8, 60); wr32(a[3] + 12, f);
     return D3D_OK_;
 }
 

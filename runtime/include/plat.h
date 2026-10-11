@@ -36,6 +36,7 @@ void plat_set_gamma(const uint16_t *ramp);                   /* 3 x 256 WORDs (R
  * wait_ms > 0 blocks up to that long for the first event. */
 int  plat_poll(plat_msg_t *m, int wait_ms);
 
+uint8_t plat_vk_toggled(uint32_t vk);                        /* 1 while the Caps Lock / Num Lock (VK_CAPITAL, VK_NUMLOCK) light is on */
 uint8_t plat_vk_down(uint32_t vk);                           /* 1 while virtual key vk is held */
 uint8_t plat_dik_down(uint32_t dik);                         /* 1 while DirectInput key dik (set-1 scan | 0x80 extended) is held */
 void plat_mouse_delta(int *dx, int *dy, int *dwheel);        /* motion since the last call */
