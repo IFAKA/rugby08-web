@@ -58,6 +58,16 @@ static void *timer_main(void *arg) {
             continue;                                       /* table may have changed */
         }
         mmtimer_t t = g_timers[next];
+        {   /* one "timer:" trace line per second: deliveries and how late they ran (the game's clock is this tick) */
+            static uint64_t t0, late_sum, late_max; static unsigned n;
+            uint64_t late = now - t.due_ns;
+            late_sum += late; if (late > late_max) late_max = late; n++;
+            if (!t0) t0 = now;
+            if (now - t0 >= 1000000000ull) {
+                rt_trace("timer: %u fires/s, late avg %.2f ms, max %.2f ms", n, late_sum / 1e6 / n, late_max / 1e6);
+                t0 = now; n = 0; late_sum = late_max = 0;
+            }
+        }
         t_fire_due = t.due_ns; t_fire_proc = t.proc;
         if (t.flags & 1) g_timers[next].due_ns += (uint64_t)t.delay * 1000000ull;   /* TIME_PERIODIC */
         else g_timers[next] = g_timers[--g_ntimers];                               /* one-shot: done */

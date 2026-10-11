@@ -187,7 +187,7 @@ int plat_gl_create(void) {
     g_gl = SDL_GL_CreateContext(g_win);
     if (!g_gl) { rt_log("SDL_GL_CreateContext: %s", SDL_GetError()); return -1; }
     SDL_GL_MakeCurrent(g_win, g_gl);
-    SDL_GL_SetSwapInterval(1);
+    { const char *vs = getenv("RT_VSYNC"); SDL_GL_SetSwapInterval(vs ? atoi(vs) : 1); }   /* RT_VSYNC=0: the frame pacer alone times the frames */
 #ifndef __EMSCRIPTEN__
     void (*gen)(int, unsigned *) = (void (*)(int, unsigned *))SDL_GL_GetProcAddress("glGenVertexArrays");
     void (*bind)(unsigned) = (void (*)(unsigned))SDL_GL_GetProcAddress("glBindVertexArray");
@@ -269,7 +269,8 @@ static void frame_stats(double swap_ticks) {
         /* Three slow seconds in a row: `sample` this process (5 s of stacks) into logs/, at most 3 times a
            run, so a slow scene explains itself without anyone attaching a profiler. */
         static int slow, taken;
-        slow = n * f / span < 24 ? slow + 1 : 0;
+        static int thr; if (!thr) { const char *e = getenv("RT_SLOW_FPS"); thr = e ? atoi(e) : 24; }
+        slow = n * f / span < thr ? slow + 1 : 0;
         if (slow >= 3 && taken < 3) {
             char cmd[256];
             snprintf(cmd, sizeof cmd, "sample %d 5 -file logs/sample-auto-%d.txt >/dev/null 2>&1 &", (int)getpid(), taken);

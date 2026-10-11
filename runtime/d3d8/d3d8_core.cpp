@@ -26,6 +26,11 @@ static uint32_t vtable(const d3d8_slot_t *vt, int n) {
         for (int i = 0; i < n; i++)
             m[i] = { vt[i].name, vt[i].own ? vt[i].own : vt[i].inh ? vt[i].inh : vt[i].stub, vt[i].pop };
         va = rt_com_vtable(vt[0].name, m, n);   // the bridges keep m's names; m stays allocated
+        for (int i = 0; i < n; i++) {           // everything but the calls that can sleep or wait
+            const char *nm = vt[i].name ? vt[i].name : "";
+            if (!strstr(nm, "Present") && !strstr(nm, "Reset") && !strstr(nm, "CreateDevice") && !strstr(nm, "TestCooperative"))
+                rt_host_bridge_keep_lock(rd32(va + 4u * (uint32_t)i));
+        }
         g_vtables[vt] = va;
     }
     pthread_mutex_unlock(&g_mu);

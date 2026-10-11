@@ -64,6 +64,7 @@ uint32_t rt_host_bridge(const char *name, rt_hle_fn fn, uint16_t pop);
 /* COM: allocate a guest vtable of n host bridges and an object {vtbl, host_ptr}. */
 typedef struct { const char *name; rt_hle_fn fn; uint16_t pop; } rt_method_t;
 uint32_t rt_com_vtable(const char *iface, const rt_method_t *m, int n);
+void rt_host_bridge_keep_lock(uint32_t bridge_va);   /* the call never blocks: it keeps the guest lock */
 uint32_t rt_com_new(uint32_t vtbl, void *host);          /* returns guest `this` */
 void    *rt_com_host(uint32_t this_va);                  /* host pointer stored at this+4 */
 void     rt_com_free(uint32_t this_va);

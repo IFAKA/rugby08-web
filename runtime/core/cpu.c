@@ -33,7 +33,7 @@ uint64_t recomp_host_rdtsc(void) {
 
 /* ---- bridges ------------------------------------------------------------ */
 #define MAX_HOST_BRIDGES 8192
-typedef struct { const char *name; rt_hle_fn fn; uint16_t pop; } host_bridge_t;
+typedef struct { const char *name; rt_hle_fn fn; uint16_t pop; uint8_t keep_lock; } host_bridge_t;
 static host_bridge_t g_host[MAX_HOST_BRIDGES];
 static uint32_t g_host_count;
 static pthread_mutex_t g_host_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -85,11 +85,11 @@ void rt_guest_yield(void) {
     }
 }
 
-static void run_bridge(const char *dll, const char *name, rt_hle_fn fn, uint16_t pop) {
+static void run_bridge(const char *dll, const char *name, rt_hle_fn fn, uint16_t pop, int keep) {
     const uint32_t *a = (const uint32_t *)G2H(g_esp + 4);
     uint32_t ret;
     if (fn) {
-        int held = t_big_held;
+        int held = t_big_held && !keep;   /* keep: a call that never blocks stays on the guest lock */
         if (held) big_unlock();
         ret = fn(a);
         if (held) big_lock();
@@ -104,22 +104,29 @@ static void run_bridge(const char *dll, const char *name, rt_hle_fn fn, uint16_t
 static void import_trampoline(void) {
     uint32_t i = (t_bridge_va - RT_BRIDGE_IMPORT) >> 4;
     const rt_import_t *im = &rt_imports[i];
-    run_bridge(im->dll, im->name, im->fn, im->pop);
+    run_bridge(im->dll, im->name, im->fn, im->pop, 0);
 }
 
 static void host_trampoline(void) {
     uint32_t i = (t_bridge_va - RT_BRIDGE_HOST) >> 4;
     host_bridge_t *b = &g_host[i];
-    run_bridge("host", b->name, b->fn, b->pop);
+    run_bridge("host", b->name, b->fn, b->pop, b->keep_lock);
 }
 
 uint32_t rt_host_bridge(const char *name, rt_hle_fn fn, uint16_t pop) {
     pthread_mutex_lock(&g_host_mu);
     if (g_host_count >= MAX_HOST_BRIDGES) rt_fatal("host bridge table full");
     uint32_t i = g_host_count++;
-    g_host[i] = (host_bridge_t){ name, fn, pop };
+    g_host[i] = (host_bridge_t){ name, fn, pop, 0 };
     pthread_mutex_unlock(&g_host_mu);
     return RT_BRIDGE_HOST + 16 * i;
+}
+
+/* A host bridge that never blocks (D3D state, draws, buffer uploads) keeps the guest lock across the
+ * call. Releasing it sent the main thread to the back of the FIFO behind every busy guest thread on each
+ * of the ~thousands of D3D calls per frame: half the main thread's time in a match was lock waiting. */
+void rt_host_bridge_keep_lock(uint32_t va) {
+    if (va >= RT_BRIDGE_HOST && va < RT_BRIDGE_HOST + 16 * g_host_count) g_host[(va - RT_BRIDGE_HOST) >> 4].keep_lock = 1;
 }
 
 recomp_func_t rt_shadow_lookup(uint32_t va);   /* interp.c: the shadow check's return trampoline */
