@@ -271,7 +271,7 @@ typedef struct { uint32_t a, pc; uint8_t old; } undo_t;
 typedef struct { uint32_t a, pc; uint8_t v; } fin_t;
 typedef struct {
     const char *name; uint32_t va, ra, esp0, n, frame, bridges;
-    uint32_t r[8]; double st0; int depth, top0, mark;
+    uint32_t r[8]; double st0; int depth, top0, mark, st0_ok;
     fin_t *fin; size_t nfin;
 } shadow_t;
 static RECOMP_TLS uc_engine *t_suc;
@@ -360,6 +360,7 @@ void rt_shadow_enter(uint32_t va, const char *name) {
  * tried again, so later entries descend into its callees. Summary per function in the trace. */
 static uint8_t *g_auto;            /* per image byte: checks done, 0xFF = skip */
 static uint32_t g_auto_from, g_auto_to, g_auto_max = 2;
+static uint32_t g_auto_lo, g_auto_hi = ~0u;      /* RT_SHADOW_RANGE=lo-hi (hex VAs): only functions in this range */
 static int g_auto_parsed;
 void rt_shadow_auto(uint32_t va) {
     if (!g_auto_parsed) {
@@ -368,9 +369,11 @@ void rt_shadow_auto(uint32_t va) {
         if (e && sscanf(e, "%u-%u", &g_auto_from, &g_auto_to) == 2) {
             g_auto = calloc(RT_IMAGE_END - RT_IMAGE_BASE, 1);
             if (getenv("RT_SHADOW_MAX")) g_auto_max = (uint32_t)atoi(getenv("RT_SHADOW_MAX"));
+            if (getenv("RT_SHADOW_RANGE")) sscanf(getenv("RT_SHADOW_RANGE"), "%x-%x", &g_auto_lo, &g_auto_hi);
         }
     }
     if (!g_auto || va < RT_IMAGE_BASE || va >= RT_IMAGE_END) return;
+    if (va < g_auto_lo || va > g_auto_hi) return;
     uint32_t f = rt_present_frame;
     if (f < g_auto_from || f > g_auto_to) return;
     if (t_sh_busy && f > t_sh.frame + 2) t_sh_busy = 0;
@@ -391,7 +394,12 @@ static int shadow_run(uint32_t va, const char *name, uint32_t nth, int autom) {
 
     uc_engine *uc = shadow_engine();
     uc_ctl_flush_tb(uc);
-    g_fp_top = 0;          /* MSVC calls enter with an empty x87 stack; the lifted top is a running count */
+    /* MSVC calls enter with an empty x87 stack, except the CRT's _CI* helpers (acos, fmod, ...),
+       which take their arguments in ST0/ST1. The lifted top is a running count that drifts, so
+       the interpreter gets the top two registers at most, and the depth change is compared. */
+    int crt = va >= 0x00871000u && va < 0x00890000u;   /* the statically linked MSVC CRT */
+    int d0 = !crt || s_top < 0 ? 0 : s_top > 2 ? 2 : s_top;
+    g_fp_top = d0;
     state_in(uc);
     g_fp_top = s_top;
     t_nundo = 0;
@@ -420,12 +428,12 @@ static int shadow_run(uint32_t va, const char *name, uint32_t nth, int autom) {
         fail = t_stop == STOP_FAULT ? "fault" : e ? uc_strerror(e) : "runaway";
         break;
     }
-    shadow_t sh = { name ? name : "", va, ra0, esp0, nth, rt_present_frame, bridges, { 0 }, 0.0, 0, s_top, 0, NULL, 0 };
+    shadow_t sh = { name ? name : "", va, ra0, esp0, nth, rt_present_frame, bridges, { 0 }, 0.0, 0, s_top, 0, 0, NULL, 0 };
     if (!fail) {
         state_out(uc);
         uint32_t r[8] = { g_eax, g_ecx, g_edx, g_ebx, g_esp, g_ebp, g_esi, g_edi };
         memcpy(sh.r, r, sizeof r);
-        sh.depth = g_fp_top; sh.st0 = g_fp_top > 0 ? g_st[0] : 0.0;
+        sh.depth = g_fp_top - d0; sh.st0_ok = g_fp_top > 0; sh.st0 = g_fp_top > 0 ? g_st[0] : 0.0;
         sh.fin = malloc((t_nundo ? t_nundo : 1) * sizeof *sh.fin);
         size_t n = 0;          /* newest write first per address after a stable pass: walk the log backwards */
         for (size_t i = t_nundo; i-- > 0; ) sh.fin[n++] = (fin_t){ t_undo[i].a, t_undo[i].pc, *(uint8_t *)G2H(t_undo[i].a) };
@@ -469,7 +477,7 @@ static void shadow_ret(void) {
     /* modulo 8: x87 TOP is a ring. `ffree` tags a register empty without moving TOP (D3DX's matrix
        multiply ends each row with four of them), and the lifted top is an unwrapped count of it */
     if (((g_fp_top - sh.top0 - sh.depth) & 7) != 0) p += sprintf(p, " fpdepth %d/%d", g_fp_top - sh.top0, sh.depth);
-    else if (sh.depth > 0) {
+    else if (sh.st0_ok) {   /* the interpreter ended with a value in ST0 (a result, or a _CI* return) */
         double a = g_st[0], b = sh.st0;
         if (!(a == b || fabs(a - b) <= 1e-9 * fabs(b) || (isnan(a) && isnan(b)))) p += sprintf(p, " st0 %.9g/%.9g", a, b);
     }
