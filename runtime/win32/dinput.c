@@ -3,6 +3,8 @@
  * extensions, so QueryInterface hands back the same object for any IID.
  * Immediate data only: GetDeviceData reports an empty buffer. Joysticks are not enumerated yet. */
 #include "win32.h"
+#include <math.h>
+#include <stdlib.h>
 #include "plat.h"
 #include <stdlib.h>
 #include <string.h>
@@ -78,6 +80,35 @@ static uint32_t dv_GetDeviceState(const uint32_t *a) {   /* (this, cbData, lpvDa
             uint8_t on = plat_dik_down(k);
             wr8(p + k, on ? 0x80 : 0);
             if (on && seen < 8) { seen++; rt_log("DirectInput keyboard: DIK 0x%02X down", k); }
+        }
+        /* Sprint steering: the game will not turn a sprinting player toward a new direction (steering
+           with the sprint button up works in every direction). When the direction keys change while
+           Space is held, report Space released while the player turns, then sprint again -- what a
+           player does with a pad by easing off R2. The release grows with the turn: 45 degrees 12
+           frames ... 180 degrees 30. Starting from standing never drops the sprint. */
+        static int assist = -1;
+        if (assist < 0) assist = getenv("RT_NO_SPRINT_ASSIST") ? 0 : 1;
+        if (n > 0xCD && assist) {
+            static int last_dir = -1;              /* 8-way index of the last held direction, -1 none */
+            static uint32_t last_dir_frame, release_until;
+            int dx = (rd8(p + 0xCD) ? 1 : 0) - (rd8(p + 0xCB) ? 1 : 0);
+            int dy = (rd8(p + 0xC8) ? 1 : 0) - (rd8(p + 0xD0) ? 1 : 0);
+            uint32_t f = rt_present_frame;
+            if (dx || dy) {
+                int dir = (int)lround(atan2((double)dy, (double)dx) / (M_PI / 4)) & 7;
+                if (dir != last_dir) {
+                    if (last_dir >= 0 && f - last_dir_frame <= 10) {     /* turning, not starting */
+                        int steps = abs(dir - last_dir); if (steps > 4) steps = 8 - steps;
+                        uint32_t until = f + 6u + 6u * (uint32_t)steps;
+                        if (until > release_until) release_until = until;
+                    }
+                    last_dir = dir;
+                }
+                last_dir_frame = f;
+            } else if (f - last_dir_frame > 10) {
+                last_dir = -1; release_until = 0;
+            }
+            if (f < release_until) wr8(p + 0x39, 0);
         }
     } else if (n >= 16) {                                      /* DIMOUSESTATE: lX lY lZ rgbButtons[4] */
         mouse_drain();
