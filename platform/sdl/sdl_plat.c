@@ -96,7 +96,7 @@ uint8_t plat_vk_down(uint32_t vk) {
    cursor in screen coordinates instead; replay clicks set it. */
 static int g_vcur_x, g_vcur_y;
 static int g_rel, g_cx, g_cy;   /* captured-pointer mode and in-window position */
-static int virtual_cursor(void) { return rt_frame_limit > 0 || rt_replay_path[0]; }
+static int virtual_cursor(void) { return rt_frame_limit > 0 || (rt_replay_path[0] && !rt_replay_live); }
 
 /* ---- window --------------------------------------------------------------------------------- */
 static SDL_Window *g_win;
@@ -487,6 +487,7 @@ void plat_replay_tick(uint32_t frame) {
             int wx = 0, wy = 0;
             if (g_win) SDL_GetWindowPosition(g_win, &wx, &wy);
             if (r->x >= 0) { g_vcur_x = wx + r->x; g_vcur_y = wy + r->y; }
+            if (rt_replay_live && g_win && r->x >= 0) SDL_WarpMouseInWindow(g_win, r->x, r->y);   /* live: the real pointer goes there */
             int bx = g_vcur_x - wx, by = g_vcur_y - wy;
             e.type = r->down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
             e.button.windowID = g_win ? SDL_GetWindowID(g_win) : 0;

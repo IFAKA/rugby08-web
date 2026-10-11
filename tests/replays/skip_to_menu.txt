@@ -1,0 +1,12 @@
+# Live skip from launch to the main menu (scripts/play.sh --menu). Return taps skip the intro movie; the title screen needs a click.
+# Verified hidden with --replay: main menu at frame 4500.
+150 tap Return
+300 tap Return
+450 tap Return
+600 tap Return
+900 tap Return
+1500 tap Return
+2500 click 320 240
+3000 tap Return
+3500 click 320 240
+4000 tap Return

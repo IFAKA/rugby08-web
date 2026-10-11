@@ -88,6 +88,7 @@ extern char rt_audio_capture_path[1024]; /* --audio-capture PATH ("" = none) */
 extern int rt_log_input;                 /* --log-input: log host key/mouse events and what the game polls */
 extern char rt_shot_path[1024];          /* replay `<frame> shot PATH`: PNG of that frame (then "") */
 extern char rt_replay_path[1024];        /* --replay PATH ("" = none) */
+extern int rt_replay_live;               /* --replay-live: replay without the automated-run isolation */
 extern volatile uint32_t rt_present_frame;  /* presented frames so far (d3d8 Present) */
 /* tools/hooks.json "shadow:NAME": run the function in the interpreter first (writes undone), then
  * compare the lifted run's registers and memory against it (runtime/core/interp.c). */

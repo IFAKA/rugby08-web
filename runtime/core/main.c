@@ -14,6 +14,7 @@ char rt_audio_capture_path[1024]; /* --audio-capture PATH: WAV of the mixed audi
 int rt_log_input;
 char rt_shot_path[1024];          /* set by the input replay's `shot` events (d3d8 Present writes it) */
 char rt_replay_path[1024];        /* --replay PATH: scripted key input (tests/replays/) */
+int rt_replay_live;               /* --replay-live PATH: same script, but visible window and real input (play.sh --menu) */
 
 void rt_log_open(const char *path);
 void rt_mem_init(void);
@@ -61,6 +62,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) snprintf(rt_screenshot_path, sizeof rt_screenshot_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--audio-capture") && i + 1 < argc) snprintf(rt_audio_capture_path, sizeof rt_audio_capture_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--replay") && i + 1 < argc) snprintf(rt_replay_path, sizeof rt_replay_path, "%s", argv[++i]);
+        else if (!strcmp(argv[i], "--replay-live") && i + 1 < argc) { snprintf(rt_replay_path, sizeof rt_replay_path, "%s", argv[++i]); rt_replay_live = 1; }
         else if (!strcmp(argv[i], "--log-input")) rt_log_input = 1;
         else if (!strcmp(argv[i], "-v")) rt_verbose = 1;
         else if (!strncmp(argv[i], "--", 2)) { /* platform options are parsed by rt_platform_init */ }

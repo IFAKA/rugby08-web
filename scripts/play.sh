@@ -6,7 +6,15 @@
 # Game log: logs/play-<time>.log per run (logs/play.log links to the newest).
 cd "$(dirname "$0")/.." || exit 1
 MUTE_ENV=
-if [ "$1" = --mute ]; then shift; MUTE_ENV=SDL_AUDIODRIVER=dummy; fi
+MENU_ARGS=
+for a in "$@"; do
+  case "$a" in
+    --mute) MUTE_ENV=SDL_AUDIODRIVER=dummy;;
+    --menu) MENU_ARGS="--replay-live $PWD/tests/replays/skip_to_menu.txt";;   # skip intro + title, land on the main menu
+    *) set -- "$@" "$a";;
+  esac
+  shift
+done
 # Always bring the build up to date (a no-op when nothing changed): the app bundle below is a copy,
 # and a stale copy reopened from Finder runs old code.
 if [ -d build/native ]; then cmake --build build/native -j >logs/play_build.log 2>&1 || { echo "play: build failed (logs/play_build.log)"; exit 1; }
@@ -55,4 +63,4 @@ exec open -n ${MUTE_ENV:+--env "$MUTE_ENV"} "$APP" --args \
     --exe "$ROOT/Rugby08_unpacked.exe" \
     --game-dir "$ROOT/Game Files" \
     --user-dir "$ROOT/userdata" \
-    --log "$ROOT/$LOG" --log-input "$@"
+    --log "$ROOT/$LOG" --log-input $MENU_ARGS "$@"
