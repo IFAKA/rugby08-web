@@ -275,3 +275,9 @@ Next: `./init.sh next` shows what to fix.
 - Shadows over players: d3d9-webgl reset two stencil ops whenever one was set and ignored the masks. The game marks players stencil 2 and draws flattened-mesh shadows where stencil < 1 (then 1), so the fix also stops the 4 light shadows stacking.
 - Black ball: not IrradBlock (0x72B7C0 is a red herring). LightingInstance (0x6D0140) scales its IrradLight by a byte shadow map sampled under the object (0x6E4DF0). The map is rendered at stadium load into a 256x256 target and copied out with CopyRects (0x6E3549); our CopyRects copied the never-filled guest shadow, so the map was all zero. Now read back from GL.
 - Next: pixel-shader path (RT_PS_CAPS=1) still renders players black; recheck now that the map is filled. Vertex shader #59 link failure.
+
+## 2026-10-11 (night) — code review fixes (built, native.smoke/menu PASS, not playtested)
+- SetGammaRamp was stored and never applied: now plat_set_gamma -> SDL_SetWindowGammaRamp (native only); trace line "SetGammaRamp" in play logs shows what the game sets.
+- IDirect3DDevice9::Reset in d3d9-webgl was a no-op, so the game's Reset 1280x1024 (seen in play logs) left the backend at the CreateDevice size. It now updates logical size, window, back buffer surface, viewport, scissor; the D3D8 layer resets rt to the back buffer and resizes its wrapper.
+- Dead paths (never hit in 50 play logs): CopyRects/LockRect on render targets. Left alone.
+- Next: playtest brightness + options resolution change.
