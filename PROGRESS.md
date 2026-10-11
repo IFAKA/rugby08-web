@@ -318,3 +318,9 @@ Next: `./init.sh next` shows what to fix.
 ## 2026-10-11 (night 4) — grey band / stadium overlap: D3D clip-space z not remapped (built, native.menu PASS, not playtested)
 - Found by reading d3d9-webgl: gl_Position used the D3D projection as is. D3D clips z to [0,w], GL to [-w,w], so geometry nearer than the near plane (low POV camera, big stadium/pitch polygons) was not clipped and drew in front of everything. Fix: gl_Position.z = z*2 - w in the fixed-function VS and in the MojoShader-translated VS (MOJOSHADER_DEPTH_CLIPPING was never defined). Submodule d3d9-webgl edit, uncommitted.
 - Next: user checks POV camera for the grey band; if it remains, trace draws (RT_TRACE_DRAWS_FRAME) on a frame that shows it.
+
+## 2026-10-12 — online mode (branch `online`, worktree ../rugby08-online)
+- Deterministic mode (runtime/core/det.c, RT_DET=1): one virtual clock for every guest-visible time source; one guest thread runs at a time, hand-overs decided by guest state + virtual time only; host input crosses only at Present; guest never sees the host window/desktop/cursor. Polling (32 clock reads <64 calls apart) and long stalls (>256 slices without Present) advance time; ordinary match frames are exactly 1/60 s.
+- Netplay (runtime/core/netplay.c): lockstep from boot, inputs for frame f+delay, incremental state hash (one 1/120 slice per frame) exchanged every 120 frames, DESYNC stops both. Virtual DirectInput pads (Logitech DualAction per controltypes.csv; game reads sticks only, d-pad mapped to the stick). server/main.go: stdlib relay (rooms, lobby, COOP/COEP static, password). Web lobby in platform/web/shell.html.
+- Checks: net.det_synctest, net.det_chaos, net.lockstep (1v1 into a match), net.desync_detect, net.web_lockstep all PASS. Browser vs native cross-play desyncs (different builds): online is browser-to-browser.
+- Next: per-player camera (render-side view correction), live-input check in a real browser, deployment notes.

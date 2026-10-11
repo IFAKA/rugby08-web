@@ -94,6 +94,7 @@ void det_set_deadline_fn(uint64_t (*fn)(void));   /* extra wake-up time (timers)
 void det_on_frame(det_frame_fn fn);   /* called first at each det_frame, in registration order */
 void det_frame(uint32_t frame);       /* Present */
 uint64_t det_hash(void);
+int det_hash_step(uint32_t frame, uint32_t parts, uint64_t *out);   /* incremental: 1 + hash at a cycle end */
 void rt_thread_tls_set_all(uint32_t slot, uint32_t v);   /* TLS slot of every thread (TlsFree clears it) */
 extern RECOMP_TLS uint32_t rt_last_error;
 

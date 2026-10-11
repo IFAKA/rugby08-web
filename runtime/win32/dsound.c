@@ -87,11 +87,27 @@ static void mix_buffer(dsbuf_t *b, float *out, int frames) {
     }
 }
 
+/* Deterministic mode: the speakers follow the cursor the guest sees (virtual time, vpos). A buffer more
+ * than 50 ms ahead of it waits in silence (virtual time stalls while netplay waits for a player); one
+ * more than 50 ms behind jumps forward. Read-only: the host audio thread never changes guest state. */
+static int det_follow(dsbuf_t *b) {
+    if (!b->vplaying) return 0;
+    uint32_t n = b->block ? b->size / b->block : 0, rate = b->freq ? b->freq : b->rate;
+    if (!n) return 0;
+    uint64_t p = b->vpos0 + (det_now_ns() - b->vt0) * (uint64_t)rate / 1000000000ull;
+    if (p >= n) { if (!b->looping) return 0; p %= n; }
+    double d = b->pos - (double)p, lim = rate * 0.05;
+    if (b->looping) { if (d > n / 2.0) d -= n; else if (d < -(n / 2.0)) d += n; }
+    if (d > lim) return 0;
+    if (d < -lim) b->pos = (double)p;
+    return 1;
+}
+
 static void mix(float *out, int frames) {
     memset(out, 0, sizeof(float) * 2 * (size_t)frames);
     pthread_mutex_lock(&g_mu);
     for (dsbuf_t *b = g_bufs; b; b = b->next)
-        if (b->playing && (b != g_primary || g_coop == DSSCL_WRITEPRIMARY)) mix_buffer(b, out, frames);
+        if (b->playing && (b != g_primary || g_coop == DSSCL_WRITEPRIMARY) && (rt_det != 1 || det_follow(b))) mix_buffer(b, out, frames);
     pthread_mutex_unlock(&g_mu);
     for (int i = 0; i < 2 * frames; i++) out[i] = out[i] > 1.0f ? 1.0f : out[i] < -1.0f ? -1.0f : out[i];
 }

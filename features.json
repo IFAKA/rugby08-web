@@ -304,6 +304,52 @@
       "desc": "The game's own CRT math (atan2 0x873250, exp 0x874C90 -- both through the fxam-classifying transcendental dispatcher) matches host libm within 1e-12 over a sign/zero/quadrant grid, evaluated at WinMain (RT_SELFTEST_CRT, runtime/core/log.c). Guards the 8-bit sar lift (atan2 returned x for y=0, the run direction was wrong).",
       "check": "RT_SELFTEST_CRT=1 SDL_AUDIODRIVER=dummy timeout 120 build/native/rugby08 --frames 10 --log logs/selftest_crt.log 2>&1 | grep -q \"crt selftest: .* 0 wrong -> PASS\"",
       "passes": true
+    },
+    {
+      "id": "net.det_synctest",
+      "deps": [
+        "native.menu"
+      ],
+      "desc": "Deterministic mode: two native runs of play_now_match.txt (RT_DET=1) are state-hash identical at every 300th frame up to frame 15000 (into a match).",
+      "check": "tools/det_synctest.sh --frames 15000 --every 300 --timeout 1800",
+      "passes": true
+    },
+    {
+      "id": "net.det_chaos",
+      "deps": [
+        "net.det_synctest"
+      ],
+      "desc": "Deterministic mode ignores host timing: random host delays at every guest thread hand-over (RT_DET_CHAOS) leave the state hashes unchanged.",
+      "check": "tools/det_synctest.sh --frames 6000 --every 300 --timeout 1200 --chaos",
+      "passes": true
+    },
+    {
+      "id": "net.lockstep",
+      "deps": [
+        "net.det_synctest"
+      ],
+      "desc": "Netplay 1v1 over the relay server (server/): two native instances, each driving its own virtual pad, Scotland v New Zealand from Team Select into the match; equal state hashes over 15000 frames.",
+      "check": "tools/net_test.sh --frames 15000 --timeout 1500",
+      "passes": true
+    },
+    {
+      "id": "net.desync_detect",
+      "deps": [
+        "net.lockstep"
+      ],
+      "desc": "A desync is detected: one flipped guest byte on one instance (RT_NET_FAULT) stops both with a DESYNC report.",
+      "check": "! FAULT=500 tools/net_test.sh --frames 1500 --timeout 400 && grep -q DESYNC logs/net_out1.log && grep -q DESYNC logs/net_out2.log",
+      "passes": true
+    },
+    {
+      "id": "net.web_lockstep",
+      "deps": [
+        "net.lockstep",
+        "web.smoke"
+      ],
+      "desc": "Netplay in the browser: two headless Chromium pages join one room through the relay (?net=auto) and keep equal state hashes.",
+      "check": "tools/net_web_test.sh --hashes 4 --timeout 600",
+      "passes": true
     }
   ]
 }

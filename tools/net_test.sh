@@ -25,7 +25,7 @@ run() {   # $1 player number, $2 replay
 }
 run 1 "$P1" & A=$!
 sleep 0.3
-run 2 "$P2" & B=$!
+RT_NET_FAULT=${FAULT:-} run 2 "$P2" & B=$!
 wait $A; RA=$?; wait $B; RB=$?
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
 grep '^netplay: frame' logs/net_out1.log > logs/net_hash1.txt; grep '^netplay: frame' logs/net_out2.log > logs/net_hash2.txt

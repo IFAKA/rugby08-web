@@ -72,13 +72,16 @@ static void check_hashes(uint32_t frame) {
 
 /* det_frame hook: runs first at every Present. */
 static void net_frame(uint32_t frame) {
+    static long fault = -2;   /* RT_NET_FAULT=F (tests): flip one guest byte at frame F, a desync to detect */
+    if (fault == -2) { const char *e = getenv("RT_NET_FAULT"); fault = e ? atol(e) : -1; }
+    if ((long)frame == fault) wr8(RT_HEAP_LO + 0x100, (uint8_t)(rd8(RT_HEAP_LO + 0x100) ^ 0x5A));
     plat_local_pad(&g_local);   /* live devices (no-op in replay runs: replay events already set g_local) */
     uint8_t m[18];
     m[0] = 'I'; m[1] = (uint8_t)g_slot; put32(m + 2, frame + (uint32_t)g_delay); memcpy(m + 6, &g_local, sizeof g_local);
     store_input(g_slot, frame + (uint32_t)g_delay, &g_local);
     net_tx_send(m, sizeof m, 0);
-    if (frame > 0 && frame % NET_HASH_EVERY == 0) {   /* the state the inputs of this frame act on */
-        uint64_t h = det_hash();
+    uint64_t h;
+    if (det_hash_step(frame, NET_HASH_EVERY, &h)) {   /* frames frame-119..frame, one slice each */
         uint8_t hm[14];
         hm[0] = 'H'; hm[1] = (uint8_t)g_slot; put32(hm + 2, frame);
         for (int i = 0; i < 8; i++) hm[6 + i] = (uint8_t)(h >> (8 * i));
@@ -102,7 +105,7 @@ static void net_frame(uint32_t frame) {
     if (waited >= 20) net_tx_status(0);
     pump(0);
     for (int i = 0; i < g_players; i++) rt_pads[i] = g_in[frame % RING][i].pad;
-    if (frame >= NET_HASH_EVERY) check_hashes(frame - NET_HASH_EVERY);
+    if (frame >= 2 * NET_HASH_EVERY && frame % NET_HASH_EVERY == NET_HASH_EVERY - 1) check_hashes(frame - NET_HASH_EVERY);
 }
 
 /* --net URL --net-room CODE [--net-players N] [--net-name NAME] [--net-delay D]: join the room

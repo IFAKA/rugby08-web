@@ -202,6 +202,32 @@ uint64_t det_hash(void) {
     return h;
 }
 
+/* Incremental hash (netplay): the guest state, as laid out at the cycle's first frame, is cut into
+ * `parts` slices and slice frame % parts is hashed at that frame, so no frame pays for the whole
+ * state. Returns 1 with the cycle's hash at its last frame. Same frames, same slices on every
+ * instance: equal results iff the instances agree. */
+int det_hash_step(uint32_t frame, uint32_t parts, uint64_t *out) {
+    static uint64_t h;
+    static uint32_t lo[3], hi[3], total;
+    uint32_t k = frame % parts;
+    if (k == 0) {
+        lo[0] = RT_IMAGE_BASE; hi[0] = RT_IMAGE_END; lo[1] = RT_STACK0_LO; hi[1] = RT_STACK0_HI;
+        lo[2] = RT_HEAP_LO; hi[2] = rt_heap_top();
+        total = 0; for (int r = 0; r < 3; r++) total += hi[r] - lo[r];
+        h = 0xCBF29CE484222325ull;
+    } else if (!total) return 0;   /* joined mid-cycle */
+    uint32_t chunk = ((total + parts - 1) / parts + 7) & ~7u, from = k * chunk, to = from + chunk > total ? total : from + chunk;
+    for (int r = 0, base = 0; r < 3 && from < to; base += (int)(hi[r] - lo[r]), r++) {
+        uint32_t a = from > (uint32_t)base ? from - (uint32_t)base : 0, b = to - (uint32_t)base;
+        uint32_t size = hi[r] - lo[r];
+        if (a >= size || to <= (uint32_t)base) continue;
+        if (b > size) b = size;
+        h = hash_range(h, lo[r] + a, lo[r] + b);
+    }
+    if (k + 1 == parts) { *out = h; total = 0; return 1; }
+    return 0;
+}
+
 /* RT_DET_HASH=N: "det: frame F hash H" every N frames. RT_DET_PAGES=F: page hashes at frame F
  * (one line per 64 KiB page) to locate the first difference between two runs. */
 static void hash_frame(uint32_t frame) {
