@@ -187,7 +187,7 @@ int plat_gl_create(void) {
     g_gl = SDL_GL_CreateContext(g_win);
     if (!g_gl) { rt_log("SDL_GL_CreateContext: %s", SDL_GetError()); return -1; }
     SDL_GL_MakeCurrent(g_win, g_gl);
-    { const char *vs = getenv("RT_VSYNC"); SDL_GL_SetSwapInterval(vs ? atoi(vs) : 1); }   /* RT_VSYNC=0: the frame pacer alone times the frames */
+    { const char *vs = getenv("RT_VSYNC"); SDL_GL_SetSwapInterval(vs ? atoi(vs) : 0); }   /* the frame pacer times the frames: a vsync-blocking swap on top quantized slow scenes to 30 fps (RT_VSYNC=1 restores it) */
 #ifndef __EMSCRIPTEN__
     void (*gen)(int, unsigned *) = (void (*)(int, unsigned *))SDL_GL_GetProcAddress("glGenVertexArrays");
     void (*bind)(unsigned) = (void (*)(unsigned))SDL_GL_GetProcAddress("glBindVertexArray");
