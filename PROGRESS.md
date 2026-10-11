@@ -281,3 +281,9 @@ Next: `./init.sh next` shows what to fix.
 - IDirect3DDevice9::Reset in d3d9-webgl was a no-op, so the game's Reset 1280x1024 (seen in play logs) left the backend at the CreateDevice size. It now updates logical size, window, back buffer surface, viewport, scissor; the D3D8 layer resets rt to the back buffer and resizes its wrapper.
 - Dead paths (never hit in 50 play logs): CopyRects/LockRect on render targets. Left alone.
 - Next: playtest brightness + options resolution change.
+
+## 2026-10-11 (night 2) — shim fixes from code review (built; smoke/menu/audio PASS; not playtested)
+- Handles: DuplicateHandle now makes a real second handle (h_dup, refcounted; CloseHandle closes a file's fd only with the last one); Create{Event,Mutex,Semaphore}A on an existing name return the shared object + ERROR_ALREADY_EXISTS (h_open_named).
+- TlsFree clears the slot in every thread's TEB (thread.c keeps a TIB list); freeing an unallocated slot fails as on Windows.
+- recomp_miss dedup is a hash set (was a 65k linear scan under a mutex per call).
+- Caps/Num Lock toggle state reaches GetKeyState/GetKeyboardState; display mode list includes the desktop size.
