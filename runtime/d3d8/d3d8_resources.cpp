@@ -1,6 +1,8 @@
 // d3d8_resources.cpp -- textures, surfaces, vertex/index buffers, and the device methods that
 // create or copy them. The guest writes into shadows in guest memory (Lock returns guest VAs);
 // Unlock uploads the shadow to d3d9-webgl, converting formats it does not handle.
+#include <GLES3/gl3.h>
+#include <vector>
 #include "d3d8_int.hpp"
 #include <algorithm>
 #include <cstring>
@@ -101,9 +103,40 @@ static uint32_t new_texture(Obj *dev, uint32_t w, uint32_t h, uint32_t levels, u
 }
 
 // Lock a texture level: the guest gets its shadow (allocated on first use).
+// A render-target texture's pixels live on the GPU: copy them into the guest shadow so a lock reads
+// what was drawn (D3D returns the rendered surface). The game renders each stadium's shadow map
+// into a 256x256 target and reads it back; an empty read made every lit object fully shadowed.
+// Rows need no flip: d3d9-webgl draws into targets Y-flipped, so GL row 0 is the D3D top row.
+static void readback_level(Obj *t, uint32_t l) {
+    if (!(t->usage & 1u) || !t->host || compressed(t->fmt)) return;      // D3DUSAGE_RENDERTARGET
+    GLuint tex = d3d9w_texture_gl(d3d8_texture9(t));
+    if (!tex) return;
+    uint32_t w = std::max(1u, t->w >> l), h = std::max(1u, t->h >> l), b = bpp(t->fmt) / 8;
+    GLint prev = 0; glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev);
+    GLuint fbo = 0; glGenFramebuffers(1, &fbo); glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, (GLint)l);
+    std::vector<uint8_t> px((size_t)w * h * 4);
+    bool ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (ok) glReadPixels(0, 0, (GLsizei)w, (GLsizei)h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev); glDeleteFramebuffers(1, &fbo);
+    if (!ok) return;
+    uint8_t *dst = (uint8_t *)G2H(t->lvl_shadow[l]);
+    uint32_t pitch = t->lvl_pitch[l];
+    for (uint32_t y = 0; y < h; y++)
+        for (uint32_t x = 0; x < w; x++) {
+            const uint8_t *p = &px[((size_t)y * w + x) * 4];
+            uint8_t *d = dst + y * pitch + x * b;
+            if (b == 4) { d[0] = p[2]; d[1] = p[1]; d[2] = p[0]; d[3] = p[3]; }          // A8R8G8B8 / X8R8G8B8
+            else if (b == 2) { uint16_t v = t->fmt == 23 ? (uint16_t)((p[0] >> 3) << 11 | (p[1] >> 2) << 5 | p[2] >> 3)        // R5G6B5
+                                                         : (uint16_t)((p[3] >> 7) << 15 | (p[0] >> 3) << 10 | (p[1] >> 3) << 5 | p[2] >> 3);
+                               memcpy(d, &v, 2); }
+        }
+}
+
 static uint32_t lock_level(Obj *t, uint32_t l, uint32_t lr, uint32_t rect) {
     if (l >= t->levels) return D3DERR_INVALIDCALL_;
     if (!t->lvl_shadow[l]) t->lvl_shadow[l] = gcalloc(t->lvl_size[l]);
+    readback_level(t, l);
     uint32_t off = 0, pitch = t->lvl_pitch[l];
     if (rect) {
         uint32_t x = rd32(rect), y = rd32(rect + 4);
@@ -235,6 +268,7 @@ extern "C" HLE_D3D(IDirect3DDevice8, CopyRects) {   // (this, src, srcRects, cou
     if (!src || !dst || src->fmt != dst->fmt) return D3DERR_INVALIDCALL_;
     if ((src->host && !src->parent) || (dst->host && !dst->parent)) { d3d8_unimpl("CopyRects(render target)", 0); return D3D_OK_; }
     uint32_t sp, dp, sb = surface_bits(src, &sp), db = surface_bits(dst, &dp);
+    if (src->parent) readback_level(src->parent, src->level);   // a render-target texture: copy what was drawn
     bool c = compressed(src->fmt);
     uint32_t unit = c ? (src->fmt == D3DFMT_DXT1 ? 8 : 16) : bpp(src->fmt) / 8, div = c ? 4 : 1;
     uint32_t n = a[2] ? a[3] : 1;
