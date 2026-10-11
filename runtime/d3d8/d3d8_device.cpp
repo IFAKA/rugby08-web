@@ -29,6 +29,8 @@ struct DevState {
     uint32_t vshader = 0, rt = 0, zs = 0, backbuffer = 0, focus = 0;
     uint32_t gamma[3 * 256] = {};
     float vsc[96][4] = {};               // vertex shader constants (D3D8: 96 registers)
+    float psc[8][4] = {};                // pixel shader constants (ps.1.x: 8 registers)
+    uint32_t pshader = 0;                // SetPixelShader handle
     uint32_t frame = 0;
 };
 
@@ -71,6 +73,8 @@ void d3d8_device_init(Obj *dev, uint32_t focus_hwnd) {
 extern "C" {
 
 // ---- device lifetime / info -----------------------------------------------------------------
+static int g_trace_vsc;   // RT_TRACE_DRAWS_FRAME is on for this frame: print vertex shader constants
+
 HLE_D3D(IDirect3DDevice8, TestCooperativeLevel) { (void)a; return D3D_OK_; }
 HLE_D3D(IDirect3DDevice8, GetAvailableTextureMem) { (void)a; return 512u << 20; }
 HLE_D3D(IDirect3DDevice8, ResourceManagerDiscardBytes) { (void)a; return D3D_OK_; }
@@ -163,9 +167,25 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
         exit(0);
     }
     if (rt_shot_path[0]) { save_frame_png(o, rt_shot_path); rt_shot_path[0] = 0; }
-    {   // RT_TRACE_DRAWS_FRAME=N: the backend prints every draw of frame N (the one after this Present)
-        static long want = getenv("RT_TRACE_DRAWS_FRAME") ? atol(getenv("RT_TRACE_DRAWS_FRAME")) : -1;
-        if (want >= 0) d3d9w_trace_draws((long)s->frame + 1 == want);
+    {   // RT_TRACE_DRAWS_FRAME=N or A-B/S: the backend prints every draw of frame N (the one after this
+        // Present), or of every S-th frame from A to B, each with a screenshot logs/trace_frames/fN.png
+        static long from = -2, to, step = 1;
+        if (from == -2) {
+            const char *e = getenv("RT_TRACE_DRAWS_FRAME");
+            from = -1;
+            if (e && sscanf(e, "%ld-%ld/%ld", &from, &to, &step) < 2) { to = from; step = 1; }
+            if (step < 1) step = 1;
+        }
+        long f = (long)s->frame;
+        if (from >= 0 && f >= from && f <= to && (f - from) % step == 0 && from != to) {
+            char p[64]; snprintf(p, sizeof p, "logs/trace_frames/f%ld.png", f);
+            save_frame_png(o, p);
+        }
+        long next = f + 1;
+        int on = from >= 0 && next >= from && next <= to && (next - from) % step == 0;
+        if (on) printf("trace frame %ld\n", next);
+        if (from >= 0) d3d9w_trace_draws(on);
+        g_trace_vsc = on;
     }
     plat_gl_swap();
 #ifdef __EMSCRIPTEN__
@@ -268,6 +288,24 @@ HLE_D3D(IDirect3DDevice8, GetMaterial) { memcpy(G2H(a[1]), &S(a)->mat, 68); retu
 
 HLE_D3D(IDirect3DDevice8, SetLight) {
     D3DLIGHT9 l; memcpy(&l, G2H(a[2]), 104);
+    {   // RT_LOG_LIGHTS=F: the first 64 SetLight calls from presented frame F with their colours and the caller's return address
+        static int n; static long from = getenv("RT_LOG_LIGHTS") ? atol(getenv("RT_LOG_LIGHTS")) : -1;
+        int on = from >= 0 && (long)rt_present_frame >= from;
+        if (on && n++ < 64)
+            rt_log("SetLight %u type %d diffuse %.3f,%.3f,%.3f ambient %.3f,%.3f,%.3f dir %.2f,%.2f,%.2f from 0x%08X (light at 0x%08X)",
+                   a[1], (int)l.Type, l.Diffuse.r, l.Diffuse.g, l.Diffuse.b, l.Ambient.r, l.Ambient.g, l.Ambient.b,
+                   l.Direction.x, l.Direction.y, l.Direction.z, a[-1], a[2]);
+        if (on && a[1] == 0 && n < 64) {   // the scene lighting object the game copies them from (0x772CA6)
+            uint32_t list = rd32(0xA619C4), cur = rd32(0xA619C0), idx = cur ? rd32(cur + 4) : 0;
+            uint32_t obj = list ? rd32(list + idx * 8 + 4) : 0;
+            char buf[1024]; int k = 0;
+            for (uint32_t o = 0; obj && o < 0x80; o += 4) {
+                float f; uint32_t v = rd32(obj + o); memcpy(&f, &v, 4);
+                k += snprintf(buf + k, sizeof buf - k, " +%02X=%g", o, f);
+            }
+            rt_log("  lighting object list=0x%08X cur=0x%08X idx=%u obj=0x%08X:%s", list, cur, idx, obj, buf);
+        }
+    }
     S(a)->lights[a[1]] = l;
     D(a)->SetLight(a[1], &l);
     return D3D_OK_;
@@ -438,6 +476,9 @@ HLE_D3D(IDirect3DDevice8, SetVertexShaderConstant) {   // (this, Register, pCons
     DevState *s = S(a);
     for (uint32_t i = 0; i < a[3] && a[1] + i < 96; i++)
         for (int k = 0; k < 4; k++) { uint32_t u = rd32(a[2] + 16 * i + 4 * (uint32_t)k); memcpy(&s->vsc[a[1] + i][k], &u, 4); }
+    if (g_trace_vsc)
+        for (uint32_t i = 0; i < a[3] && a[1] + i < 96; i++)
+            printf("vsc c%u = %g %g %g %g\n", a[1] + i, s->vsc[a[1] + i][0], s->vsc[a[1] + i][1], s->vsc[a[1] + i][2], s->vsc[a[1] + i][3]);
     return D3D_OK_;
 }
 
@@ -474,7 +515,40 @@ HLE_D3D(IDirect3DDevice8, SetVertexShader) {  // FVF codes, or a handle from Cre
     return D3D_OK_;
 }
 HLE_D3D(IDirect3DDevice8, GetVertexShader) { wr32(a[1], S(a)->vshader); return D3D_OK_; }
-HLE_D3D(IDirect3DDevice8, SetPixelShader) { if (a[1]) d3d8_unimpl("SetPixelShader(nonzero)", 0); return D3D_OK_; }
+// Pixel shaders (reported in the caps with RT_PS_CAPS=1 while they are being verified): ps.1.x
+// through MojoShader, run by d3d9-webgl in place of the fixed-function texture stages.
+static std::vector<Ps8 *> g_ps;   // handle - 1
+HLE_D3D(IDirect3DDevice8, CreatePixelShader) {   // (this, pFunction, pHandle)
+    Ps8 *p = new Ps8;
+    int id = (int)g_ps.size() + 1;
+    if (a[1]) ps8_translate(a[1], p, id);
+    g_ps.push_back(p);
+    wr32(a[2], (uint32_t)id);
+    return D3D_OK_;
+}
+HLE_D3D(IDirect3DDevice8, DeletePixelShader) { (void)a; return D3D_OK_; }
+HLE_D3D(IDirect3DDevice8, SetPixelShaderConstant) {   // (this, Register, pConstantData, ConstantCount)
+    DevState *s = S(a);
+    for (uint32_t i = 0; i < a[3] && a[1] + i < 8; i++)
+        for (int k = 0; k < 4; k++) { uint32_t u = rd32(a[2] + 16 * i + 4 * (uint32_t)k); memcpy(&s->psc[a[1] + i][k], &u, 4); }
+    return D3D_OK_;
+}
+HLE_D3D(IDirect3DDevice8, GetPixelShaderConstant) {
+    DevState *s = S(a);
+    for (uint32_t i = 0; i < a[3] && a[1] + i < 8; i++)
+        for (int k = 0; k < 4; k++) { uint32_t u; memcpy(&u, &s->psc[a[1] + i][k], 4); wr32(a[2] + 16 * i + 4 * (uint32_t)k, u); }
+    return D3D_OK_;
+}
+HLE_D3D(IDirect3DDevice8, SetPixelShader) {   // (this, handle): 0 = fixed-function stages
+    DevState *s = S(a);
+    s->pshader = a[1];
+    if (!a[1] || a[1] > g_ps.size()) { d3d9w_progps_use(nullptr, nullptr); return D3D_OK_; }
+    D3D9WProgPS *gl = ps8_gl(g_ps[a[1] - 1], (int)a[1]);
+    if (!gl) d3d8_unimpl("SetPixelShader(GL program failed)", 0);
+    d3d9w_progps_use(gl, s->psc);
+    return D3D_OK_;
+}
+HLE_D3D(IDirect3DDevice8, GetPixelShader) { wr32(a[1], S(a)->pshader); return D3D_OK_; }
 
 // ---- draws -----------------------------------------------------------------------------------
 HLE_D3D(IDirect3DDevice8, DrawPrimitive) { D(a)->DrawPrimitive((D3DPRIMITIVETYPE)a[1], a[2], a[3]); return D3D_OK_; }

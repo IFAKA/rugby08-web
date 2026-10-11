@@ -172,7 +172,7 @@ HLE_D3D(IDirect3D8, CheckDeviceFormat) {      // (this, adapter, devtype, adapte
 HLE_D3D(IDirect3D8, CheckDeviceMultiSampleType) { return a[5] == 0 ? D3D_OK_ : D3DERR_NOTAVAILABLE_; }
 HLE_D3D(IDirect3D8, CheckDepthStencilMatch) { (void)a; return D3D_OK_; }
 
-// D3DCAPS8 (212 bytes): a fixed-function DX8 part, no vertex/pixel shaders (d3d9-webgl is FFP only).
+// D3DCAPS8 (212 bytes): a DX8 part with vertex shaders 1.1 and the fixed-function pixel pipeline.
 void d3d8_fill_caps(uint32_t p) {
     memset(G2H(p), 0, 212);
     auto d = [&](uint32_t off, uint32_t v) { wr32(p + off, v); };
@@ -202,7 +202,10 @@ void d3d8_fill_caps(uint32_t p) {
     d(160, 8); d(164, 1); d(168, 4); d(172, 0);
     f(176, 64.f);
     d(180, 0x000FFFFF); d(184, 0x00FFFFFF); d(188, 16); d(192, 255);
-    d(196, 0); d(200, 0); d(204, 0);       // no shaders
+    // vs.1.1 with 96 constants (MojoShader -> GLSL), no pixel shaders: a GeForce4 MX-class DX8 part.
+    // Reporting no vertex shaders sent the game down its fixed-function fallback for players.
+    d(196, 0xFFFE0101); d(200, 96); d(204, 0);
+    if (getenv("RT_PS_CAPS")) { d(204, 0xFFFF0104); f(208, 8.f); }   // experiment: ps.1.4 (see CreatePixelShader)
 }
 
 HLE_D3D(IDirect3D8, GetDeviceCaps) { if (a[1] != 0) return D3DERR_INVALIDCALL_; d3d8_fill_caps(a[3]); return D3D_OK_; }

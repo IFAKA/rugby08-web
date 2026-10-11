@@ -68,5 +68,14 @@ bool vs8_parse_decl(uint32_t decl_va, Vs8 *vs);
 bool vs8_translate(uint32_t func_va, Vs8 *vs, int id);
 D3D9WProgVS *vs8_gl(Vs8 *vs, int id);
 
+// A D3D8 pixel shader: MojoShader's GLSL ES 3.00 translation of its ps.1.x bytecode.
+struct Ps8 {
+    const MOJOSHADER_parseData *pd = nullptr;
+    D3D9WProgPS *gl = nullptr;           // compiled on first use
+    bool gl_tried = false;
+};
+bool ps8_translate(uint32_t func_va, Ps8 *ps, int id);
+D3D9WProgPS *ps8_gl(Ps8 *ps, int id);
+
 #define HLE_D3D(iface, method) uint32_t d3d8_##iface##_##method(const uint32_t *a)
 extern "C" uint32_t d3d8_IUnknown_Release(const uint32_t *a);

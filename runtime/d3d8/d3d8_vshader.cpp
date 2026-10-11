@@ -134,3 +134,52 @@ D3D9WProgVS *vs8_gl(Vs8 *vs, int id) {
            regs.size(), el.size());
     return vs->gl;
 }
+
+// ---- pixel shaders --------------------------------------------------------------------------
+// D3D8 ps.1.x bytecode is D3D9's for these versions (no declarations), so MojoShader takes it as is.
+bool ps8_translate(uint32_t func_va, Ps8 *ps, int id) {
+    uint32_t n = func_tokens(func_va);
+    if (!n) { rt_log("CreatePixelShader #%d: no end token", id); return false; }
+    std::vector<uint32_t> tok(n);
+    for (uint32_t i = 0; i < n; i++) tok[i] = rd32(func_va + 4 * i);
+    ps->pd = MOJOSHADER_parse(MOJOSHADER_PROFILE_GLSLES3, "main", (const unsigned char *)tok.data(),
+                              (unsigned)(tok.size() * 4), nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr);
+#ifndef __EMSCRIPTEN__
+    {
+        mkdir("logs/shaders", 0755);
+        char path[64];
+        snprintf(path, sizeof path, "logs/shaders/ps_%03d.glsl", id);
+        if (FILE *f = fopen(path, "w")) {
+            const MOJOSHADER_parseData *pd = ps->pd;
+            fprintf(f, "// version 0x%08X, %u tokens\n", tok[0], n);
+            for (int i = 0; i < pd->error_count; i++) fprintf(f, "// ERROR @%d: %s\n", pd->errors[i].error_position, pd->errors[i].error);
+            for (int i = 0; i < pd->uniform_count; i++)
+                fprintf(f, "// uniform %s type %d index %d count %d\n", pd->uniforms[i].name, pd->uniforms[i].type, pd->uniforms[i].index, pd->uniforms[i].array_count);
+            for (int i = 0; i < pd->sampler_count; i++)
+                fprintf(f, "// sampler %s index %d type %d\n", pd->samplers[i].name, pd->samplers[i].index, pd->samplers[i].type);
+            if (pd->output) fwrite(pd->output, 1, (size_t)pd->output_len, f);
+            fclose(f);
+        }
+    }
+#endif
+    if (ps->pd->error_count) {
+        rt_log("CreatePixelShader #%d: MojoShader: %s", id, ps->pd->errors[0].error);
+        return false;
+    }
+    return true;
+}
+
+D3D9WProgPS *ps8_gl(Ps8 *ps, int id) {
+    if (ps->gl_tried) return ps->gl;
+    ps->gl_tried = true;
+    const MOJOSHADER_parseData *pd = ps->pd;
+    if (!pd || pd->error_count || !pd->output) return nullptr;
+    std::vector<unsigned char> regs;
+    for (int i = 0; i < pd->uniform_count; i++)
+        if (pd->uniforms[i].type == MOJOSHADER_UNIFORM_FLOAT)
+            for (int k = 0; k < (pd->uniforms[i].array_count ? pd->uniforms[i].array_count : 1); k++)
+                regs.push_back((unsigned char)(pd->uniforms[i].index + k));
+    ps->gl = d3d9w_progps_create(pd->output, regs.data(), (int)regs.size());
+    rt_log("SetPixelShader #%d: %s (%zu constants, %d samplers)", id, ps->gl ? "compiled" : "FAILED", regs.size(), pd->sampler_count);
+    return ps->gl;
+}
