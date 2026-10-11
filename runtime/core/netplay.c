@@ -97,7 +97,9 @@ static void net_frame(uint32_t frame) {
         if (all) break;
         pump(waited ? 5 : 0);
         if (++waited % 2000 == 0) rt_trace("netplay: waiting for players at frame %u", frame);
+        if (waited == 20) net_tx_status(1);   /* ~0.1 s late: the page shows "waiting for..." */
     }
+    if (waited >= 20) net_tx_status(0);
     pump(0);
     for (int i = 0; i < g_players; i++) rt_pads[i] = g_in[frame % RING][i].pad;
     if (frame >= NET_HASH_EVERY) check_hashes(frame - NET_HASH_EVERY);
@@ -109,6 +111,8 @@ int rt_net_start(int argc, char **argv) {
     const char *url = NULL, *room = NULL, *name = "player";
     int players = 2, delay = 4;
     for (int i = 1; i + 1 < argc; i++) {
+        int s, p, d;   /* --net-session SLOT,PLAYERS,DELAY: the web lobby already connected and started */
+        if (!strcmp(argv[i], "--net-session") && sscanf(argv[i + 1], "%d,%d,%d", &s, &p, &d) == 3) return rt_net_begin(s, p, d);
         if (!strcmp(argv[i], "--net")) url = argv[++i];
         else if (!strcmp(argv[i], "--net-room")) room = argv[++i];
         else if (!strcmp(argv[i], "--net-players")) players = atoi(argv[++i]);

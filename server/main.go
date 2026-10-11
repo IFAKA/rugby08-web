@@ -42,6 +42,7 @@ type client struct {
 	room *room
 	slot int
 	name string
+	rtt  int // ms, as the client last measured it (lobby)
 }
 
 type room struct {
@@ -182,12 +183,12 @@ func newCode() string {
 }
 
 func (r *room) lobby() {
-	names := []string{}
+	names, rtts := []string{}, []int{}
 	for _, p := range r.players {
-		names = append(names, p.name)
+		names, rtts = append(names, p.name), append(rtts, p.rtt)
 	}
 	for _, p := range r.players {
-		p.send(map[string]any{"t": "lobby", "room": r.code, "players": names, "need": r.need})
+		p.send(map[string]any{"t": "lobby", "room": r.code, "players": names, "rtt": rtts, "need": r.need})
 	}
 }
 
@@ -207,6 +208,7 @@ type request struct {
 	Delay   int    `json:"delay"`
 	Auto    bool   `json:"auto"`
 	TS      any    `json:"ts"`
+	RTT     int    `json:"rtt"`
 }
 
 func (c *client) handle(req request) {
@@ -263,6 +265,11 @@ func (c *client) handle(req request) {
 		}
 	case "ping":
 		c.send(map[string]any{"t": "pong", "ts": req.TS})
+	case "rtt": // the client's measured round trip, shown in the lobby and used for the input delay
+		c.rtt = req.RTT
+		if c.room != nil && !c.room.started {
+			c.room.lobby()
+		}
 	}
 }
 

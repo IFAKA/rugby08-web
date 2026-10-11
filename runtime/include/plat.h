@@ -72,7 +72,8 @@ int rt_net_begin(int slot, int players, int delay);
 rt_pad_t *rt_net_local_pad(void);
 int  net_tx_open(const char *url);        /* 0 = connected */
 int  net_tx_send(const void *data, int len, int text);
-int  net_tx_recv(void *buf, int cap, int wait_ms);   /* >0 length, 0 none, -1 closed */   /* replay "pad N tap|down|up NAME"; 0 = unknown name */
+int  net_tx_recv(void *buf, int cap, int wait_ms);   /* >0 length, 0 none, -1 closed */
+void net_tx_status(int waiting_frames);   /* 0: running; >0: frames spent waiting for other players (UI) */   /* replay "pad N tap|down|up NAME"; 0 = unknown name */
 
 /* Input replay (--replay FILE, tests/replays/): lines "<frame> tap|down|up <SDL key name>", '#'
  * comments. Called once per presented frame; due events become ordinary SDL key events, so they

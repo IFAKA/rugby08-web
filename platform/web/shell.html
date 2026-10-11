@@ -2,114 +2,215 @@
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Emscripten-Generated Code</title>
-    <style>{{{ SHELL_CSS }}}</style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rugby 08</title>
+    <style>
+      :root { --bg:#0b1410; --panel:#13221b; --line:#25402f; --text:#eef5f0; --dim:#9db3a5; --accent:#3fbf6f; --warn:#e8b14a; --bad:#e5604d; }
+      * { box-sizing: border-box; }
+      html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      #stage { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+      canvas.emscripten { display:block; max-width:100vw; max-height:100vh; outline:none; background:#000; }
+      .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(5,10,8,.86); z-index:10; }
+      .overlay[hidden] { display:none; }
+      .card { width:min(460px, 92vw); background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:28px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+      h1 { margin:0 0 4px; font-size:28px; letter-spacing:.5px; } h2 { margin:0 0 16px; font-size:20px; }
+      .sub { color:var(--dim); margin:0 0 22px; font-size:14px; }
+      button { width:100%; padding:14px 16px; margin:6px 0; border-radius:10px; border:1px solid var(--line); background:#1a2e24; color:var(--text); font-size:16px; cursor:pointer; }
+      button:hover:not(:disabled) { border-color:var(--accent); }
+      button.primary { background:var(--accent); border-color:var(--accent); color:#06120b; font-weight:600; }
+      button:disabled { opacity:.45; cursor:default; }
+      button.link { background:none; border:none; color:var(--dim); width:auto; padding:8px 0; font-size:14px; }
+      input, select { width:100%; padding:12px 14px; margin:6px 0 12px; border-radius:10px; border:1px solid var(--line); background:#0e1a14; color:var(--text); font-size:16px; }
+      label { font-size:13px; color:var(--dim); }
+      .row { display:flex; gap:10px; } .row > * { flex:1; }
+      .code { font:600 34px/1 ui-monospace, Menlo, monospace; letter-spacing:6px; text-align:center; padding:14px; border:1px dashed var(--line); border-radius:10px; margin:8px 0 6px; }
+      ul.players { list-style:none; padding:0; margin:14px 0; } ul.players li { display:flex; justify-content:space-between; padding:10px 12px; border:1px solid var(--line); border-radius:8px; margin:6px 0; }
+      .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
+      .good { background:var(--accent); } .ok { background:var(--warn); } .slow { background:var(--bad); }
+      .hint { color:var(--dim); font-size:13px; margin-top:14px; }
+      .err { color:var(--bad); min-height:20px; font-size:14px; }
+      #badge { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:rgba(10,20,15,.9); border:1px solid var(--line); padding:8px 16px; border-radius:999px; z-index:5; font-size:14px; }
+      #badge[hidden] { display:none; }
+      #loading { color:var(--dim); font-size:14px; margin-top:10px; min-height:20px; }
+      kbd { background:#0e1a14; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:12px; }
+      #output { display:none; }
+    </style>
   </head>
   <body>
-    <a href="http://emscripten.org">{{{ SHELL_LOGO }}}</a>
+    <div id="stage"><canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas></div>
+    <div id="badge" hidden>Waiting for the other players…</div>
+    <textarea id="output"></textarea>
 
-    <div class="spinner" id='spinner'></div>
-    <div class="emscripten" id="status">Downloading...</div>
+    <div class="overlay" id="lobby">
+      <div class="card" id="screen-home">
+        <h1>Rugby 08</h1>
+        <p class="sub">Play on your own, or with friends online. Everyone keeps their own controls.</p>
+        <button class="primary" id="btn-solo" disabled>Play solo</button>
+        <button id="btn-online" disabled>Play online with friends</button>
+        <div id="loading">Loading the game…</div>
+      </div>
 
-    <span id='controls'>
-      <span><input type="checkbox" id="resize">Resize canvas</span>
-      <span><input type="checkbox" id="pointerLock" checked>Lock/hide mouse pointer &nbsp;&nbsp;&nbsp;</span>
-      <span><input type="button" value="Fullscreen" onclick="Module.requestFullscreen(document.getElementById('pointerLock').checked,
-                                                                                document.getElementById('resize').checked)">
-      </span>
-    </span>
+      <div class="card" id="screen-online" hidden>
+        <h2>Play online</h2>
+        <label for="name">Your name</label>
+        <input id="name" maxlength="16" placeholder="e.g. Facu">
+        <div class="row">
+          <div><label for="players">Players</label>
+            <select id="players"><option>2</option><option>3</option><option>4</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="primary" id="btn-host">Host a game</button></div>
+        </div>
+        <label for="code">Have a code from a friend?</label>
+        <div class="row"><input id="code" maxlength="6" placeholder="ABC123" style="text-transform:uppercase"><button id="btn-join" style="margin-top:6px">Join</button></div>
+        <div class="err" id="online-err"></div>
+        <button class="link" id="btn-back">← Back</button>
+      </div>
 
-    <div class="emscripten">
-      <progress value="0" max="100" id="progress" hidden=1></progress>
+      <div class="card" id="screen-room" hidden>
+        <h2 id="room-title">Your game</h2>
+        <label>Invite code</label>
+        <div class="code" id="room-code">——————</div>
+        <button id="btn-copy">Copy invite link</button>
+        <ul class="players" id="room-players"></ul>
+        <button class="primary" id="btn-start" disabled>Start match</button>
+        <div class="hint" id="room-hint"></div>
+        <div class="err" id="room-err"></div>
+        <div class="hint">Controls: <kbd>←↑→↓</kbd> run · <kbd>S</kbd> accept / pass · <kbd>A</kbd>/<kbd>D</kbd> pass left/right · <kbd>Space</kbd> sprint · <kbd>Esc</kbd> pause — or plug in a gamepad.</div>
+        <button class="link" id="btn-leave">← Leave</button>
+      </div>
+
+      <div class="card" id="screen-end" hidden>
+        <h2 id="end-title">Match ended</h2>
+        <p class="sub" id="end-text"></p>
+        <button class="primary" onclick="location.reload()">Back to the menu</button>
+      </div>
     </div>
 
-    <div class="emscripten_border">
-      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-    </div>
-    <textarea id="output" rows="8"></textarea>
-
-    <script type='text/javascript'>
-      var statusElement = document.getElementById('status');
-      var progressElement = document.getElementById('progress');
-      var spinnerElement = document.getElementById('spinner');
-      var canvasElement = document.getElementById('canvas');
-      var outputElement = document.getElementById('output');
-      if (outputElement) outputElement.value = ''; // clear browser cache
-
-      // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-      // application robust, you may want to override this behavior before shipping!
-      // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-      canvasElement.addEventListener('webglcontextlost', (e) => {
-        alert('WebGL context lost. You will need to reload the page.');
-        e.preventDefault();
-      }, false);
-
-      var setStatus = (text) => {
-        if (!setStatus.last) setStatus.last = { time: Date.now(), text: '' };
-        if (text === setStatus.last.text) return;
-        var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-        var now = Date.now();
-        // if this is a progress update, skip it if too soon
-        if (m && now - setStatus.last.time < 30) return;
-        setStatus.last.time = now;
-        setStatus.last.text = text;
-        if (m) {
-          text = m[1];
-          progressElement.value = parseInt(m[2])*100;
-          progressElement.max = parseInt(m[4])*100;
-          progressElement.hidden = false;
-          spinnerElement.hidden = false;
-        } else {
-          progressElement.value = null;
-          progressElement.max = null;
-          progressElement.hidden = true;
-          if (!text) spinnerElement.style.display = 'none';
-        }
-        statusElement.innerHTML = text;
-      };
-
-#if MODULARIZE && !EXPORT_ES6
-      var moduleArgs = {
-#else
+    <script type="text/javascript">
+      var $ = (id) => document.getElementById(id);
+      var screens = ['home', 'online', 'room', 'end'];
+      function show(name) { screens.forEach(s => $('screen-' + s).hidden = s !== name); $('lobby').hidden = false; }
       var tail = [];
+      var ready = false;
+
       var Module = {
-#endif
-        // the game traces thousands of lines: keep them out of the browser console (it logs every one,
-        // stderr as an error) unless the page is opened with ?log; the text box shows the latest 40
+        noInitialRun: true,
         print(...args) {
           var line = args.join(' ');
           if (/[?&]log\b/.test(location.search)) console.log(line);
-          if (outputElement) {
-            tail.push(line); if (tail.length > 40) tail.shift();
-            outputElement.value = tail.join("\n");
-            outputElement.scrollTop = outputElement.scrollHeight; // focus on bottom
-          }
+          tail.push(line); if (tail.length > 40) tail.shift();
         },
         printErr(...args) { Module.print(...args); },
-        canvas: canvasElement,
-        setStatus: setStatus,
+        canvas: $('canvas'),
+        setStatus(text) { if (!ready) $('loading').textContent = text ? text.replace(/\(.*\)/, '') : ''; },
         totalDependencies: 0,
-        monitorRunDependencies(left) {
-          this.totalDependencies = Math.max(this.totalDependencies, left);
-          setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
-        }
+        monitorRunDependencies(left) { this.totalDependencies = Math.max(this.totalDependencies, left); },
+        onRuntimeInitialized() {
+          ready = true;
+          $('loading').textContent = '';
+          $('btn-solo').disabled = $('btn-online').disabled = false;
+          var q = new URLSearchParams(location.search), room = q.get('room');
+          if (q.get('net') === 'auto' && room) {   // checks (tools/net_web_test.sh): join/create ROOM, start when full
+            $('name').value = q.get('name') || 'Player';
+            connect({ t: 'join', room, auto: true, players: +(q.get('players') || 2), delay: +(q.get('delay') || 4) });
+            return;
+          }
+          if (/[?&](solo|log)\b/.test(location.search)) { start([]); return; }   // checks (tools/web_check.sh) and direct links
+          if (room) { $('code').value = room.toUpperCase(); show('online'); }
+        },
+        onExit(code) {
+          var t = { 3: ['Out of sync', 'The games stopped agreeing with each other, so the match was stopped. Start a new one.'],
+                    4: ['A player left', 'Someone left the game or lost their connection.'] }[code] || ['Match ended', ''];
+          $('end-title').textContent = t[0]; $('end-text').textContent = t[1];
+          show('end');
+        },
+        rugbyNetStatus(waiting) { $('badge').hidden = !waiting; },
       };
-      setStatus('Downloading...');
-      window.onerror = window.onunhandledrejection = () => {
-        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
-        setStatus('Exception thrown, see JavaScript console');
-        spinnerElement.style.display = 'none';
-        setStatus = (text) => {
-          if (text) console.error('[post-exception status] ' + text);
+      $('canvas').addEventListener('webglcontextlost', (e) => { e.preventDefault(); Module.onExit(0); }, false);
+
+      function start(args) {
+        $('lobby').hidden = true;
+        $('canvas').focus();
+        Module.callMain(args);
+      }
+
+      // ---- online lobby (server/main.go protocol) ----
+      var net = null, me = { slot: -1, host: false }, lobby = { players: [], rtt: [], need: 2 }, rtt = 0;
+      $('name').value = localStorage.getItem('rugbyName') || '';
+      function connect(first) {
+        var name = $('name').value.trim() || 'Player';
+        localStorage.setItem('rugbyName', name);
+        $('online-err').textContent = '';
+        var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+        ws.binaryType = 'arraybuffer';
+        net = { ws, queue: [], closed: false, started: false };
+        ws.onopen = () => ws.send(JSON.stringify(Object.assign({ name }, first)));
+        ws.onclose = () => {
+          net.closed = true;
+          if (!net.started) { $('online-err').textContent = $('room-err').textContent = 'Lost the connection to the server.'; }
         };
+        ws.onmessage = (ev) => {
+          if (net.started) {   // the game reads everything (inputs, hashes, "left")
+            net.queue.push(typeof ev.data === 'string' ? new TextEncoder().encode(ev.data) : new Uint8Array(ev.data));
+            return;
+          }
+          if (typeof ev.data !== 'string') return;
+          var m = JSON.parse(ev.data);
+          if (m.t === 'error') { $('online-err').textContent = $('room-err').textContent = m.msg; return; }
+          if (m.t === 'joined') { me.slot = m.slot; me.host = m.host; show('room'); $('room-code').textContent = m.room; me.room = m.room; }
+          if (m.t === 'lobby') { lobby = m; renderRoom(); }
+          if (m.t === 'pong') {
+            var r = performance.now() - m.ts;
+            rtt = rtt ? Math.round(rtt * 0.7 + r * 0.3) : Math.round(r);
+            ws.send(JSON.stringify({ t: 'rtt', rtt }));
+          }
+          if (m.t === 'start') {
+            net.started = true;
+            Module.rugbyNet = net;
+            start(['--net-session', me.slot + ',' + m.players + ',' + m.delay]);
+          }
+        };
+        clearInterval(connect.timer);
+        connect.timer = setInterval(() => { if (ws.readyState === 1 && !net.started) ws.send(JSON.stringify({ t: 'ping', ts: performance.now() })); }, 1000);
+      }
+      function quality(ms) { return ms < 60 ? 'good' : ms < 140 ? 'ok' : 'slow'; }
+      function renderRoom() {
+        var ul = $('room-players'); ul.innerHTML = '';
+        for (var i = 0; i < lobby.need; i++) {
+          var li = document.createElement('li'), name = lobby.players[i];
+          if (name) {
+            var ms = lobby.rtt[i] || 0;
+            li.innerHTML = '<span>' + (i + 1) + '. ' + name.replace(/[<&]/g, '') + (i === me.slot ? ' (you)' : '') + (i === 0 ? ' · host' : '') +
+              '</span><span><span class="dot ' + quality(ms) + '"></span>' + (ms ? ms + ' ms' : '…') + '</span>';
+          } else li.innerHTML = '<span style="color:var(--dim)">' + (i + 1) + '. waiting for a friend…</span><span></span>';
+          ul.appendChild(li);
+        }
+        var n = lobby.players.length;
+        $('room-title').textContent = me.host ? 'Your game' : 'Joined ' + lobby.players[0] + "'s game";
+        $('btn-start').hidden = !me.host;
+        $('btn-start').disabled = n < 2;
+        $('room-hint').textContent = me.host ? (n < 2 ? 'Send the invite link to your friends.' : 'Everyone in? Start the match.')
+                                             : 'Waiting for ' + lobby.players[0] + ' to start the match.';
+      }
+      // Input delay: the two slowest players' one-way trips through the server, in 60 Hz frames, plus slack.
+      function inputDelay() {
+        var r = lobby.rtt.slice().sort((a, b) => b - a);
+        var oneWay = ((r[0] || 50) + (r[1] || 50)) / 2;
+        return Math.max(2, Math.min(20, Math.ceil(oneWay / 16.7) + 2));
+      }
+
+      $('btn-solo').onclick = () => start([]);
+      $('btn-online').onclick = () => show('online');
+      $('btn-back').onclick = () => show('home');
+      $('btn-host').onclick = () => connect({ t: 'host', players: +$('players').value });
+      $('btn-join').onclick = () => { var c = $('code').value.trim().toUpperCase(); if (c.length < 4) { $('online-err').textContent = 'Type the code your friend sent you.'; return; } connect({ t: 'join', room: c }); };
+      $('btn-start').onclick = () => net.ws.send(JSON.stringify({ t: 'start', delay: inputDelay() }));
+      $('btn-leave').onclick = () => { if (net) net.ws.close(); show('online'); };
+      $('btn-copy').onclick = () => {
+        var url = location.origin + location.pathname + '?room=' + me.room;
+        navigator.clipboard.writeText(url).then(() => { $('btn-copy').textContent = 'Link copied ✓'; setTimeout(() => $('btn-copy').textContent = 'Copy invite link', 2000); });
       };
+      show('home');
     </script>
     {{{ SCRIPT }}}
-#if MODULARIZE && !EXPORT_ES6
-    <script type='text/javascript'>
-      {{{ EXPORT_NAME }}}(moduleArgs);
-    </script>
-#endif
   </body>
 </html>

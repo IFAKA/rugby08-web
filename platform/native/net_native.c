@@ -52,6 +52,8 @@ int net_tx_open(const char *url) {   /* ws://host:port/path */
     return -1;
 }
 
+void net_tx_status(int waiting_frames) { (void)waiting_frames; }
+
 int net_tx_send(const void *data, int len, int text) {
     uint8_t h[14];
     int hn = 0;
