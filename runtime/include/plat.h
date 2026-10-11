@@ -30,6 +30,7 @@ int  plat_gl_create(void);                                   /* 0 = ok */
 void plat_gl_size(int *w, int *h);                           /* drawable size in pixels */
 void plat_gl_set_size(int w, int h);                         /* resize the window to w x h */
 void plat_gl_swap(void);
+void plat_set_gamma(const uint16_t *ramp);                   /* 3 x 256 WORDs (R, G, B), D3DGAMMARAMP layout */
 
 /* Next pending event as a WM_* message (hwnd filled in by user32). 1 = got one, 0 = none.
  * wait_ms > 0 blocks up to that long for the first event. */

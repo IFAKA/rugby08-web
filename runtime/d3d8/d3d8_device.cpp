@@ -104,7 +104,11 @@ HLE_D3D(IDirect3DDevice8, Reset) {
     rt_trace("IDirect3DDevice8::Reset %ux%u", pp.BackBufferWidth, pp.BackBufferHeight);
     dev9(o)->Reset(&pp);
     o->w = pp.BackBufferWidth; o->h = pp.BackBufferHeight;
+    DevState *s = o->dev;
     o->dev->vp = { 0, 0, o->w, o->h, 0.f, 1.f };
+    // Reset makes the back buffer the render target again, at its new size
+    if (Obj *bb = d3d8_obj(s->backbuffer)) { bb->w = o->w; bb->h = o->h; }
+    if (s->rt != s->backbuffer) { addref(s->backbuffer); release(s->rt); s->rt = s->backbuffer; }
     return D3D_OK_;
 }
 
@@ -204,6 +208,10 @@ HLE_D3D(IDirect3DDevice8, GetBackBuffer) {   // (this, index, type, ppSurface)
 HLE_D3D(IDirect3DDevice8, GetRasterStatus) { wr32(a[1], 0); wr32(a[1] + 4, 0); return D3D_OK_; }   // {InVBlank, ScanLine}
 HLE_D3D(IDirect3DDevice8, SetGammaRamp) {    // (this, flags, D3DGAMMARAMP*: 3 x 256 WORD)
     for (int i = 0; i < 768; i++) S(a)->gamma[i] = rd16(a[2] + 2u * (uint32_t)i);
+    uint16_t ramp[768];
+    for (int i = 0; i < 768; i++) ramp[i] = (uint16_t)S(a)->gamma[i];
+    plat_set_gamma(ramp);
+    rt_trace("SetGammaRamp flags=%u r[128]=%u r[255]=%u", a[1], S(a)->gamma[128], S(a)->gamma[255]);
     return 0;
 }
 HLE_D3D(IDirect3DDevice8, GetGammaRamp) { for (int i = 0; i < 768; i++) wr16(a[1] + 2u * (uint32_t)i, (uint16_t)S(a)->gamma[i]); return 0; }

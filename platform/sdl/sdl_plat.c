@@ -199,6 +199,15 @@ void plat_gl_size(int *w, int *h) {
     if (g_win) SDL_GL_GetDrawableSize(g_win, w, h);
 }
 
+void plat_set_gamma(const uint16_t *ramp) {
+#ifndef __EMSCRIPTEN__   /* the browser has no display gamma table */
+    if (g_win && SDL_SetWindowGammaRamp(g_win, ramp, ramp + 256, ramp + 512) != 0)
+        rt_log("plat: SetWindowGammaRamp: %s", SDL_GetError());
+#else
+    (void)ramp;
+#endif
+}
+
 void plat_gl_set_size(int w, int h) {
     if (g_win && w > 0 && h > 0) SDL_SetWindowSize(g_win, w, h);
 }

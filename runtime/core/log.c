@@ -86,9 +86,28 @@ static void probe_parse(void) {
         if (*e == ';') e++; else break;
     }
 }
+/* RT_PROBE_DUMP="VA:arg:len" with RT_PROBE_FRAMES: the first entry of VA in a presented frame dumps len
+ * bytes at the pointer in stack arg 0..2 (or ecx for arg 'e'): objects whose address varies per run. */
+static void probe_dump(uint32_t va, uint32_t f) {
+    static uint32_t dva, len, last_f = ~0u; static int arg = -2;
+    if (arg == -2) {
+        const char *e = getenv("RT_PROBE_DUMP"); arg = -1;
+        if (e) { char c = 0; if (sscanf(e, "%x:%c:%x", &dva, &c, &len) == 3) arg = c == 'e' ? 3 : c - '0'; }
+    }
+    if (arg < 0 || va != dva || f == last_f || f < g_probe_from || f > g_probe_to || f % 5) return;
+    last_f = f;
+    uint32_t a = arg == 3 ? g_ecx : rd32(g_esp + 4 + 4u * (uint32_t)arg);
+    rt_trace("dumpobj f%u at %08X", f, a);
+    for (uint32_t o = 0; o < len; o += 16) {
+        uint32_t w[4]; float fl[4];
+        for (int i = 0; i < 4; i++) { w[i] = rd32(a + o + 4u * (uint32_t)i); memcpy(&fl[i], &w[i], 4); }
+        rt_trace("dumpobj +%03X: %08X %08X %08X %08X | %g %g %g %g", o, w[0], w[1], w[2], w[3], fl[0], fl[1], fl[2], fl[3]);
+    }
+}
 static void probe_enter(uint32_t va) {
     if (g_nprobe < 0) probe_parse();
     uint32_t f = rt_present_frame;
+    probe_dump(va, f);
     if (f < g_probe_from || f > g_probe_to) return;
     for (int i = 0; i < g_nprobe; i++) if (g_probe[i].va == va) {
         char buf[400]; int o = snprintf(buf, sizeof buf, "probe %08X f%u ecx=%08X args %08X %08X %08X", va, f, g_ecx,
@@ -111,9 +130,26 @@ void recomp_trace_enter(uint32_t va) {
         g_cov[o >> 3] |= (uint8_t)(1u << (o & 7));
     }
 }
+/* RT_DUMP="hexaddr:hexlen@frame[,...]": at that presented frame write the guest memory range to the
+ * trace as one line per 16 bytes (hex dwords and the first float), for chasing object pointers. */
+static void dump_at(uint32_t frame) {
+    const char *e = getenv("RT_DUMP");
+    while (e && *e) {
+        char *end; uint32_t a = (uint32_t)strtoul(e, &end, 16), len = 0, fr = 0;
+        if (*end == ':') len = (uint32_t)strtoul(end + 1, &end, 16);
+        if (*end == '@') fr = (uint32_t)strtoul(end + 1, &end, 10);
+        if (fr == frame && len) for (uint32_t o = 0; o < len; o += 16) {
+            uint32_t w[4]; float f[4];
+            for (int i = 0; i < 4; i++) { w[i] = rd32(a + o + 4u * (uint32_t)i); memcpy(&f[i], &w[i], 4); }
+            rt_trace("dump f%u %08X: %08X %08X %08X %08X | %g %g %g %g", frame, a + o, w[0], w[1], w[2], w[3], f[0], f[1], f[2], f[3]);
+        }
+        e = end; if (*e == ',') e++; else break;
+    }
+}
 void rt_coverage_frame(uint32_t frame) {
     static const char *spec; static int parsed;
     rt_present_frame = frame;
+    dump_at(frame);
     if (!parsed) { parsed = 1; spec = getenv("RT_COVERAGE"); }
     if (!spec) return;
     for (const char *p = spec; *p; ) {
