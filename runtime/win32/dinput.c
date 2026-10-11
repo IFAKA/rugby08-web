@@ -81,35 +81,11 @@ static uint32_t dv_GetDeviceState(const uint32_t *a) {   /* (this, cbData, lpvDa
             wr8(p + k, on ? 0x80 : 0);
             if (on && seen < 8) { seen++; rt_log("DirectInput keyboard: DIK 0x%02X down", k); }
         }
-        /* Sprint steering: the game will not turn a sprinting player toward a new direction (steering
-           with the sprint button up works in every direction). When the direction keys change while
-           Space is held, report Space released while the player turns, then sprint again -- what a
-           player does with a pad by easing off R2. The release grows with the turn: 45 degrees 12
-           frames ... 180 degrees 30. Starting from standing never drops the sprint. */
-        static int assist = -1;
-        if (assist < 0) assist = getenv("RT_NO_SPRINT_ASSIST") ? 0 : 1;
-        if (n > 0xCD && assist) {
-            static int last_dir = -1;              /* 8-way index of the last held direction, -1 none */
-            static uint32_t last_dir_frame, release_until;
-            int dx = (rd8(p + 0xCD) ? 1 : 0) - (rd8(p + 0xCB) ? 1 : 0);
-            int dy = (rd8(p + 0xC8) ? 1 : 0) - (rd8(p + 0xD0) ? 1 : 0);
-            uint32_t f = rt_present_frame;
-            if (dx || dy) {
-                int dir = (int)lround(atan2((double)dy, (double)dx) / (M_PI / 4)) & 7;
-                if (dir != last_dir) {
-                    if (last_dir >= 0 && f - last_dir_frame <= 10) {     /* turning, not starting */
-                        int steps = abs(dir - last_dir); if (steps > 4) steps = 8 - steps;
-                        uint32_t until = f + 6u + 6u * (uint32_t)steps;
-                        if (until > release_until) release_until = until;
-                    }
-                    last_dir = dir;
-                }
-                last_dir_frame = f;
-            } else if (f - last_dir_frame > 10) {
-                last_dir = -1; release_until = 0;
-            }
-            if (f < release_until) wr8(p + 0x39, 0);
-        }
+        /* Right Shift also sprints (Space, DIK 0x39). Many keyboards -- Bluetooth ones especially --
+           cannot report Space together with two arrow keys: the key press never reaches the host, so
+           holding Space while steering with two arrows drops keys. Modifier keys are reported in
+           their own byte and never ghost. */
+        if (n > 0x39 && plat_dik_down(0x36)) wr8(p + 0x39, 0x80);
     } else if (n >= 16) {                                      /* DIMOUSESTATE: lX lY lZ rgbButtons[4] */
         mouse_drain();
         int dx = (int)(g_mx - d->mx), dy = (int)(g_my - d->my), dw = (int)(g_mw - d->mw);

@@ -88,20 +88,33 @@ static void probe_parse(void) {
 }
 /* RT_PROBE_DUMP="VA:arg:len" with RT_PROBE_FRAMES: the first entry of VA in a presented frame dumps len
  * bytes at the pointer in stack arg 0..2 (or ecx for arg 'e'): objects whose address varies per run. */
+static void probe_hexdump(const char *tag, uint32_t f, uint32_t a, uint32_t len) {
+    rt_trace("%s f%u at %08X", tag, f, a);
+    for (uint32_t o = 0; o < len; o += 16) {
+        uint32_t w[4]; float fl[4];
+        for (int i = 0; i < 4; i++) { w[i] = rd32(a + o + 4u * (uint32_t)i); memcpy(&fl[i], &w[i], 4); }
+        rt_trace("%s +%03X: %08X %08X %08X %08X | %g %g %g %g", tag, o, w[0], w[1], w[2], w[3], fl[0], fl[1], fl[2], fl[3]);
+    }
+}
+/* RT_PROBE_DUMP="VA:arg:len[:len2:off,off,...]": also dump len2 bytes at each pointer found at obj+off. */
 static void probe_dump(uint32_t va, uint32_t f) {
-    static uint32_t dva, len, last_f = ~0u; static int arg = -2;
+    static uint32_t dva, len, len2, offs[8], noff, last_f = ~0u; static int arg = -2;
     if (arg == -2) {
         const char *e = getenv("RT_PROBE_DUMP"); arg = -1;
-        if (e) { char c = 0; if (sscanf(e, "%x:%c:%x", &dva, &c, &len) == 3) arg = c == 'e' ? 3 : c - '0'; }
+        char c = 0; int n = 0;
+        if (e && sscanf(e, "%x:%c:%x%n", &dva, &c, &len, &n) == 3) {
+            arg = c == 'e' ? 3 : c - '0';
+            if (e[n] == ':') { char *end; len2 = (uint32_t)strtoul(e + n + 1, &end, 16);
+                while (*end == ':' || *end == ',') { offs[noff++ % 8] = (uint32_t)strtoul(end + 1, &end, 16); } }
+        }
     }
     if (arg < 0 || va != dva || f == last_f || f < g_probe_from || f > g_probe_to || f % 5) return;
     last_f = f;
     uint32_t a = arg == 3 ? g_ecx : rd32(g_esp + 4 + 4u * (uint32_t)arg);
-    rt_trace("dumpobj f%u at %08X", f, a);
-    for (uint32_t o = 0; o < len; o += 16) {
-        uint32_t w[4]; float fl[4];
-        for (int i = 0; i < 4; i++) { w[i] = rd32(a + o + 4u * (uint32_t)i); memcpy(&fl[i], &w[i], 4); }
-        rt_trace("dumpobj +%03X: %08X %08X %08X %08X | %g %g %g %g", o, w[0], w[1], w[2], w[3], fl[0], fl[1], fl[2], fl[3]);
+    probe_hexdump("dumpobj", f, a, len);
+    for (uint32_t i = 0; i < noff && i < 8; i++) {
+        uint32_t q = rd32(a + offs[i]);
+        if (q > 0x10000 && len2) probe_hexdump("dumpent", f, q, len2);
     }
 }
 static void probe_enter(uint32_t va) {

@@ -287,3 +287,4 @@ Next: `./init.sh next` shows what to fix.
 - TlsFree clears the slot in every thread's TEB (thread.c keeps a TIB list); freeing an unallocated slot fails as on Windows.
 - recomp_miss dedup is a hash set (was a 65k linear scan under a mutex per call).
 - Caps/Num Lock toggle state reaches GetKeyState/GetKeyboardState; display mode list includes the desktop size.
+- Sprint steering root cause (2026-10-11 evening): NOT game logic. The user's built-in MacBook keyboard works, a Bluetooth keyboard does not: keyboards cannot report Space + two arrows together (rollover/ghosting), so the game never gets the key. The 12-30 frame "sprint assist" workaround was based on the wrong diagnosis and is removed. dinput.c: Right Shift also reports Space (sprint) since modifiers never ghost. Probes kept (RT_PROBE, RT_PROBE_DUMP, RT_DUMP, RT_SHADOW_RANGE: env-gated, in log.c/interp.c). The winmm.c timer re-arm change stays (unverified effect).
