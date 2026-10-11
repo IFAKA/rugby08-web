@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* ---- keys: SDL scancode -> Win32 virtual key + set-1 scan code -------------------------------- */
 typedef struct { uint8_t vk, scan, ext; } keymap_t;
@@ -264,6 +265,18 @@ static void frame_stats(double swap_ticks) {
         rt_trace("perf: %d fps, avg %.1f ms, worst %.1f ms, %d frames >20 ms, swap %.1f ms, paced-wait %.1f ms",
                  (int)(n * f / span + 0.5), span * 1000 / f / n, worst * 1000 / f, (int)over,
                  swap_sum * 1000 / f / n, g_wait_ticks * 1000 / f / n);
+#ifdef __APPLE__
+        /* Three slow seconds in a row: `sample` this process (5 s of stacks) into logs/, at most 3 times a
+           run, so a slow scene explains itself without anyone attaching a profiler. */
+        static int slow, taken;
+        slow = n * f / span < 24 ? slow + 1 : 0;
+        if (slow >= 3 && taken < 3) {
+            char cmd[256];
+            snprintf(cmd, sizeof cmd, "sample %d 5 -file logs/sample-auto-%d.txt >/dev/null 2>&1 &", (int)getpid(), taken);
+            if (system(cmd) == 0) rt_trace("perf: slow scene, sampling into logs/sample-auto-%d.txt", taken);
+            taken++; slow = -10;
+        }
+#endif
         t0 = now; n = 0; worst = swap_sum = over = g_wait_ticks = 0;
     }
 }
