@@ -203,9 +203,34 @@ void plat_gl_set_size(int w, int h) {
     if (g_win && w > 0 && h > 0) SDL_SetWindowSize(g_win, w, h);
 }
 
+/* Present at most 60 frames per second (RT_FPS=N, 0 = uncapped), as on the 60 Hz displays the game
+   was made for. Vsync alone runs it at the host's refresh rate (120 Hz on ProMotion Macs), and the
+   game's per-frame steering loses turns at a quarter of the time step it was tuned for: sprinting
+   players could not change direction. */
+static void frame_pace(void) {
+    static double period = -1, next;
+    if (period < 0) {
+        const char *e = getenv("RT_FPS");
+        int fps = e ? atoi(e) : 60;
+        period = fps > 0 ? (double)SDL_GetPerformanceFrequency() / fps : 0;
+        next = 0;
+    }
+    if (period <= 0) return;
+    double now = (double)SDL_GetPerformanceCounter();
+    if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
+    next += period;
+    double wait = next - now;
+    if (wait > 0) {
+        uint32_t ms = (uint32_t)(wait * 1000.0 / (double)SDL_GetPerformanceFrequency());
+        if (ms > 1) SDL_Delay(ms - 1);
+        while ((double)SDL_GetPerformanceCounter() < next) { }
+    }
+}
+
 void plat_gl_swap(void) {
 #ifndef __EMSCRIPTEN__
     if (g_win && g_gl) SDL_GL_SwapWindow(g_win);
+    frame_pace();
 #endif
 }
 
