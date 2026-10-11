@@ -369,6 +369,15 @@
       "desc": "Independent cameras online: player 2 watches through its own camera preset (RT_POV=3) while player 1 uses the game camera; the match state hashes stay equal over 15000 frames.",
       "check": "POV2=3 tools/net_test.sh --frames 15000 --timeout 1500",
       "passes": true
+    },
+    {
+      "id": "net.live_input",
+      "deps": [
+        "net.web_lockstep"
+      ],
+      "desc": "Online in real browser pages: keyboard presses on one page (Playwright) reach that player's pad and both pages keep equal state hashes.",
+      "check": "timeout 600 /opt/homebrew/bin/python3 tools/net_live_input.py   # system Python: Playwright is not in .venv",
+      "passes": true
     }
   ]
 }

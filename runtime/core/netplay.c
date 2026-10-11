@@ -76,6 +76,8 @@ static void net_frame(uint32_t frame) {
     if (fault == -2) { const char *e = getenv("RT_NET_FAULT"); fault = e ? atol(e) : -1; }
     if ((long)frame == fault) wr8(RT_HEAP_LO + 0x100, (uint8_t)(rd8(RT_HEAP_LO + 0x100) ^ 0x5A));
     plat_local_pad(&g_local);   /* live devices (no-op in replay runs: replay events already set g_local) */
+    {   static rt_pad_t last;   /* trace input changes (checks: tools/net_live_input.py) */
+        if (memcmp(&last, &g_local, sizeof last)) { rt_trace("netplay: local input frame %u buttons %04X stick %d,%d", frame, g_local.buttons, g_local.lx, g_local.ly); last = g_local; } }
     uint8_t m[18];
     m[0] = 'I'; m[1] = (uint8_t)g_slot; put32(m + 2, frame + (uint32_t)g_delay); memcpy(m + 6, &g_local, sizeof g_local);
     store_input(g_slot, frame + (uint32_t)g_delay, &g_local);

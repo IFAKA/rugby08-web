@@ -1,7 +1,7 @@
 // Rugby 08 online relay: serves the web build and relays lockstep inputs between the players of a room.
 // Standard library only (WebSocket implemented here). One process, no external services.
 //
-//	go run ./server -addr :8090 -dir build/web [-password SECRET]
+//	go run ./server -addr :8090 -dir build/web [-password SECRET] [-cert FULLCHAIN.pem -key KEY.pem]
 //
 // Lobby protocol (JSON text messages):
 //
@@ -342,6 +342,8 @@ func main() {
 	addr := flag.String("addr", ":8090", "listen address")
 	dir := flag.String("dir", "build/web", "web build to serve")
 	password := flag.String("password", "", "require this password (HTTP basic auth, any user name)")
+	cert := flag.String("cert", "", "TLS certificate file (HTTPS; browsers allow the game's threads only on HTTPS or localhost)")
+	key := flag.String("key", "", "TLS private key file")
 	flag.Parse()
 	files := http.FileServer(http.Dir(*dir))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -363,6 +365,9 @@ func main() {
 		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		files.ServeHTTP(w, r)
 	})
-	log.Printf("rugby08 server on %s (serving %s)", *addr, *dir)
+	log.Printf("rugby08 server on %s (serving %s, TLS %v)", *addr, *dir, *cert != "")
+	if *cert != "" {
+		log.Fatal(http.ListenAndServeTLS(*addr, *cert, *key, handler))
+	}
 	log.Fatal(http.ListenAndServe(*addr, handler))
 }
