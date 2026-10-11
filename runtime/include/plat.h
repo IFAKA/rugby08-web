@@ -35,6 +35,7 @@ void plat_set_gamma(const uint16_t *ramp);                   /* 3 x 256 WORDs (R
 /* Next pending event as a WM_* message (hwnd filled in by user32). 1 = got one, 0 = none.
  * wait_ms > 0 blocks up to that long for the first event. */
 int  plat_poll(plat_msg_t *m, int wait_ms);
+int  plat_pending(void);   /* messages queued by the replay or window activation, not yet polled */
 
 uint8_t plat_vk_toggled(uint32_t vk);                        /* 1 while the Caps Lock / Num Lock (VK_CAPITAL, VK_NUMLOCK) light is on */
 uint8_t plat_vk_down(uint32_t vk);                           /* 1 while virtual key vk is held */
@@ -45,6 +46,23 @@ uint32_t plat_vk_to_scancode(uint32_t vk);                   /* Win32 set-1 scan
 void plat_cursor_pos(int *x, int *y);                        /* screen coordinates */
 void plat_cursor_set_pos(int x, int y);
 void plat_cursor_visible(int show);
+
+/* Virtual gamepads (runtime/core/pads.c): the game sees them as DirectInput "Logitech Dual Action"
+ * pads (runtime/win32/dinput.c), after the mouse and keyboard, or before the keyboard in a netplay
+ * session so that players 1-4 are Team Select's entries 1-4. Sticks -32768..32767 (y down
+ * positive); buttons RT_PAD_* bits; hat RT_HAT_* bits. In deterministic mode they change only at
+ * Present (replay pad events, netplay frame inputs). */
+enum { RT_PAD_CROSS = 1, RT_PAD_CIRCLE = 2, RT_PAD_SQUARE = 4, RT_PAD_TRIANGLE = 8, RT_PAD_L1 = 16,
+       RT_PAD_R1 = 32, RT_PAD_L2 = 64, RT_PAD_R2 = 128, RT_PAD_START = 256, RT_PAD_SELECT = 512,
+       RT_PAD_L3 = 1024, RT_PAD_R3 = 2048 };
+enum { RT_HAT_UP = 1, RT_HAT_RIGHT = 2, RT_HAT_DOWN = 4, RT_HAT_LEFT = 8 };
+#define RT_MAX_PADS 4
+typedef struct { int16_t lx, ly, rx, ry; uint16_t buttons; uint8_t hat, spare; } rt_pad_t;
+extern rt_pad_t rt_pads[RT_MAX_PADS];
+extern int rt_npads;                     /* pads the game can see (RT_PADS=N, netplay players) */
+extern int rt_pads_first;                /* 1: pads enumerate before the keyboard (netplay) */
+int rt_pad_event(int pad, const char *name, int down);
+int rt_pad_count(void);   /* replay "pad N tap|down|up NAME"; 0 = unknown name */
 
 /* Input replay (--replay FILE, tests/replays/): lines "<frame> tap|down|up <SDL key name>", '#'
  * comments. Called once per presented frame; due events become ordinary SDL key events, so they

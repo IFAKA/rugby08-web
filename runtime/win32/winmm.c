@@ -31,6 +31,7 @@ static __thread uint64_t t_fire_due;
 static __thread uint32_t t_fire_proc;
 
 static uint64_t now_ns(void) {
+    if (det_on()) return det_now_ns();
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
     return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec;
@@ -84,6 +85,35 @@ static void *timer_main(void *arg) {
     return NULL;
 }
 
+/* Deterministic mode: the timer thread is a det.c thread. It fires every timer due by virtual time,
+ * in due order (ties: table order), and otherwise waits; det.c wakes it at the earliest due. */
+static uint64_t next_due(void) {
+    uint64_t m = UINT64_MAX;
+    for (int i = 0; i < g_ntimers; i++) if (g_timers[i].due_ns < m) m = g_timers[i].due_ns;
+    return m;
+}
+static int timer_due(void *p) { (void)p; return next_due() <= det_now_ns(); }
+static uint32_t g_tstack, g_ttib;
+static int g_tdet;
+static void *timer_det_main(void *arg) {
+    (void)arg;
+    det_thread_begin(g_tdet);
+    rt_thread_enter(g_tstack, g_tstack + TIMER_STACK, g_ttib);
+    for (;;) {
+        det_wait(timer_due, NULL, UINT64_MAX);
+        int next = -1;
+        for (int i = 0; i < g_ntimers; i++)
+            if (next < 0 || g_timers[i].due_ns < g_timers[next].due_ns) next = i;
+        mmtimer_t t = g_timers[next];
+        t_fire_due = t.due_ns; t_fire_proc = t.proc;
+        if (t.flags & 1) g_timers[next].due_ns += (uint64_t)t.delay * 1000000ull;
+        else g_timers[next] = g_timers[--g_ntimers];
+        if (t.flags & 0x30) { hobj_t *e = h_get(t.proc, H_EVENT); if (e) h_signal(e); }
+        else { guest_call(t.proc, 5, t.id, 0, t.user, 0, 0); t_fire_proc = 0; }
+    }
+    return NULL;
+}
+
 HLE(timeSetEvent) {   /* (delay ms, resolution, proc, user, flags) -> timer id, 0 on failure */
     if (!a[0] || !a[2]) return 0;
     pthread_mutex_lock(&g_tmu);
@@ -92,7 +122,14 @@ HLE(timeSetEvent) {   /* (delay ms, resolution, proc, user, flags) -> timer id, 
         pthread_attr_t at;
         pthread_attr_init(&at);
         pthread_attr_setstacksize(&at, 8u << 20);
-        if (pthread_create(&pt, &at, timer_main, NULL)) { pthread_mutex_unlock(&g_tmu); return 0; }
+        void *(*fn)(void *) = timer_main;
+        if (det_on()) {   /* allocated here, by the guest thread that asked: a fixed order */
+            g_tstack = gmemalign(16, TIMER_STACK); g_ttib = gmemalign(0x1000, 0x1000);
+            g_tdet = det_thread_new(timer_due, NULL);
+            det_set_deadline_fn(next_due);
+            fn = timer_det_main;
+        }
+        if (pthread_create(&pt, &at, fn, NULL)) { pthread_mutex_unlock(&g_tmu); return 0; }
         pthread_detach(pt);
         g_tthread = 1;
     }

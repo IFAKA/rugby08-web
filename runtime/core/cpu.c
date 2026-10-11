@@ -26,6 +26,7 @@ uint32_t g_icall_trace[ICALL_TRACE_SIZE], g_icall_from[ICALL_TRACE_SIZE];
 uint32_t g_icall_trace_idx, g_icall_count;
 
 uint64_t recomp_host_rdtsc(void) {
+    if (det_on()) return det_clock_read();
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;  /* "1 GHz" TSC */
@@ -59,7 +60,7 @@ static RECOMP_TLS int t_big_held;
 static int big_on(void) {
     if (g_big_on < 0) {   /* the shadow check undoes its writes: only safe while no other guest thread runs */
         const char *e = getenv("RT_BIGLOCK");
-        g_big_on = !(e && *e == '0') || getenv("RT_SHADOW_ALL") != NULL;
+        g_big_on = (!(e && *e == '0') || getenv("RT_SHADOW_ALL") != NULL) && !det_on();   /* det.c schedules instead */
     }
     return g_big_on;
 }
@@ -80,6 +81,7 @@ static void big_unlock(void) {
     pthread_mutex_unlock(&g_big_mu);
 }
 void rt_guest_yield(void) {
+    if (rt_det == 1) { det_preempt(); return; }
     if (t_big_held && __atomic_load_n(&g_big_next, __ATOMIC_RELAXED) != __atomic_load_n(&g_big_serving, __ATOMIC_RELAXED) + 1) {
         big_unlock(); big_lock();      /* someone is waiting: let them in */
     }

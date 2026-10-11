@@ -40,7 +40,22 @@ HLE(InitializeCriticalSection) {
     return 0;
 }
 HLE(DeleteCriticalSection) { (void)a; return 0; }   /* keep the mutex: cheap, and avoids reuse races */
+/* Deterministic mode: only the baton holder runs, so ownership is plain bookkeeping (det.c). */
+typedef struct { int owner, count; } dcs_t;
+static dcs_t g_dcs[MAX_CS];
+static int dcs_free(void *p) { return ((dcs_t *)p)->count == 0; }
+
 HLE(EnterCriticalSection) {
+    if (det_on() && det_thread_id() >= 0) {
+        cs_get(a[0]);
+        dcs_t *d = &g_dcs[rd32(a[0] + 0x10)];
+        int me = det_thread_id();
+        while (d->count && d->owner != me) det_wait(dcs_free, d, UINT64_MAX);
+        d->owner = me; d->count++;
+        wr32(a[0] + 8, rd32(a[0] + 8) + 1);
+        wr32(a[0] + 0xC, rt_thread_tib() >> 12);
+        return 0;
+    }
     pthread_mutex_lock(cs_get(a[0]));
     wr32(a[0] + 8, rd32(a[0] + 8) + 1);              /* RecursionCount */
     wr32(a[0] + 0xC, rt_thread_tib() >> 12);          /* OwningThread (our thread id) */
@@ -50,6 +65,11 @@ HLE(LeaveCriticalSection) {
     uint32_t r = rd32(a[0] + 8);
     if (r) wr32(a[0] + 8, r - 1);
     if (r <= 1) wr32(a[0] + 0xC, 0);
+    if (det_on() && det_thread_id() >= 0) {
+        dcs_t *d = &g_dcs[rd32(a[0] + 0x10)];
+        if (d->count && --d->count == 0) d->owner = -1;
+        return 0;
+    }
     pthread_mutex_unlock(cs_get(a[0]));
     return 0;
 }
@@ -159,21 +179,27 @@ HLE(TlsSetValue) { if (a[0] >= 64) return set_err(ERROR_INVALID_PARAMETER_); wr3
 typedef struct {
     uint32_t start, param, stack, tib, handle;
     int suspended;
+    int det;                          /* det.c thread slot (deterministic mode) */
     pthread_t pt;
 } gthread_t;
+static int resumed(void *p) { return !((gthread_t *)p)->suspended; }
 static RECOMP_TLS gthread_t *t_self;
 
 static void *thread_main(void *arg) {
     gthread_t *t = arg;
     hobj_t *o = h_get(t->handle, H_THREAD);
-    pthread_mutex_lock(&o->mu);
-    while (t->suspended) pthread_cond_wait(&o->cv, &o->mu);
-    pthread_mutex_unlock(&o->mu);
+    if (t->det >= 0) det_thread_begin(t->det);
+    else {
+        pthread_mutex_lock(&o->mu);
+        while (t->suspended) pthread_cond_wait(&o->cv, &o->mu);
+        pthread_mutex_unlock(&o->mu);
+    }
     t_self = t;
     rt_thread_enter(t->stack, t->stack + THREAD_STACK, t->tib);
     uint32_t rc = guest_call(t->start, 1, t->param);
     o->exit_code = rc;
     h_signal(o);
+    det_thread_end();
     return NULL;
 }
 
@@ -189,6 +215,7 @@ HLE(CreateThread) {   /* (sa, stacksize, start, param, flags, &tid) */
     o->p = t;
     o->exit_code = 259;   /* STILL_ACTIVE */
     if (a[5]) wr32(a[5], t->tib >> 12);
+    t->det = det_on() ? det_thread_new(t->suspended ? resumed : NULL, t) : -1;
     pthread_attr_t at;
     pthread_attr_init(&at);
     pthread_attr_setstacksize(&at, 8u << 20);   /* host stack: lifted code recurses deeply */
@@ -211,6 +238,7 @@ HLE(ResumeThread) {
 }
 HLE(ExitThread) {
     if (t_self) { hobj_t *o = h_get(t_self->handle, H_THREAD); o->exit_code = a[0]; h_signal(o); }
+    det_thread_end();
     pthread_exit(NULL);
 }
 HLE(TerminateThread) { rt_log("TerminateThread(0x%08X) ignored", a[0]); return TRUE_; }
@@ -229,6 +257,7 @@ HLE(DuplicateHandle) {   /* (srcproc, src, dstproc, &dst, access, inherit, optio
 }
 
 static void sleep_ms(uint32_t ms) {
+    if (det_on() && det_thread_id() >= 0) { det_sleep_ms(ms); return; }
     if (!ms) { sched_yield(); return; }
     struct timespec ts = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
     nanosleep(&ts, NULL);

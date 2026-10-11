@@ -73,6 +73,27 @@ void     rt_com_free(uint32_t this_va);
 /* Initialise this host thread's CPU state for running guest code on stack [lo,hi). */
 void rt_thread_enter(uint32_t stack_lo, uint32_t stack_hi, uint32_t tib_va);
 uint32_t rt_thread_tib(void);
+
+/* ---- deterministic mode (det.c) ---------------------------------------- */
+extern int rt_det;
+int det_on(void);                     /* RT_DET=1 or a netplay session */
+uint64_t det_now_ns(void);            /* virtual time */
+uint64_t det_clock_read(void);        /* a guest clock read: virtual time, spin-aware */
+int det_thread_id(void);              /* -1: a host thread */
+typedef int (*det_ready_fn)(void *arg);
+typedef void (*det_frame_fn)(uint32_t frame);
+void det_init_main(void);
+void det_yield(void);
+void det_preempt(void);              /* a time slice of guest work ended */
+int  det_wait(det_ready_fn ready, void *arg, uint64_t deadline_ns);   /* 1 ready, 0 timeout */
+void det_sleep_ms(uint32_t ms);
+int  det_thread_new(det_ready_fn ready, void *arg);
+void det_thread_begin(int id);
+void det_thread_end(void);
+void det_set_deadline_fn(uint64_t (*fn)(void));   /* extra wake-up time (timers) */
+void det_on_frame(det_frame_fn fn);   /* called first at each det_frame, in registration order */
+void det_frame(uint32_t frame);       /* Present */
+uint64_t det_hash(void);
 void rt_thread_tls_set_all(uint32_t slot, uint32_t v);   /* TLS slot of every thread (TlsFree clears it) */
 extern RECOMP_TLS uint32_t rt_last_error;
 

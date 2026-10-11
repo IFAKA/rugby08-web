@@ -29,6 +29,7 @@
 #define MAX_CLASSES 32
 
 static uint32_t now_ms(void) {
+    if (det_on()) return (uint32_t)(det_now_ns() / 1000000ull);
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint32_t)(ts.tv_sec * 1000u + ts.tv_nsec / 1000000u);
@@ -380,9 +381,23 @@ HLE(PeekMessageA) {   /* (msg, hwnd, min, max, remove) */
     return take(a[0], a[1], a[2], a[3], a[4] & 1) ? TRUE_ : FALSE_;
 }
 
+static int has_msg(void *p) {   /* det_wait readiness for GetMessageA(hwnd, lo, hi) */
+    const uint32_t *f = p;
+    pthread_mutex_lock(&g_mu);
+    int any = 0;
+    for (int i = 0; i < g_qn && !any; i++) any = match(&g_q[i], f[0], f[1], f[2]);
+    pthread_mutex_unlock(&g_mu);
+    return any || plat_pending();
+}
+
 HLE(GetMessageA) {    /* (msg, hwnd, min, max): 0 on WM_QUIT */
     static int first = 1;
     if (first) { first = 0; rt_trace("message pump: first GetMessageA"); }
+    if (det_on() && det_thread_id() >= 0) {   /* messages come only from guest threads and Present (det.c) */
+        uint32_t f[3] = { a[1], a[2], a[3] };
+        while (!take(a[0], a[1], a[2], a[3], 1)) { pump(0); if (!take(a[0], a[1], a[2], a[3], 1)) det_wait(has_msg, f, UINT64_MAX); else break; }
+        return rd32(a[0] + 4) == WM_QUIT ? 0 : TRUE_;
+    }
     while (!take(a[0], a[1], a[2], a[3], 1)) pump(10);
     return rd32(a[0] + 4) == WM_QUIT ? 0 : TRUE_;
 }

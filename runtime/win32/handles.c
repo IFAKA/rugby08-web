@@ -102,7 +102,27 @@ static int try_acquire(hobj_t *o) {
     }
 }
 
+static int can_acquire(void *p) {   /* det_wait readiness: try_acquire without taking */
+    hobj_t *o = p;
+    switch (o->type) {
+    case H_EVENT: return o->signaled;
+    case H_SEMAPHORE: return o->count > 0;
+    case H_MUTEX: return !(o->count > 0 && o->owner != rt_host_tid());
+    default: return o->signaled;
+    }
+}
+
 uint32_t h_wait(hobj_t *o, uint32_t timeout_ms) {
+    if (det_on() && det_thread_id() >= 0) {   /* deterministic mode: wait in virtual time (det.c) */
+        uint64_t dl = timeout_ms == 0xFFFFFFFFu ? UINT64_MAX : det_now_ns() + (uint64_t)timeout_ms * 1000000ull;
+        for (;;) {
+            pthread_mutex_lock(&o->mu);
+            int ok = try_acquire(o);
+            pthread_mutex_unlock(&o->mu);
+            if (ok) return 0;
+            if (!det_wait(can_acquire, o, dl) && det_now_ns() >= dl) return WAIT_TIMEOUT_;
+        }
+    }
     pthread_mutex_lock(&o->mu);
     if (timeout_ms == 0xFFFFFFFFu) {
         while (!try_acquire(o)) pthread_cond_wait(&o->cv, &o->mu);

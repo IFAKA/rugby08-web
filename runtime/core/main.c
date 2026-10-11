@@ -76,6 +76,7 @@ int main(int argc, char **argv) {
     rt_load_image(rt_exe_path, &entry);
     rt_bind_imports();
     rt_thread_enter(RT_STACK0_LO, RT_STACK0_HI, RT_TIB0_VA);
+    if (det_on()) det_init_main();
     rt_trace("boot: image loaded, entry 0x%08X, %u lifted functions", entry, recomp_dispatch_count);
     uint32_t rc = guest_call(entry, 0);
     rt_trace("exit: entry returned %u", rc);

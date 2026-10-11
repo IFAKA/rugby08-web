@@ -357,7 +357,8 @@ HLE(CompareStringW) {
 }
 
 /* ---- time ------------------------------------------------------------------------------------------ */
-uint64_t rt_now_ns(void) {
+uint64_t rt_now_ns(void) {   /* deterministic mode: virtual time (det.c) */
+    if (det_on()) return det_clock_read();
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
@@ -380,6 +381,7 @@ static uint64_t unix_to_filetime(uint64_t sec, uint64_t ns) { return (sec + 1164
 HLE(GetSystemTimeAsFileTime) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
+    if (det_on()) { uint64_t v = det_now_ns(); tv.tv_sec = (time_t)(1199145600ull + v / 1000000000ull); tv.tv_usec = (int)(v / 1000 % 1000000); }   /* 2008-01-01 + virtual time */
     uint64_t ft = unix_to_filetime((uint64_t)tv.tv_sec, (uint64_t)tv.tv_usec * 1000);
     wr32(a[0], (uint32_t)ft); wr32(a[0] + 4, (uint32_t)(ft >> 32));
     return 0;
