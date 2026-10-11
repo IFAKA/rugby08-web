@@ -2,6 +2,7 @@
 #include "rt.h"
 #include "aems.h"
 #include <pthread.h>
+#include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -41,11 +42,57 @@ static pthread_mutex_t g_host_mu = PTHREAD_MUTEX_INITIALIZER;
  * RECOMP_ICALL has already pushed the dummy return address: a[k] = MEM32(esp + 4 + 4k). */
 static RECOMP_TLS uint32_t t_bridge_va;
 
+/* ---- the guest lock (on by default; RT_BIGLOCK=0 turns it off) ---------------------------------
+ * One guest thread runs guest code at a time, as on the single-core PCs the game shipped for, and
+ * every hand-over is a full barrier. Lifted code does plain loads and stores, and x86 orders them
+ * (TSO) where arm64 does not: a reader thread could see a ring's new count before the packet it
+ * covers. Released around every import (a Windows call may block) and every RT_BIGLOCK_SLICE
+ * function entries (rt_guest_yield), so a guest thread spinning on a flag still lets the writer
+ * run. FIFO tickets: a yield hands the lock to the longest waiter. Measured 2026-10-11: the intro's
+ * STRM-ring crash (sub_0088E870, guest 0x4) in 4 of 8 runs without it, 0 of 8 with it; the tutorial
+ * replay takes 328 s with it, 326 s without. */
+static int g_big_on = -1;
+static uint32_t g_big_next, g_big_serving;
+static pthread_mutex_t g_big_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_big_cv = PTHREAD_COND_INITIALIZER;
+static RECOMP_TLS int t_big_held;
+static int big_on(void) {
+    if (g_big_on < 0) {   /* the shadow check undoes its writes: only safe while no other guest thread runs */
+        const char *e = getenv("RT_BIGLOCK");
+        g_big_on = !(e && *e == '0') || getenv("RT_SHADOW_ALL") != NULL;
+    }
+    return g_big_on;
+}
+static void big_lock(void) {
+    uint32_t my = __atomic_fetch_add(&g_big_next, 1, __ATOMIC_SEQ_CST);
+    if (__atomic_load_n(&g_big_serving, __ATOMIC_ACQUIRE) != my) {
+        pthread_mutex_lock(&g_big_mu);
+        while (__atomic_load_n(&g_big_serving, __ATOMIC_ACQUIRE) != my) pthread_cond_wait(&g_big_cv, &g_big_mu);
+        pthread_mutex_unlock(&g_big_mu);
+    }
+    t_big_held = 1;
+}
+static void big_unlock(void) {
+    t_big_held = 0;
+    pthread_mutex_lock(&g_big_mu);
+    __atomic_add_fetch(&g_big_serving, 1, __ATOMIC_RELEASE);
+    pthread_cond_broadcast(&g_big_cv);
+    pthread_mutex_unlock(&g_big_mu);
+}
+void rt_guest_yield(void) {
+    if (t_big_held && __atomic_load_n(&g_big_next, __ATOMIC_RELAXED) != __atomic_load_n(&g_big_serving, __ATOMIC_RELAXED) + 1) {
+        big_unlock(); big_lock();      /* someone is waiting: let them in */
+    }
+}
+
 static void run_bridge(const char *dll, const char *name, rt_hle_fn fn, uint16_t pop) {
     const uint32_t *a = (const uint32_t *)G2H(g_esp + 4);
     uint32_t ret;
     if (fn) {
+        int held = t_big_held;
+        if (held) big_unlock();
         ret = fn(a);
+        if (held) big_lock();
     } else {
         rt_log("UNIMPL %s!%s", dll, name);
         ret = 0;
@@ -166,6 +213,8 @@ uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
         rt_log("guest_call: no function at 0x%08X", va);
         return 0;
     }
+    int take = big_on() && !t_big_held;    /* a host thread or an import calling back into guest code */
+    if (take) big_lock();
     uint32_t sv_esp = g_esp, sv_ebx = g_ebx, sv_esi = g_esi, sv_edi = g_edi, sv_ebp = g_ebp;
     uint32_t sv_cur = g_cur_func;
     for (int i = n - 1; i >= 0; i--) { g_esp -= 4; wr32(g_esp, args[i]); }
@@ -175,6 +224,7 @@ uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
     uint32_t ret = g_eax;
     g_esp = sv_esp; g_ebx = sv_ebx; g_esi = sv_esi; g_edi = sv_edi; g_ebp = sv_ebp;
     g_cur_func = sv_cur;
+    if (take) big_unlock();
     return ret;
 }
 

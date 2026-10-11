@@ -58,9 +58,19 @@ static RECOMP_TLS uint32_t t_enter_idx;
  * during a window is written to its file, one VA per line (rt_coverage_frame from d3d8 Present). */
 static uint8_t *g_cov;              /* one bit per byte of [RT_IMAGE_BASE, RT_IMAGE_END) */
 static volatile int g_cov_on;
+/* Functions entered on this thread since the index rt_enter_mark() returned (oldest first, up to
+ * the ring's size) into out[]; returns how many. The shadow check names a mismatch's callees. */
+uint32_t rt_enter_mark(void) { return t_enter_idx; }
+int rt_enter_since(uint32_t mark, uint32_t *out, int max) {
+    int n = 0;
+    uint32_t from = t_enter_idx - mark > ENTER_RING ? t_enter_idx - ENTER_RING : mark;
+    for (uint32_t i = from; i < t_enter_idx && n < max; i++) out[n++] = t_enter[i & (ENTER_RING - 1)][0];
+    return n;
+}
 void recomp_trace_enter(uint32_t va) {
     uint32_t *e = t_enter[t_enter_idx++ & (ENTER_RING - 1)];
     e[0] = va; e[1] = g_ecx; e[2] = g_esp;
+    if ((t_enter_idx & 4095) == 0) rt_guest_yield();   /* cpu.c guest lock: let waiting threads run */
     rt_shadow_auto(va);
     if (g_cov_on && va >= RT_IMAGE_BASE && va < RT_IMAGE_END) {
         uint32_t o = va - RT_IMAGE_BASE;

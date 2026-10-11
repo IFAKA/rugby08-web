@@ -46,6 +46,7 @@ uint32_t gstrdup(const char *s);
  * Callee-saved registers and esp are restored afterwards, so cdecl works too. */
 uint32_t guest_call(uint32_t va, int n, ...);
 uint32_t guest_callv(uint32_t va, int n, const uint32_t *args);
+void rt_guest_yield(void);   /* RT_BIGLOCK: hand the guest lock to a waiting thread (cpu.c) */
 
 /* Import bridges (generated table, gen/runtime/imports.c) */
 typedef uint32_t (*rt_hle_fn)(const uint32_t *a);
@@ -91,7 +92,9 @@ extern volatile uint32_t rt_present_frame;  /* presented frames so far (d3d8 Pre
 /* tools/hooks.json "shadow:NAME": run the function in the interpreter first (writes undone), then
  * compare the lifted run's registers and memory against it (runtime/core/interp.c). */
 void rt_shadow_enter(uint32_t va, const char *name);
-void rt_shadow_auto(uint32_t va);   /* RT_SHADOW_ALL=from-to: every function entered (recomp_trace_enter) */
+void rt_shadow_auto(uint32_t va);
+uint32_t rt_enter_mark(void);                       /* log.c entry ring (RECOMP_TRACE builds) */
+int rt_enter_since(uint32_t mark, uint32_t *out, int max);   /* RT_SHADOW_ALL=from-to: every function entered (recomp_trace_enter) */
 /* PNG (RGBA8, rows top to bottom); 0 = ok. */
 int rt_png_write(const char *path, int w, int h, const uint8_t *rgba);
 

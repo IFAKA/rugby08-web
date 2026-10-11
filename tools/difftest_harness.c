@@ -66,6 +66,8 @@ void rt_fatal(const char *fmt, ...) {          /* the message goes to stderr; di
 void rt_log(const char *fmt, ...) { (void)fmt; g_status = 4; }   /* soft fault: reference raised #DE */
 void rt_trace(const char *fmt, ...) { (void)fmt; }                 /* interp.c's shadow check (unused here) */
 volatile uint32_t rt_present_frame;
+uint32_t rt_enter_mark(void) { return 0; }
+int rt_enter_since(uint32_t mark, uint32_t *out, int max) { (void)mark; (void)out; (void)max; return 0; }
 static void on_signal(int sig) { g_status = sig == SIGALRM ? 2 : 1; siglongjmp(g_case_env, 1); }
 
 #define IMG_LO   0x00400000u

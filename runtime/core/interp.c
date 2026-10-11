@@ -271,7 +271,7 @@ typedef struct { uint32_t a, pc; uint8_t old; } undo_t;
 typedef struct { uint32_t a, pc; uint8_t v; } fin_t;
 typedef struct {
     const char *name; uint32_t va, ra, esp0, n, frame, bridges;
-    uint32_t r[8]; double st0; int depth, top0;
+    uint32_t r[8]; double st0; int depth, top0, mark;
     fin_t *fin; size_t nfin;
 } shadow_t;
 static RECOMP_TLS uc_engine *t_suc;
@@ -420,7 +420,7 @@ static int shadow_run(uint32_t va, const char *name, uint32_t nth, int autom) {
         fail = t_stop == STOP_FAULT ? "fault" : e ? uc_strerror(e) : "runaway";
         break;
     }
-    shadow_t sh = { name ? name : "", va, ra0, esp0, nth, rt_present_frame, bridges, { 0 }, 0.0, 0, s_top, NULL, 0 };
+    shadow_t sh = { name ? name : "", va, ra0, esp0, nth, rt_present_frame, bridges, { 0 }, 0.0, 0, s_top, 0, NULL, 0 };
     if (!fail) {
         state_out(uc);
         uint32_t r[8] = { g_eax, g_ecx, g_edx, g_ebx, g_esp, g_ebp, g_esi, g_edi };
@@ -450,6 +450,7 @@ static int shadow_run(uint32_t va, const char *name, uint32_t nth, int autom) {
         t_sh_busy = 0;
         return 1;
     }
+    sh.mark = (int)rt_enter_mark();     /* the lifted run's callees, for the report */
     t_sh = sh;
     wr(esp0, SHADOW_VA);                    /* the lifted body's ret lands in shadow_ret */
     return 1;
@@ -465,7 +466,9 @@ static void shadow_ret(void) {
     char regs[256] = "", *p = regs;
     for (int i = 0; i < 8; i++)
         if (r[i] != sh.r[i]) p += sprintf(p, " %s %08X/%08X", rn[i], r[i], sh.r[i]);
-    if (g_fp_top - sh.top0 != sh.depth) p += sprintf(p, " fpdepth %d/%d", g_fp_top - sh.top0, sh.depth);
+    /* modulo 8: x87 TOP is a ring. `ffree` tags a register empty without moving TOP (D3DX's matrix
+       multiply ends each row with four of them), and the lifted top is an unwrapped count of it */
+    if (((g_fp_top - sh.top0 - sh.depth) & 7) != 0) p += sprintf(p, " fpdepth %d/%d", g_fp_top - sh.top0, sh.depth);
     else if (sh.depth > 0) {
         double a = g_st[0], b = sh.st0;
         if (!(a == b || fabs(a - b) <= 1e-9 * fabs(b) || (isnan(a) && isnan(b)))) p += sprintf(p, " st0 %.9g/%.9g", a, b);
@@ -492,8 +495,16 @@ static void shadow_ret(void) {
     static unsigned checked, bad;
     checked++; if (regs[0] || ndiff) bad++;
     if (sh.name[0] || regs[0] || ndiff || checked % 500 == 0)
+    if (g_cur_func != sh.va)        /* the lifted ret that came back here: normally the function's own */
+        p += sprintf(p, " (returned from sub_%08X, entry esp %08X)", g_cur_func, sh.esp0);
     rt_trace("shadow sub_%08X %s #%u (frame %u): %s%s; %d memory diffs, %d fp-close, %zu bytes written, %u imports [%u checked, %u mismatched]",
              sh.va, sh.name, sh.n, sh.frame, (regs[0] || ndiff) ? "MISMATCH" : "match", regs, ndiff, close, sh.nfin, sh.bridges, checked, bad);
+    if (regs[0] || ndiff) {
+        uint32_t ent[24]; char list[24 * 9 + 1] = "", *q = list;
+        int ne = rt_enter_since((uint32_t)sh.mark, ent, 24);
+        for (int i = 0; i < ne; i++) q += sprintf(q, " %08X", ent[i]);
+        rt_trace("shadow sub_%08X #%u   lifted run entered:%s", sh.va, sh.n, ne ? list : " (none)");
+    }
     free(sh.fin);
     if (sh.ra == RECOMP_RETADDR) return;
     recomp_func_t fn = native_at(sh.ra);
