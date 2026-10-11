@@ -350,8 +350,9 @@ static uint32_t buf_lock(const uint32_t *a) {   // (this, offset, size, BYTE**, 
     Obj *b = d3d8_obj(a[0]);
     uint32_t off = a[1], sz = a[2] ? a[2] : b->size - std::min(a[1], b->size);
     if (off > b->size || off + sz > b->size) return D3DERR_INVALIDCALL_;
-    if (!b->locks++) { b->lock_lo = off; b->lock_hi = off + sz; }
+    if (!b->locks++) { b->lock_lo = off; b->lock_hi = off + sz; b->lock_flags = 0; }
     else { b->lock_lo = std::min(b->lock_lo, off); b->lock_hi = std::max(b->lock_hi, off + sz); }
+    b->lock_flags |= a[4];
     wr32(a[3], b->shadow + off);
     return D3D_OK_;
 }
@@ -362,9 +363,13 @@ static uint32_t buf_unlock(const uint32_t *a) {
     if (--b->locks) return D3D_OK_;
     uint32_t n = b->lock_hi - b->lock_lo;
     if (!n) return D3D_OK_;
+    // Small buffers are cheaper to re-send whole as a fresh allocation than to patch in place: the
+    // GL driver stalls on a SubData into storage the GPU still reads. NOOVERWRITE keeps its range.
+    uint32_t fl = b->lock_flags & 0x3000;   // D3DLOCK_NOOVERWRITE | D3DLOCK_DISCARD
+    if (!(fl & 0x1000) && b->size <= (256u << 10)) { b->lock_lo = 0; b->lock_hi = b->size; n = b->size; fl = 0x2000; }
     void *p = nullptr;
-    HRESULT hr = b->kind == K_VB ? ((IDirect3DVertexBuffer9 *)b->host)->Lock(b->lock_lo, n, &p, 0)
-                                 : ((IDirect3DIndexBuffer9 *)b->host)->Lock(b->lock_lo, n, &p, 0);
+    HRESULT hr = b->kind == K_VB ? ((IDirect3DVertexBuffer9 *)b->host)->Lock(b->lock_lo, n, &p, fl)
+                                 : ((IDirect3DIndexBuffer9 *)b->host)->Lock(b->lock_lo, n, &p, fl);
     if (hr != D3D_OK || !p) return D3DERR_INVALIDCALL_;
     memcpy(p, G2H(b->shadow + b->lock_lo), n);
     if (b->kind == K_VB) ((IDirect3DVertexBuffer9 *)b->host)->Unlock(); else ((IDirect3DIndexBuffer9 *)b->host)->Unlock();

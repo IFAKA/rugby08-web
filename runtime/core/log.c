@@ -132,7 +132,24 @@ static void probe_enter(uint32_t va) {
         rt_trace("%s", buf);
     }
 }
+/* The debug machinery below (entry ring, shadow check, probes, coverage) runs on every function
+ * entry, tens of thousands of times a frame; it costs ~20% of a match frame. It is armed once: by one
+ * of these environment variables, or by the first rt_shadow_enter (a `shadow:` hook). */
+int rt_entry_hooks = -1;
+void rt_entry_hooks_arm(void) { rt_entry_hooks = 1; }
+static void entry_hooks_init(void) {
+    static const char *const v[] = { "RT_PROBE", "RT_PROBE_DUMP", "RT_SHADOW_ALL", "RT_SHADOW_FROM", "RT_COVERAGE" };
+    rt_entry_hooks = 0;
+    for (unsigned i = 0; i < sizeof v / sizeof *v; i++) if (getenv(v[i])) rt_entry_hooks = 1;
+}
 void recomp_trace_enter(uint32_t va) {
+    if (rt_entry_hooks <= 0) {
+        if (rt_entry_hooks < 0) entry_hooks_init();
+        if (!rt_entry_hooks) {
+            if ((++t_enter_idx & 4095) == 0) rt_guest_yield();
+            return;
+        }
+    }
     uint32_t *e = t_enter[t_enter_idx++ & (ENTER_RING - 1)];
     e[0] = va; e[1] = g_ecx; e[2] = g_esp;
     if ((t_enter_idx & 4095) == 0) rt_guest_yield();   /* cpu.c guest lock: let waiting threads run */

@@ -339,8 +339,10 @@ static void shadow_ret(void);
 
 static int shadow_run(uint32_t va, const char *name, uint32_t nth, int autom);
 
+void rt_entry_hooks_arm(void);
 void rt_shadow_enter(uint32_t va, const char *name) {
     static int from = -1, max;
+    rt_entry_hooks_arm();
     static struct { uint32_t va, n; } count[64]; static int ncount;
     if (from < 0) {
         from = getenv("RT_SHADOW_FROM") ? atoi(getenv("RT_SHADOW_FROM")) : 0;
