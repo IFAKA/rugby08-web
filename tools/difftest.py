@@ -139,6 +139,10 @@ def main():
             pages = []
             def unmapped(uc, access, addr, size, value, ud):
                 for pg in {addr & ~0xFFF, (addr + max(size, 1) - 1) & ~0xFFF}:
+                    # The null page and kernel space (>= 2 GiB: the exe is not LARGEADDRESSAWARE)
+                    # fault on Windows, as in the runtime's 2 GiB arena: such a case is not comparable.
+                    if pg >= 0x80000000:
+                        return False
                     if pg not in pages and len(pages) < 64 and pg not in (0,):
                         try:
                             uc.mem_map(pg, 0x1000); pages.append(pg)

@@ -1,7 +1,9 @@
 #include <string.h>
 /* log.c -- rt_log (log file), rt_trace (log + stdout: what checks grep), rt_fatal. */
 #include "rt.h"
+uint32_t rt_ms(void);   /* runtime/win32/k32_sys.c */
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <pthread.h>
 
@@ -59,13 +61,16 @@ static volatile int g_cov_on;
 void recomp_trace_enter(uint32_t va) {
     uint32_t *e = t_enter[t_enter_idx++ & (ENTER_RING - 1)];
     e[0] = va; e[1] = g_ecx; e[2] = g_esp;
+    rt_shadow_auto(va);
     if (g_cov_on && va >= RT_IMAGE_BASE && va < RT_IMAGE_END) {
         uint32_t o = va - RT_IMAGE_BASE;
         g_cov[o >> 3] |= (uint8_t)(1u << (o & 7));
     }
 }
+volatile uint32_t rt_present_frame;
 void rt_coverage_frame(uint32_t frame) {
     static const char *spec; static int parsed;
+    rt_present_frame = frame;
     if (!parsed) { parsed = 1; spec = getenv("RT_COVERAGE"); }
     if (!spec) return;
     for (const char *p = spec; *p; ) {
@@ -109,7 +114,56 @@ void recomp_dump_trace(const char *why) {
 
 /* tools/hooks.json: a name starting with "args:" logs the first three stack arguments and ecx
  * (the caller's state at entry: globals are current until the body's first REGS_OUT). */
+/* RT_SELFTEST_CRT=1: at WinMain (the CRT is initialised) evaluate the game's own CRT math -- atan2
+ * (0x873250) and exp (0x874C90), both through the CRT's fxam-classifying dispatcher, and _ftol
+ * (0x872F18, every (int)float cast: fistp then an add/sbb fix-up to truncation) -- over a grid of
+ * arguments, compare with the host's libm / C cast, print one line and exit (0 = all match). */
+static double crt(uint32_t va, int n, double a, double b) {   /* cdecl double f(double[, double]) */
+    uint32_t args[4];
+    memcpy(&args[0], &a, 8); memcpy(&args[2], &b, 8);
+    int top = g_fp_top;
+    guest_callv(va, 2 * n, args);
+    double r = g_fp_top > top ? g_st[0] : NAN;
+    while (g_fp_top > top) {                 /* pop what the call left: the result */
+        for (int i = 0; i < 7; i++) g_st[i] = g_st[i + 1];
+        g_st[7] = 0.0; g_fp_top--;
+    }
+    return r;
+}
+static void selftest_crt(void) {
+    static const double v[] = { 0.0, -0.0, 1.0, -1.0, 0.5, -0.5, 2.0, -3.0, 1e-3, 123.25, -0.70710678 };
+    int n = 0, bad = 0;
+    for (unsigned i = 0; i < sizeof v / sizeof *v; i++)
+        for (unsigned j = 0; j < sizeof v / sizeof *v; j++) {
+            double y = v[i], x = v[j];
+            double g = crt(0x873250u, 2, y, x), h = atan2(y, x);
+            n++;
+            if (!(g == h || fabs(g - h) <= 1e-12 * fabs(h))) {
+                if (bad++ < 8) rt_trace("crt selftest: atan2(%g, %g) = %.17g, libm %.17g", y, x, g, h);
+            }
+        }
+    for (unsigned i = 0; i < sizeof v / sizeof *v; i++) {
+        double g = crt(0x874C90u, 1, v[i], 0), h = exp(v[i]);
+        n++;
+        if (!(g == h || fabs(g - h) <= 1e-12 * fabs(h)))
+            if (bad++ < 8) rt_trace("crt selftest: exp(%g) = %.17g, libm %.17g", v[i], g, h);
+    }
+    static const double f[] = { 2.7, -2.7, 1.5, -1.5, 0.5, -0.5, 0.49, 3.0, -3.0, 123456.75, -123456.25, 1e-9 };
+    for (unsigned i = 0; i < sizeof f / sizeof *f; i++) {     /* _ftol: argument in ST0, result edx:eax */
+        int top = g_fp_top;
+        for (int k = 7; k > 0; k--) g_st[k] = g_st[k - 1];
+        g_st[0] = f[i]; g_fp_top++;
+        int32_t g = (int32_t)guest_callv(0x872F18u, 0, NULL), h = (int32_t)f[i];
+        while (g_fp_top > top) { for (int k = 0; k < 7; k++) g_st[k] = g_st[k + 1]; g_st[7] = 0.0; g_fp_top--; }
+        n++;
+        if (g != h && bad++ < 8) rt_trace("crt selftest: _ftol(%g) = %d, C cast %d", f[i], g, h);
+    }
+    rt_trace("crt selftest: %d cases, %d wrong -> %s", n, bad, bad ? "FAIL" : "PASS");
+    exit(bad ? 1 : 0);
+}
+
 void rt_hook_enter(uint32_t va, const char *name) {
+    if (!strcmp(name, "WinMain") && getenv("RT_SELFTEST_CRT")) selftest_crt();
     if (!strncmp(name, "list:", 5)) {  /* controller manager (ecx): count +0xc, list +0x1c, each entry's type; once */
         static int done;
         if (done++) return;
@@ -129,6 +183,25 @@ void rt_hook_enter(uint32_t va, const char *name) {
         if (i < 16 && (seen[i][1] != t || seen[i][2] != sel || seen[i][3] != act)) {
             seen[i][1] = t; seen[i][2] = sel; seen[i][3] = act;
             rt_trace("%s ecx=%08X type=%u selectable=%u active=%u", name + 4, g_ecx, t, sel, act);
+        }
+        return;
+    }
+    if (!strncmp(name, "shadow:", 7)) { rt_shadow_enter(va, name + 7); return; }
+    if (!strncmp(name, "stick:", 6)) {  /* controller (ecx) at its per-frame read: left stick x/y, 8-way dir; on change */
+        static uint32_t seen[16][5]; static int n;
+        { static uint32_t calls, ms0;   /* game frame time (app clock 0xA7ED28 +0x78) against host time */
+          uint32_t clk = rd32(0xA7ED28);
+          if (clk && ++calls % 120 == 0) {
+              uint32_t raw = rd32(clk + 0x78), ms = rt_ms(); float dt; memcpy(&dt, &raw, 4);
+              rt_trace("%s clock dt=%g host %u ms per 120 reads", name + 6, dt, ms - ms0); ms0 = ms;
+          } }
+        uint32_t x = rd32(g_ecx + 8), y = rd32(g_ecx + 12), dir = rd32(g_ecx + 0x30), side = rd32(g_ecx + 0x2558);
+        int i = 0; while (i < n && seen[i][0] != g_ecx) i++;
+        if (i == n && n < 16) { seen[n][0] = g_ecx; seen[n][1] = ~0u; n++; }
+        if (i < 16 && (seen[i][1] != x || seen[i][2] != y || seen[i][3] != dir || seen[i][4] != side)) {
+            seen[i][1] = x; seen[i][2] = y; seen[i][3] = dir; seen[i][4] = side;
+            float fx, fy; memcpy(&fx, &x, 4); memcpy(&fy, &y, 4);
+            rt_trace("%s ecx=%08X type=%u side=%d x=%g y=%g dir=%u", name + 6, g_ecx, rd32(g_ecx + 0x2570), (int)side, fx, fy, dir);
         }
         return;
     }

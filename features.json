@@ -295,6 +295,15 @@
       "check": "tools/web_check.sh --expect 'WinMain entered' --timeout 180",
       "passes": true,
       "notes": "2026-10-10: the old check (`timeout 30 tools/web_check.sh ... || exit 0`) always exited 0 and the script did not exist; replaced by a real headless-Chromium check."
+    },
+    {
+      "id": "lift.crt_math",
+      "deps": [
+        "native.menu"
+      ],
+      "desc": "The game's own CRT math (atan2 0x873250, exp 0x874C90 -- both through the fxam-classifying transcendental dispatcher) matches host libm within 1e-12 over a sign/zero/quadrant grid, evaluated at WinMain (RT_SELFTEST_CRT, runtime/core/log.c). Guards the 8-bit sar lift (atan2 returned x for y=0, the run direction was wrong).",
+      "check": "RT_SELFTEST_CRT=1 SDL_AUDIODRIVER=dummy timeout 120 build/native/rugby08 --frames 10 --log logs/selftest_crt.log 2>&1 | grep -q \"crt selftest: .* 0 wrong -> PASS\"",
+      "passes": true
     }
   ]
 }

@@ -87,6 +87,11 @@ extern char rt_audio_capture_path[1024]; /* --audio-capture PATH ("" = none) */
 extern int rt_log_input;                 /* --log-input: log host key/mouse events and what the game polls */
 extern char rt_shot_path[1024];          /* replay `<frame> shot PATH`: PNG of that frame (then "") */
 extern char rt_replay_path[1024];        /* --replay PATH ("" = none) */
+extern volatile uint32_t rt_present_frame;  /* presented frames so far (d3d8 Present) */
+/* tools/hooks.json "shadow:NAME": run the function in the interpreter first (writes undone), then
+ * compare the lifted run's registers and memory against it (runtime/core/interp.c). */
+void rt_shadow_enter(uint32_t va, const char *name);
+void rt_shadow_auto(uint32_t va);   /* RT_SHADOW_ALL=from-to: every function entered (recomp_trace_enter) */
 /* PNG (RGBA8, rows top to bottom); 0 = ok. */
 int rt_png_write(const char *path, int w, int h, const uint8_t *rgba);
 

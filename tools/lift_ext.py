@@ -240,6 +240,7 @@ class Lifter(lift32.Lifter):
             a, b = self._fmt_read(ops[0]), self._fmt_read(ops[1])
             lines = [f"{{ uint32_t _xa = {a}, _xb = {b}; {comment}"]
             lines.append(self._flag_capture("_xa", "_xb", lift32.op_bits(ops[0])))
+            lines.append("_cf = (uint32_t)(_flag_a + _flag_b < _flag_a);")   # as lift32's add
             lines.append(f"{self._fmt_write(ops[0], '_xa + _xb')}; {self._fmt_write(ops[1], '_xa')}; }}")
             self._flag_state = ("add", "_flag_a, _flag_b")
             return lines

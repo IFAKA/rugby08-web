@@ -75,7 +75,9 @@ uint32_t rt_host_bridge(const char *name, rt_hle_fn fn, uint16_t pop) {
     return RT_BRIDGE_HOST + 16 * i;
 }
 
+recomp_func_t rt_shadow_lookup(uint32_t va);   /* interp.c: the shadow check's return trampoline */
 recomp_func_t recomp_lookup_manual(uint32_t va) {
+    if (va == 0xFFD00000u) return rt_shadow_lookup(va);
     if (va >= RT_BRIDGE_IMPORT && va < RT_BRIDGE_IMPORT + 16 * rt_import_count) {
         t_bridge_va = va;
         return import_trampoline;
