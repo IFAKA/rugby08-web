@@ -96,6 +96,12 @@ static uint32_t dv_GetDeviceState(const uint32_t *a) {   /* (this, cbData, lpvDa
     if (d->kind == DEV_PAD) {   /* DIJOYSTATE: lX lY lZ lRx lRy lRz rglSlider[2] rgdwPOV[4] rgbButtons[32] */
         const rt_pad_t *s = &rt_pads[d->pad];
         int16_t v[6] = { s->lx, s->ly, s->rx, 0, 0, s->ry };   /* Dual Action: right stick on Z / Rz */
+        /* The game reads only the sticks (FUN_0081FD80 ignores the POV hat): a d-pad steers the left
+           stick while the stick is centred. */
+        if (!s->lx && !s->ly && s->hat) {
+            v[0] = s->hat & RT_HAT_LEFT ? -32768 : s->hat & RT_HAT_RIGHT ? 32767 : 0;
+            v[1] = s->hat & RT_HAT_UP ? -32768 : s->hat & RT_HAT_DOWN ? 32767 : 0;
+        }
         for (int i = 0; i < 6 && 4u * (uint32_t)i + 4 <= n; i++) {
             int64_t x = v[i];
             if (d->dz[i] && (x < 0 ? -x : x) * 10000 < (int64_t)d->dz[i] * 32768) x = 0;

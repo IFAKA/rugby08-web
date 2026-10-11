@@ -1,5 +1,6 @@
 /* main.c -- boot: arena, image, imports, main thread, then the game's own CRT entry point. */
 #include "rt.h"
+#include "plat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,10 +66,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--replay-live") && i + 1 < argc) { snprintf(rt_replay_path, sizeof rt_replay_path, "%s", argv[++i]); rt_replay_live = 1; }
         else if (!strcmp(argv[i], "--log-input")) rt_log_input = 1;
         else if (!strcmp(argv[i], "-v")) rt_verbose = 1;
+        else if (!strncmp(argv[i], "--net", 5) && i + 1 < argc) i++;   /* netplay options: rt_net_start */
         else if (!strncmp(argv[i], "--", 2)) { /* platform options are parsed by rt_platform_init */ }
         else usage();
     }
     rt_log_open(log_path);
+    rt_net_start(argc, argv);   /* before anything reads a clock: a session runs in deterministic mode */
     install_fault_handler();
     rt_platform_init(argc, argv);
     rt_mem_init();

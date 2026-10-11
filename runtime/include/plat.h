@@ -62,7 +62,17 @@ extern rt_pad_t rt_pads[RT_MAX_PADS];
 extern int rt_npads;                     /* pads the game can see (RT_PADS=N, netplay players) */
 extern int rt_pads_first;                /* 1: pads enumerate before the keyboard (netplay) */
 int rt_pad_event(int pad, const char *name, int down);
-int rt_pad_count(void);   /* replay "pad N tap|down|up NAME"; 0 = unknown name */
+int rt_pad_count(void);
+void plat_local_pad(rt_pad_t *p);        /* this player's live devices -> p (unchanged in replay runs) */
+
+/* Netplay (runtime/core/netplay.c). Transport: platform/native/net_native.c, platform/web/. */
+extern int rt_net;
+int rt_net_start(int argc, char **argv);  /* --net URL --net-room CODE ...: 1 if a session started */
+int rt_net_begin(int slot, int players, int delay);
+rt_pad_t *rt_net_local_pad(void);
+int  net_tx_open(const char *url);        /* 0 = connected */
+int  net_tx_send(const void *data, int len, int text);
+int  net_tx_recv(void *buf, int cap, int wait_ms);   /* >0 length, 0 none, -1 closed */   /* replay "pad N tap|down|up NAME"; 0 = unknown name */
 
 /* Input replay (--replay FILE, tests/replays/): lines "<frame> tap|down|up <SDL key name>", '#'
  * comments. Called once per presented frame; due events become ordinary SDL key events, so they

@@ -365,6 +365,7 @@ uint64_t rt_now_ns(void) {   /* deterministic mode: virtual time (det.c) */
 }
 static uint64_t g_boot_ns;
 uint32_t rt_ms(void) {
+    if (det_on()) return (uint32_t)(det_clock_read() / 1000000ull);
     if (!g_boot_ns) g_boot_ns = rt_now_ns();
     return (uint32_t)((rt_now_ns() - g_boot_ns) / 1000000ull);
 }

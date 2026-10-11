@@ -107,6 +107,7 @@ static void video_init(void) {
     if (g_inited) return;
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) rt_fatal("SDL_Init: %s", SDL_GetError());
+    SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);   /* plat_local_pad (netplay); failure only disables controllers */
     keymap_init();
     g_inited = 1;
 }
@@ -450,6 +451,54 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
     *m = g_pending[0];
     memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);
     return 1;
+}
+
+/* ---- this player's pad (plat.h plat_local_pad): a game controller, else the keyboard ------------ */
+/* Keyboard layout = the game's own keyboard map (docs/CONTROLS.md): S Cross, Q Square, W Triangle,
+ * E Circle, A L1, D R1, Left Shift L2, Space / Right Shift R2, Left Ctrl or Esc Start, Left Alt
+ * Select, Return Cross, Backspace Triangle; arrows left stick, numpad 8/2/4/6 right stick. */
+void plat_local_pad(rt_pad_t *p) {
+    if (virtual_cursor() || !g_inited) return;   /* automated runs: the replay is the input */
+    static SDL_GameController *gc;
+    if (gc && !SDL_GameControllerGetAttached(gc)) { SDL_GameControllerClose(gc); gc = NULL; }
+    if (!gc) for (int i = 0; i < SDL_NumJoysticks() && !gc; i++) if (SDL_IsGameController(i)) gc = SDL_GameControllerOpen(i);
+    rt_pad_t q = { 0 };
+    const Uint8 *k = SDL_GetKeyboardState(NULL);
+    static const struct { SDL_Scancode sc; uint16_t bit; } kb[] = {
+        { SDL_SCANCODE_S, RT_PAD_CROSS }, { SDL_SCANCODE_RETURN, RT_PAD_CROSS }, { SDL_SCANCODE_Q, RT_PAD_SQUARE },
+        { SDL_SCANCODE_W, RT_PAD_TRIANGLE }, { SDL_SCANCODE_BACKSPACE, RT_PAD_TRIANGLE }, { SDL_SCANCODE_E, RT_PAD_CIRCLE },
+        { SDL_SCANCODE_A, RT_PAD_L1 }, { SDL_SCANCODE_D, RT_PAD_R1 }, { SDL_SCANCODE_LSHIFT, RT_PAD_L2 },
+        { SDL_SCANCODE_SPACE, RT_PAD_R2 }, { SDL_SCANCODE_RSHIFT, RT_PAD_R2 }, { SDL_SCANCODE_LCTRL, RT_PAD_START },
+        { SDL_SCANCODE_ESCAPE, RT_PAD_START }, { SDL_SCANCODE_LALT, RT_PAD_SELECT },
+    };
+    if (plat_window_focused()) {
+        for (size_t i = 0; i < sizeof kb / sizeof *kb; i++) if (k[kb[i].sc]) q.buttons |= kb[i].bit;
+        q.lx = (int16_t)(k[SDL_SCANCODE_LEFT] ? -32768 : k[SDL_SCANCODE_RIGHT] ? 32767 : 0);
+        q.ly = (int16_t)(k[SDL_SCANCODE_UP] ? -32768 : k[SDL_SCANCODE_DOWN] ? 32767 : 0);
+        q.rx = (int16_t)(k[SDL_SCANCODE_KP_4] ? -32768 : k[SDL_SCANCODE_KP_6] ? 32767 : 0);
+        q.ry = (int16_t)(k[SDL_SCANCODE_KP_8] ? -32768 : k[SDL_SCANCODE_KP_2] ? 32767 : 0);
+    }
+    if (gc) {
+        static const struct { SDL_GameControllerButton b; uint16_t bit; } gb[] = {
+            { SDL_CONTROLLER_BUTTON_A, RT_PAD_CROSS }, { SDL_CONTROLLER_BUTTON_B, RT_PAD_CIRCLE },
+            { SDL_CONTROLLER_BUTTON_X, RT_PAD_SQUARE }, { SDL_CONTROLLER_BUTTON_Y, RT_PAD_TRIANGLE },
+            { SDL_CONTROLLER_BUTTON_LEFTSHOULDER, RT_PAD_L1 }, { SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, RT_PAD_R1 },
+            { SDL_CONTROLLER_BUTTON_START, RT_PAD_START }, { SDL_CONTROLLER_BUTTON_BACK, RT_PAD_SELECT },
+            { SDL_CONTROLLER_BUTTON_LEFTSTICK, RT_PAD_L3 }, { SDL_CONTROLLER_BUTTON_RIGHTSTICK, RT_PAD_R3 },
+        };
+        for (size_t i = 0; i < sizeof gb / sizeof *gb; i++) if (SDL_GameControllerGetButton(gc, gb[i].b)) q.buttons |= gb[i].bit;
+        if (SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16000) q.buttons |= RT_PAD_L2;
+        if (SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 16000) q.buttons |= RT_PAD_R2;
+        if (SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_DPAD_UP)) q.hat |= RT_HAT_UP;
+        if (SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_DPAD_DOWN)) q.hat |= RT_HAT_DOWN;
+        if (SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) q.hat |= RT_HAT_LEFT;
+        if (SDL_GameControllerGetButton(gc, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) q.hat |= RT_HAT_RIGHT;
+        int16_t ax[4] = { SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTX), SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTY),
+                          SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX), SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY) };
+        int16_t *dst[4] = { &q.lx, &q.ly, &q.rx, &q.ry };
+        for (int i = 0; i < 4; i++) if ((ax[i] < 0 ? -ax[i] : ax[i]) > 8000 && !*dst[i]) *dst[i] = ax[i];   /* 8000: stick dead zone */
+    }
+    *p = q;
 }
 
 /* ---- input replay (plat.h plat_replay_tick) ---------------------------------------------------- */
