@@ -44,6 +44,9 @@ void rt_heap_init(uint32_t hi) {
     if (!g_ms) rt_fatal("guest heap: create_mspace_with_base failed");
 }
 
+/* End of the used part of the heap (the top chunk's start, 8-aligned): det.c hashes [LO, top). */
+uint32_t rt_heap_top(void) { return (H2G(((mstate)g_ms)->top) + 7u) & ~7u; }
+
 static uint32_t h2g_or0(void *p) { return p ? H2G(p) : 0; }
 
 uint32_t gmalloc(uint32_t size)  { return h2g_or0(mspace_malloc(g_ms, size ? size : 1)); }

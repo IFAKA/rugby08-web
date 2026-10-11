@@ -423,10 +423,20 @@ static void translate(const SDL_Event *e) {
     (void)WM_LBUTTONDOWN_;
 }
 
+int plat_pending(void) { return g_npending > 0 || g_activate_pending; }
+
 int plat_poll(plat_msg_t *m, int wait_ms) {
     if (!g_inited) return 0;
     SDL_Event e;
     if (g_activate_pending) { g_activate_pending = 0; push(WM_ACTIVATEAPP_, 1, 0); push(WM_ACTIVATE_, 1, 0); }
+    if (det_on()) {   /* deterministic mode: the host window's own events never reach the guest; only
+                         what the replay/netplay pushed at Present and the initial activation do */
+        while (SDL_PollEvent(&e)) {}
+        if (!g_npending) return 0;
+        *m = g_pending[0];
+        memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);
+        return 1;
+    }
     while (!g_npending) {
         int got = wait_ms > 0 ? SDL_WaitEventTimeout(&e, wait_ms) : SDL_PollEvent(&e);
         if (!got) return 0;
@@ -480,6 +490,15 @@ static void replay_load(void) {
             g_replay[g_nreplay++] = (replay_ev_t){ frame + (hold ? hold : 3), 0, 1, SDL_SCANCODE_UNKNOWN, -1, -1 };
             continue;
         }
+        int pad;
+        char pname[32];
+        if (sscanf(line, "%u pad %d %15s %31s", &frame, &pad, act, pname) == 4) {   /* virtual pad (plat.h rt_pad_t) */
+            int tap = !strcmp(act, "tap");
+            g_replay = realloc(g_replay, (size_t)(g_nreplay + 2) * sizeof *g_replay);
+            g_replay[g_nreplay++] = (replay_ev_t){ frame, (uint8_t)strcmp(act, "up"), 4, SDL_SCANCODE_UNKNOWN, pad, 0, strdup(pname) };
+            if (tap) g_replay[g_nreplay++] = (replay_ev_t){ frame + 3, 0, 4, SDL_SCANCODE_UNKNOWN, pad, 0, strdup(pname) };
+            continue;
+        }
         char shot[512];
         if (sscanf(line, "%u shot %511s", &frame, shot) == 2) {          /* PNG of that presented frame */
             g_replay = realloc(g_replay, (size_t)(g_nreplay + 1) * sizeof *g_replay);
@@ -514,6 +533,11 @@ void plat_replay_tick(uint32_t frame) {
         SDL_Event e;
         memset(&e, 0, sizeof e);
         if (r->mouse == 3) { snprintf(rt_shot_path, sizeof rt_shot_path, "%s", r->path); continue; }
+        if (r->mouse == 4) {
+            if (!rt_pad_event(r->x, r->path, r->down)) rt_log("replay: unknown pad input '%s'", r->path);
+            rt_trace("replay: frame %u pad %d %s %s", frame, r->x, r->down ? "down" : "up", r->path);
+            continue;
+        }
         if (r->mouse == 2) {              /* like a real mouse: DirectInput delta, cursor position and WM_MOUSEMOVE */
             int wx = 0, wy = 0, ww = 640, wh = 480;
             if (g_win) { SDL_GetWindowPosition(g_win, &wx, &wy); SDL_GetWindowSize(g_win, &ww, &wh); }

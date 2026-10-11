@@ -1,0 +1,14 @@
+# Virtual pad 0 (RT_PADS=1): skip the intro and title with Cross / Start, then screenshots of the menus.
+150 pad 0 tap cross
+300 pad 0 tap cross
+450 pad 0 tap cross
+600 pad 0 tap cross
+900 pad 0 tap start
+1500 pad 0 tap cross
+2500 pad 0 tap start
+3000 pad 0 tap cross
+3500 pad 0 tap start
+4000 pad 0 tap cross
+2400 shot logs/pad/p2400.png
+3400 shot logs/pad/p3400.png
+4400 shot logs/pad/p4400.png

@@ -39,6 +39,8 @@ typedef struct dsbuf {
     int32_t volume, pan;              /* hundredths of a dB */
     int playing, looping;
     double pos;                       /* play cursor in frames */
+    int vplaying;                     /* deterministic mode: what the guest sees, from virtual time */
+    uint64_t vt0, vpos0;
     struct dsbuf *next;
 } dsbuf_t;
 
@@ -129,8 +131,22 @@ static uint32_t sb_GetCaps(const uint32_t *a) {   /* DSBCAPS: dwSize dwFlags dwB
     return DS_OK;
 }
 
-static void cursors(const dsbuf_t *b, uint32_t *play, uint32_t *write) {
+/* Deterministic mode: the play cursor the guest sees is vpos0 + elapsed virtual time * frequency
+ * (never the mixer's real-time progress); a one-shot buffer stops at its end. */
+static uint32_t nframes_of(const dsbuf_t *b) { return b->block ? b->size / b->block : 0; }
+static uint64_t vpos(dsbuf_t *b) {
+    uint64_t p = b->vpos0, now = det_clock_read();   /* polling the cursor is polling the clock */
+    if (b->vplaying) p += (now - b->vt0) * (uint64_t)(b->freq ? b->freq : b->rate) / 1000000000ull;
+    uint32_t n = nframes_of(b);
+    if (!n) return 0;
+    if (p >= n) { if (b->looping) p %= n; else { b->vplaying = 0; b->vpos0 = 0; p = 0; } }
+    return p;
+}
+static void vrebase(dsbuf_t *b) { b->vpos0 = vpos(b); b->vt0 = det_now_ns(); }
+
+static void cursors(dsbuf_t *b, uint32_t *play, uint32_t *write) {
     *play = (uint32_t)b->pos * b->block;
+    if (det_on()) { *play = (uint32_t)vpos(b) * b->block; *write = b->size ? (*play + (b->vplaying ? ((b->freq ? b->freq : b->rate) * WRITE_LEAD_MS / 1000) * b->block : 0)) % b->size : 0; return; }
     uint32_t lead = b->playing ? ((b->freq ? b->freq : b->rate) * WRITE_LEAD_MS / 1000) * b->block : 0;
     *write = b->size ? (*play + lead) % b->size : 0;
 }
@@ -162,7 +178,9 @@ static uint32_t sb_GetPan(const uint32_t *a) { wr32(a[1], (uint32_t)buf(a)->pan)
 static uint32_t sb_GetFrequency(const uint32_t *a) { dsbuf_t *b = buf(a); wr32(a[1], b->freq ? b->freq : b->rate); return DS_OK; }
 static uint32_t sb_GetStatus(const uint32_t *a) {
     dsbuf_t *b = buf(a);
-    wr32(a[1], (b->playing ? DSBSTATUS_PLAYING : 0) | (b->playing && b->looping ? DSBSTATUS_LOOPING : 0));
+    int playing = b->playing;
+    if (det_on()) { vpos(b); playing = b->vplaying; }
+    wr32(a[1], (playing ? DSBSTATUS_PLAYING : 0) | (playing && b->looping ? DSBSTATUS_LOOPING : 0));
     return DS_OK;
 }
 static uint32_t sb_Initialize(const uint32_t *a) { (void)a; return DSERR_ALLOCATED; }
@@ -183,8 +201,10 @@ static uint32_t sb_Lock(const uint32_t *a) {   /* (this, offset, bytes, ppv1, pc
 static uint32_t sb_Play(const uint32_t *a) {   /* (this, reserved, priority, flags) */
     dsbuf_t *b = buf(a);
     pthread_mutex_lock(&g_mu);
+    if (det_on()) vrebase(b);
     b->looping = (a[3] & DSBPLAY_LOOPING) != 0 || b == g_primary;
     b->playing = 1;
+    if (det_on()) { b->vplaying = 1; b->vt0 = det_now_ns(); }
     pthread_mutex_unlock(&g_mu);
     return DS_OK;
 }
@@ -193,6 +213,7 @@ static uint32_t sb_SetCurrentPosition(const uint32_t *a) {
     dsbuf_t *b = buf(a);
     pthread_mutex_lock(&g_mu);
     if (b->block && a[1] < b->size) b->pos = a[1] / b->block;
+    if (det_on() && b->block && a[1] < b->size) { b->vpos0 = a[1] / b->block; b->vt0 = det_now_ns(); }
     pthread_mutex_unlock(&g_mu);
     return DS_OK;
 }
@@ -209,8 +230,13 @@ static uint32_t sb_SetFormat(const uint32_t *a) {   /* primary only: the device'
 
 static uint32_t sb_SetVolume(const uint32_t *a) { buf(a)->volume = (int32_t)a[1]; return DS_OK; }
 static uint32_t sb_SetPan(const uint32_t *a) { buf(a)->pan = (int32_t)a[1]; return DS_OK; }
-static uint32_t sb_SetFrequency(const uint32_t *a) { buf(a)->freq = a[1]; return DS_OK; }
-static uint32_t sb_Stop(const uint32_t *a) { buf(a)->playing = 0; return DS_OK; }
+static uint32_t sb_SetFrequency(const uint32_t *a) { dsbuf_t *b = buf(a); if (det_on()) vrebase(b); b->freq = a[1]; return DS_OK; }
+static uint32_t sb_Stop(const uint32_t *a) {
+    dsbuf_t *b = buf(a);
+    if (det_on()) { vrebase(b); b->vplaying = 0; }
+    b->playing = 0;
+    return DS_OK;
+}
 static uint32_t sb_Unlock(const uint32_t *a) { (void)a; return DS_OK; }
 static uint32_t sb_Restore(const uint32_t *a) { (void)a; return DS_OK; }
 
