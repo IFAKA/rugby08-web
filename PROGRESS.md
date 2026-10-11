@@ -314,3 +314,7 @@ Next: `./init.sh next` shows what to fix.
 - Vsync: the vsync-blocking swap plus the 60 fps pacer quantized slow scenes to 30 fps: swap interval now 0 (RT_VSYNC=1 restores); same replay window 37.5 -> 48.7 fps average.
 - winmm `timer:` line per second: the game's clock fires 100/s, 1.8 ms late avg: not the limiter.
 - Open: dips to 30-44 fps with hitches up to 125-205 ms in some match scenes; kernel32 Sleep(0) spin in the game loop (hle_SleepEx ~10%); next sample them, then 120 Hz (fixed 60 Hz sim + interpolation).
+
+## 2026-10-11 (night 4) — grey band / stadium overlap: D3D clip-space z not remapped (built, native.menu PASS, not playtested)
+- Found by reading d3d9-webgl: gl_Position used the D3D projection as is. D3D clips z to [0,w], GL to [-w,w], so geometry nearer than the near plane (low POV camera, big stadium/pitch polygons) was not clipped and drew in front of everything. Fix: gl_Position.z = z*2 - w in the fixed-function VS and in the MojoShader-translated VS (MOJOSHADER_DEPTH_CLIPPING was never defined). Submodule d3d9-webgl edit, uncommitted.
+- Next: user checks POV camera for the grey band; if it remains, trace draws (RT_TRACE_DRAWS_FRAME) on a frame that shows it.
