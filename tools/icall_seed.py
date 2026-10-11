@@ -10,8 +10,7 @@ seeds_p = root / "analysis/icall_seeds.json"
 seeds = set(json.load(open(seeds_p))) if seeds_p.exists() else set()
 new, outside = set(), []
 lines = []
-for name in ("logs/icall_miss.txt", "logs/play.log"):   # play.log: app-bundle runs start in another cwd
-    f = root / name
+for f in [root / "logs/icall_miss.txt"] + sorted((root / "logs").glob("play-*.log")):   # play-*: app-bundle runs start in another cwd
     if f.exists():
         lines += f.read_text(errors="replace").splitlines()
 for line in lines:
