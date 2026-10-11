@@ -72,8 +72,12 @@ add_custom_command(OUTPUT ${ROOT}/gen/runtime/d3d8_vtables.c
   WORKING_DIRECTORY ${ROOT} COMMENT "gen_d3d8_bridges")
 file(GLOB RT_CORE_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/core/*.c ${ROOT}/runtime/win32/*.c
      ${ROOT}/runtime/d3d8/*.c ${ROOT}/runtime/d3d8/*.cpp)
+# d3d9-webgl, patched at build time (tools/patch_d3d9w.py: shader constant registers 96..99)
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/d3d9w_patched.cpp
+  COMMAND ${Python3_EXECUTABLE} ${ROOT}/tools/patch_d3d9w.py ${ROOT}/third_party/d3d9-webgl/d3d9.cpp ${CMAKE_BINARY_DIR}/d3d9w_patched.cpp
+  DEPENDS ${ROOT}/tools/patch_d3d9w.py ${ROOT}/third_party/d3d9-webgl/d3d9.cpp COMMENT "patch_d3d9w")
 add_library(rt_core STATIC ${RT_CORE_SRCS} ${ROOT}/gen/runtime/imports.c ${ROOT}/gen/runtime/d3d8_vtables.c
-            ${ROOT}/third_party/d3d9-webgl/d3d9.cpp)
+            ${CMAKE_BINARY_DIR}/d3d9w_patched.cpp)
 target_include_directories(rt_core PUBLIC ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include ${ROOT}/runtime/win32)
 target_include_directories(rt_core PRIVATE ${ROOT}/runtime/d3d8 ${ROOT}/third_party/d3d9-webgl ${MOJO})
 target_compile_definitions(rt_core PRIVATE MOJOSHADER_NO_VERSION_INCLUDE)
@@ -82,7 +86,7 @@ if(NOT EMSCRIPTEN)
   target_include_directories(rt_core PRIVATE ${ROOT}/platform/native/glshim)
 endif()
 target_compile_options(rt_core PRIVATE -Wall -Wno-unused-function -fwrapv -fno-strict-aliasing)
-set_source_files_properties(${ROOT}/third_party/d3d9-webgl/d3d9.cpp PROPERTIES COMPILE_OPTIONS "-w")
+set_source_files_properties(${CMAKE_BINARY_DIR}/d3d9w_patched.cpp PROPERTIES COMPILE_OPTIONS "-w")
 # Dispatch misses run in an interpreter (runtime/core/interp.c, Unicorn on the guest arena) instead of
 # returning 0. Native only for now; the web build is item web.interp
 # (docs/plans/2026-10-08-oracle-fallback-deprotect.md P4).
@@ -130,6 +134,7 @@ if(EMSCRIPTEN)
   target_link_options(rugby08 PRIVATE -O0 -pthread -sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=16 -sEXIT_RUNTIME=1
     -sJSPI   # the Windows loop yields to the browser at every Present (d3d8_device.cpp) without Asyncify
+    -sEXPORTED_RUNTIME_METHODS=callMain   # the page (shell.html) starts the game: solo, or an online session
     -sSUPPORT_LONGJMP=wasm -fwasm-exceptions
     --pre-js=${ROOT}/platform/web/gamefs.js --shell-file=${ROOT}/platform/web/shell.html
     --preload-file=${ROOT}/Rugby08_unpacked.exe@/Rugby08_unpacked.exe)

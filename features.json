@@ -350,6 +350,25 @@
       "desc": "Netplay in the browser: two headless Chromium pages join one room through the relay (?net=auto) and keep equal state hashes.",
       "check": "tools/net_web_test.sh --hashes 4 --timeout 600",
       "passes": true
+    },
+    {
+      "id": "net.pov_view",
+      "deps": [
+        "net.det_synctest"
+      ],
+      "desc": "Per-player camera (d3d8_pov.cpp): a camera preset re-projects the match view (screenshot differs from the game camera).",
+      "check": "tools/pov_check.sh --preset 3",
+      "passes": true
+    },
+    {
+      "id": "net.pov_independent",
+      "deps": [
+        "net.lockstep",
+        "net.pov_view"
+      ],
+      "desc": "Independent cameras online: player 2 watches through its own camera preset (RT_POV=3) while player 1 uses the game camera; the match state hashes stay equal over 15000 frames.",
+      "check": "POV2=3 tools/net_test.sh --frames 15000 --timeout 1500",
+      "passes": true
     }
   ]
 }

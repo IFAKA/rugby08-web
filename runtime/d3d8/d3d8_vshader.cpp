@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <string>
+#include <stdlib.h>
 
 // D3DVSDE_* register -> (D3DDECLUSAGE, index); d3d8to9's DeclAddressUsages.
 static const uint8_t k_usage[17][2] = {
@@ -127,9 +129,29 @@ D3D9WProgVS *vs8_gl(Vs8 *vs, int id) {
         if (pd->uniforms[i].type == MOJOSHADER_UNIFORM_FLOAT)
             for (int k = 0; k < (pd->uniforms[i].array_count ? pd->uniforms[i].array_count : 1); k++)
                 regs.push_back((unsigned char)(pd->uniforms[i].index + k));
+    // This player's camera (d3d8_pov.cpp): four more uniforms, registers 96..99, re-project the
+    // position as the shader's last step: clip' = clip * M (identity unless a local view is chosen).
+    std::string src(pd->output);
+    size_t nu = regs.size();
+    std::string decl = "uniform vec4 vs_uniforms_vec4[" + std::to_string(nu) + "];";
+    size_t at = nu ? src.find(decl) : std::string::npos;
+    if (at != std::string::npos) src.replace(at, decl.size(), "uniform vec4 vs_uniforms_vec4[" + std::to_string(nu + 4) + "];");
+    else if ((at = src.find("precision mediump int;\n")) != std::string::npos && !nu) src.insert(at + 23, "uniform vec4 vs_uniforms_vec4[4];\n");
+    else at = std::string::npos;
+    size_t end = src.rfind('}');
+    if (at != std::string::npos && end != std::string::npos) {
+        std::string c = "vs_uniforms_vec4[" + std::to_string(nu);
+        src.insert(end, "\tgl_Position = vec4(dot(gl_Position, " + c + "]), dot(gl_Position, " + c + "+1]), dot(gl_Position, " + c +
+                        "+2]), dot(gl_Position, " + c + "+3]));\n");
+        for (unsigned char r = 96; r < 100; r++) regs.push_back(r);
+    } else rt_log("SetVertexShader #%d: no local-camera hook (unexpected GLSL layout)", id);
+#ifndef __EMSCRIPTEN__
+    if (getenv("RT_POV_TRACE")) { char path[64]; snprintf(path, sizeof path, "logs/shaders/vsx_%03d.glsl", id);
+        if (FILE *f = fopen(path, "w")) { fputs(src.c_str(), f); fclose(f); } }
+#endif
     std::vector<D3D9WElem> el;
     for (const Vs8Elem &e : vs->elems) el.push_back({ e.stream, e.reg, e.type, e.offset });
-    vs->gl = d3d9w_progvs_create(pd->output, regs.data(), (int)regs.size(), el.data(), (int)el.size());
+    vs->gl = d3d9w_progvs_create(src.c_str(), regs.data(), (int)regs.size(), el.data(), (int)el.size());
     rt_log("SetVertexShader #%d: GL program %s (%zu constants, %zu inputs)", id, vs->gl ? "linked" : "FAILED",
            regs.size(), el.size());
     return vs->gl;

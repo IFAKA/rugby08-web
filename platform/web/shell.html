@@ -30,7 +30,8 @@
       .hint { color:var(--dim); font-size:13px; margin-top:14px; }
       .err { color:var(--bad); min-height:20px; font-size:14px; }
       #badge { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:rgba(10,20,15,.9); border:1px solid var(--line); padding:8px 16px; border-radius:999px; z-index:5; font-size:14px; }
-      #badge[hidden] { display:none; }
+      #badge[hidden], #toast[hidden] { display:none; }
+      #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:rgba(10,20,15,.9); border:1px solid var(--line); padding:8px 16px; border-radius:999px; z-index:5; font-size:14px; }
       #loading { color:var(--dim); font-size:14px; margin-top:10px; min-height:20px; }
       kbd { background:#0e1a14; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:12px; }
       #output { display:none; }
@@ -39,6 +40,7 @@
   <body>
     <div id="stage"><canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas></div>
     <div id="badge" hidden>Waiting for the other players…</div>
+    <div id="toast" hidden></div>
     <textarea id="output"></textarea>
 
     <div class="overlay" id="lobby">
@@ -74,7 +76,7 @@
         <button class="primary" id="btn-start" disabled>Start match</button>
         <div class="hint" id="room-hint"></div>
         <div class="err" id="room-err"></div>
-        <div class="hint">Controls: <kbd>←↑→↓</kbd> run · <kbd>S</kbd> accept / pass · <kbd>A</kbd>/<kbd>D</kbd> pass left/right · <kbd>Space</kbd> sprint · <kbd>Esc</kbd> pause — or plug in a gamepad.</div>
+        <div class="hint">Controls: <kbd>←↑→↓</kbd> run · <kbd>S</kbd> accept / pass · <kbd>A</kbd>/<kbd>D</kbd> pass left/right · <kbd>Space</kbd> sprint · <kbd>Esc</kbd> pause · <kbd>C</kbd> your camera — or plug in a gamepad.</div>
         <button class="link" id="btn-leave">← Leave</button>
       </div>
 
@@ -124,6 +126,7 @@
           show('end');
         },
         rugbyNetStatus(waiting) { $('badge').hidden = !waiting; },
+        rugbyToast(text) { var t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(t.timer); t.timer = setTimeout(() => t.hidden = true, 2500); },
       };
       $('canvas').addEventListener('webglcontextlost', (e) => { e.preventDefault(); Module.onExit(0); }, false);
 

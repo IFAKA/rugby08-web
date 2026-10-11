@@ -372,7 +372,26 @@ static void rel_move(int dx, int dy) {
     if (g_cy < 0) g_cy = 0; else if (g_cy > h - 1) g_cy = h - 1;
 }
 
+/* Host-only keys (never sent to the game or to other players): C cycles this player's camera. */
+void rt_pov_cycle(void);
+const char *rt_pov_name(void);
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+EM_JS(void, js_toast, (const char *s), { if (Module.rugbyToast) Module.rugbyToast(UTF8ToString(s)); });
+#endif
+static void host_key(const SDL_Event *e) {
+    if (e->type != SDL_KEYDOWN || e->key.repeat || e->key.keysym.scancode != SDL_SCANCODE_C) return;
+    rt_pov_cycle();
+    char t[96]; snprintf(t, sizeof t, "Camera: %s (C to change)", rt_pov_name());
+#ifdef __EMSCRIPTEN__
+    js_toast(t);
+#else
+    if (g_win) { char w[128]; snprintf(w, sizeof w, "Rugby 08 - %s", t); SDL_SetWindowTitle(g_win, w); }
+#endif
+}
+
 static void translate(const SDL_Event *e) {
+    host_key(e);
     if (rt_log_input) {
         if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP)
             rt_log("input: key %s %s (vk 0x%02X)", SDL_GetScancodeName(e->key.keysym.scancode),
@@ -443,7 +462,7 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
     if (g_activate_pending) { g_activate_pending = 0; push(WM_ACTIVATEAPP_, 1, 0); push(WM_ACTIVATE_, 1, 0); }
     if (det_on()) {   /* deterministic mode: the host window's own events never reach the guest; only
                          what the replay/netplay pushed at Present and the initial activation do */
-        while (SDL_PollEvent(&e)) {}
+        while (SDL_PollEvent(&e)) host_key(&e);
         if (!g_npending) return 0;
         *m = g_pending[0];
         memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);

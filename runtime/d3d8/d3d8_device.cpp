@@ -28,7 +28,8 @@ struct DevState {
     uint32_t tex[8] = {}, stream[16] = {}, stride[16] = {}, ib = 0, base_vertex = 0;
     uint32_t vshader = 0, rt = 0, zs = 0, backbuffer = 0, focus = 0;
     uint32_t gamma[3 * 256] = {};
-    float vsc[96][4] = {};               // vertex shader constants (D3D8: 96 registers)
+    float vsc[100][4] = {};              // vertex shader constants (D3D8: 96 registers; 96..99: local camera, d3d8_pov.cpp)
+    bool progvs = false;                 // a programmable vertex shader is set
     float psc[8][4] = {};                // pixel shader constants (ps.1.x: 8 registers)
     uint32_t pshader = 0;                // SetPixelShader handle
     uint32_t frame = 0;
@@ -507,14 +508,17 @@ HLE_D3D(IDirect3DDevice8, SetVertexShader) {  // FVF codes, or a handle from Cre
             static int off = getenv("RT_NO_PROGVS") != nullptr;   // A/B: draw without the GL program
             D3D9WProgVS *gl = off ? nullptr : vs8_gl(v, (int)i);
             d3d9w_progvs_use(gl, s->vsc);
+            s->progvs = gl != nullptr;
             if (!gl) d3d8_unimpl("SetVertexShader(programmable: GL program failed)", 0);
             return D3D_OK_;
         }
         d3d9w_progvs_use(nullptr, nullptr);
+        s->progvs = false;
         D(a)->SetFVF(v->fvf);
         return D3D_OK_;
     }
     d3d9w_progvs_use(nullptr, nullptr);
+    s->progvs = false;
     {   /* each distinct FVF once: position kinds the backend may not handle (XYZB1-5 blend weights) */
         static uint32_t seen[64]; static int nseen;
         int k = 0; while (k < nseen && seen[k] != a[1]) k++;
@@ -560,23 +564,55 @@ HLE_D3D(IDirect3DDevice8, SetPixelShader) {   // (this, handle): 0 = fixed-funct
 HLE_D3D(IDirect3DDevice8, GetPixelShader) { wr32(a[1], S(a)->pshader); return D3D_OK_; }
 
 // ---- draws -----------------------------------------------------------------------------------
-HLE_D3D(IDirect3DDevice8, DrawPrimitive) { D(a)->DrawPrimitive((D3DPRIMITIVETYPE)a[1], a[2], a[3]); return D3D_OK_; }
+// This player's camera (d3d8_pov.cpp), for 3D drawn to the back buffer: shader draws read the clip
+// correction from registers 96..99, fixed-function draws get the local view for the draw.
+bool pov_ff_view(const D3DMATRIX &V, const D3DMATRIX &P, D3DMATRIX *out);
+void pov_clip_columns(float cols[4][4]);
+extern "C" int rt_pov;
+static bool pov_pre(const uint32_t *a) {
+    static int env = 0;   // RT_POV=N: start with camera preset N (checks)
+    if (!env) { env = 1; if (const char *e = getenv("RT_POV")) { extern void rt_pov_set(int); rt_pov_set(atoi(e)); } }
+    DevState *s = S(a);
+    Obj *rt = d3d8_obj(s->rt), *bb = d3d8_obj(s->backbuffer);   // the scene, on screen or in a screen-sized target
+    bool to_screen = rt && bb && rt->w == bb->w && rt->h == bb->h;
+    if (s->progvs) { if (to_screen) pov_clip_columns(&s->vsc[96]); else memset(&s->vsc[96], 0, 64), s->vsc[96][0] = s->vsc[97][1] = s->vsc[98][2] = s->vsc[99][3] = 1; return false; }
+    if (!rt_pov || !to_screen) return false;
+    auto v = s->xf.find(D3DTS_VIEW), p = s->xf.find(D3DTS_PROJECTION);
+    D3DMATRIX lv;
+    if (v == s->xf.end() || p == s->xf.end() || !pov_ff_view(v->second, p->second, &lv)) return false;
+    D(a)->SetTransform(D3DTS_VIEW, &lv);
+    return true;
+}
+static void pov_post(const uint32_t *a, bool set) { if (set) D(a)->SetTransform(D3DTS_VIEW, &S(a)->xf[D3DTS_VIEW]); }
+
+HLE_D3D(IDirect3DDevice8, DrawPrimitive) {
+    bool p = pov_pre(a);
+    D(a)->DrawPrimitive((D3DPRIMITIVETYPE)a[1], a[2], a[3]);
+    pov_post(a, p);
+    return D3D_OK_;
+}
 
 HLE_D3D(IDirect3DDevice8, DrawIndexedPrimitive) {   // (this, type, minIndex, numVertices, startIndex, primCount)
+    bool p = pov_pre(a);
     D(a)->DrawIndexedPrimitive((D3DPRIMITIVETYPE)a[1], (INT)S(a)->base_vertex, a[2], a[3], a[4], a[5]);
+    pov_post(a, p);
     return D3D_OK_;
 }
 
 HLE_D3D(IDirect3DDevice8, DrawPrimitiveUP) {        // (this, type, primCount, data, stride)
     DevState *s = S(a);
+    bool p = pov_pre(a);
     D(a)->DrawPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], G2H(a[3]), a[4]);
+    pov_post(a, p);
     release(s->stream[0]); s->stream[0] = 0; s->stride[0] = 0;   // D3D clears stream 0 after *UP
     return D3D_OK_;
 }
 
 HLE_D3D(IDirect3DDevice8, DrawIndexedPrimitiveUP) { // (this, type, minIndex, numVerts, primCount, idx, idxFmt, verts, stride)
     DevState *s = S(a);
+    bool p = pov_pre(a);
     D(a)->DrawIndexedPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], a[3], a[4], G2H(a[5]), (D3DFORMAT)a[6], G2H(a[7]), a[8]);
+    pov_post(a, p);
     release(s->stream[0]); s->stream[0] = 0; s->stride[0] = 0;
     release(s->ib); s->ib = 0;
     return D3D_OK_;
