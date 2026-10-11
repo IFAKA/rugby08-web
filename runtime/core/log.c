@@ -52,6 +52,7 @@ void rt_fatal(const char *fmt, ...) {
  * Each slot also keeps ecx and esp at entry (the registers are still in the globals there), so a
  * dump shows how `this` and the stack flowed into the fault. */
 #define ENTER_RING 256
+volatile uint32_t rt_present_frame;
 static RECOMP_TLS uint32_t t_enter[ENTER_RING][3];
 static RECOMP_TLS uint32_t t_enter_idx;
 /* RT_COVERAGE="from-to:file[,from-to:file...]" (presented frames): every lifted function entered
@@ -67,17 +68,49 @@ int rt_enter_since(uint32_t mark, uint32_t *out, int max) {
     for (uint32_t i = from; i < t_enter_idx && n < max; i++) out[n++] = t_enter[i & (ENTER_RING - 1)][0];
     return n;
 }
+/* RT_PROBE="VA[:off,off..];VA..." (hex) with RT_PROBE_FRAMES="from-to": on every entry of VA in that
+ * window, trace the frame, ecx, three stack arguments and the dwords at ecx+off (hex and as float).
+ * Needs no relift: the entry hook of every lifted function calls here. */
+static struct { uint32_t va; int n; uint32_t off[8]; } g_probe[8];
+static int g_nprobe = -1;
+static uint32_t g_probe_from, g_probe_to = ~0u;
+static void probe_parse(void) {
+    g_nprobe = 0;
+    const char *e = getenv("RT_PROBE");
+    if (getenv("RT_PROBE_FRAMES")) sscanf(getenv("RT_PROBE_FRAMES"), "%u-%u", &g_probe_from, &g_probe_to);
+    while (e && *e && g_nprobe < 8) {
+        char *end; uint32_t va = (uint32_t)strtoul(e, &end, 16);
+        int k = g_nprobe++; g_probe[k].va = va; g_probe[k].n = 0;
+        if (*end == ':') { e = end + 1; while (g_probe[k].n < 8) { g_probe[k].off[g_probe[k].n++] = (uint32_t)strtoul(e, &end, 16); e = end; if (*e != ',') break; e++; } }
+        else e = end;
+        if (*e == ';') e++; else break;
+    }
+}
+static void probe_enter(uint32_t va) {
+    if (g_nprobe < 0) probe_parse();
+    uint32_t f = rt_present_frame;
+    if (f < g_probe_from || f > g_probe_to) return;
+    for (int i = 0; i < g_nprobe; i++) if (g_probe[i].va == va) {
+        char buf[400]; int o = snprintf(buf, sizeof buf, "probe %08X f%u ecx=%08X args %08X %08X %08X", va, f, g_ecx,
+                                        rd32(g_esp + 4), rd32(g_esp + 8), rd32(g_esp + 12));
+        for (int k = 0; k < g_probe[i].n && o < (int)sizeof buf - 40; k++) {
+            uint32_t v = rd32(g_ecx + g_probe[i].off[k]); float fl; memcpy(&fl, &v, 4);
+            o += snprintf(buf + o, sizeof buf - (size_t)o, " [%X]=%08X(%g)", g_probe[i].off[k], v, fl);
+        }
+        rt_trace("%s", buf);
+    }
+}
 void recomp_trace_enter(uint32_t va) {
     uint32_t *e = t_enter[t_enter_idx++ & (ENTER_RING - 1)];
     e[0] = va; e[1] = g_ecx; e[2] = g_esp;
     if ((t_enter_idx & 4095) == 0) rt_guest_yield();   /* cpu.c guest lock: let waiting threads run */
     rt_shadow_auto(va);
+    probe_enter(va);
     if (g_cov_on && va >= RT_IMAGE_BASE && va < RT_IMAGE_END) {
         uint32_t o = va - RT_IMAGE_BASE;
         g_cov[o >> 3] |= (uint8_t)(1u << (o & 7));
     }
 }
-volatile uint32_t rt_present_frame;
 void rt_coverage_frame(uint32_t frame) {
     static const char *spec; static int parsed;
     rt_present_frame = frame;
@@ -168,6 +201,10 @@ static void selftest_crt(void) {
         n++;
         if (g != h && bad++ < 8) rt_trace("crt selftest: _ftol(%g) = %d, C cast %d", f[i], g, h);
     }
+    /* _adjust_fdiv (0xAA40FC): the CRT's Pentium FDIV-bug test result. 1 sends every fmod/fprem
+       through the software workaround _adj_fprem; any real or emulated modern x87 gives 0. */
+    rt_trace("crt selftest: _adjust_fdiv = %u", rd32(0xAA40FCu));
+    if (rd32(0xAA40FCu) != 0) bad++;
     rt_trace("crt selftest: %d cases, %d wrong -> %s", n, bad, bad ? "FAIL" : "PASS");
     exit(bad ? 1 : 0);
 }
@@ -218,6 +255,21 @@ void rt_hook_enter(uint32_t va, const char *name) {
     if (!strncmp(name, "args:", 5)) {
         rt_trace("%s (0x%08X) ecx=%08X args %08X %08X %08X", name + 5, va, g_ecx,
                  rd32(g_esp + 4), rd32(g_esp + 8), rd32(g_esp + 12));
+        {   // RT_ARGS_DUMP=N: also the first N dwords at ecx as floats (finding position/heading fields)
+            static int n = -1; static uint32_t off;   // RT_ARGS_DUMP_OFF=hex: start the dump at ecx+off
+            if (n < 0) { n = getenv("RT_ARGS_DUMP") ? atoi(getenv("RT_ARGS_DUMP")) : 0;
+                         off = getenv("RT_ARGS_DUMP_OFF") ? (uint32_t)strtoul(getenv("RT_ARGS_DUMP_OFF"), 0, 16) : 0; }
+            if (n > 0 && g_ecx >= 0x10000) {
+                char buf[4096]; int k = 0;
+                for (int i = 0; i < n && k < (int)sizeof buf - 32; i++) {
+                    uint32_t base = getenv("RT_ARGS_DUMP_DEREF") ? rd32(g_ecx + (uint32_t)strtoul(getenv("RT_ARGS_DUMP_DEREF"), 0, 16)) : g_ecx;
+                    uint32_t v = rd32(base + off + 4u * (uint32_t)i); float f; memcpy(&f, &v, 4);
+                    k += getenv("RT_ARGS_DUMP_HEX") ? snprintf(buf + k, sizeof buf - k, " %08X", v)
+                                                    : snprintf(buf + k, sizeof buf - k, " %g", f);
+                }
+                rt_trace("%s dump f%u:%s", name + 5, rt_present_frame, buf);
+            }
+        }
         return;
     }
     rt_trace("%s entered (0x%08X)", name, va);
