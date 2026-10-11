@@ -22,6 +22,13 @@ static uint32_t g_next_id;
 static pthread_mutex_t g_tmu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_tcv = PTHREAD_COND_INITIALIZER;
 static int g_tthread;
+/* The timer being delivered on this thread (its ideal due time). The game's clock is a counter its
+ * one-shot TimeProc increments once per tick and re-arms from inside the callback (timeSetEvent
+ * 8-9 ms): a re-arm scheduled from "now" turns every late wakeup (guest lock, scheduler slop) into
+ * lost game time and frame-to-frame dt jitter. Re-arming from the ideal due time makes late ticks
+ * catch up, so game time follows the wall clock as on Windows (~1 ms timer latency). */
+static __thread uint64_t t_fire_due;
+static __thread uint32_t t_fire_proc;
 
 static uint64_t now_ns(void) {
     struct timespec t;
@@ -51,6 +58,7 @@ static void *timer_main(void *arg) {
             continue;                                       /* table may have changed */
         }
         mmtimer_t t = g_timers[next];
+        t_fire_due = t.due_ns; t_fire_proc = t.proc;
         if (t.flags & 1) g_timers[next].due_ns += (uint64_t)t.delay * 1000000ull;   /* TIME_PERIODIC */
         else g_timers[next] = g_timers[--g_ntimers];                               /* one-shot: done */
         pthread_mutex_unlock(&g_tmu);
@@ -59,6 +67,7 @@ static void *timer_main(void *arg) {
             if (e) h_signal(e);
         } else {
             guest_call(t.proc, 5, t.id, 0, t.user, 0, 0);   /* TimeProc(id, msg, user, dw1, dw2) */
+            t_fire_proc = 0;
         }
         pthread_mutex_lock(&g_tmu);
     }
@@ -79,8 +88,13 @@ HLE(timeSetEvent) {   /* (delay ms, resolution, proc, user, flags) -> timer id, 
     }
     if (g_ntimers == MAX_TIMERS) { pthread_mutex_unlock(&g_tmu); rt_log("timeSetEvent: %d timers live", MAX_TIMERS); return 0; }
     uint32_t id = ++g_next_id ? g_next_id : ++g_next_id;
+    uint64_t now = now_ns(), due = now + (uint64_t)a[0] * 1000000ull;
+    if (t_fire_proc && t_fire_proc == a[2]) {   /* re-armed by its own callback: keep the ideal schedule */
+        uint64_t ideal = t_fire_due + (uint64_t)a[0] * 1000000ull;
+        if (ideal + 250000000ull > now) due = ideal < now ? now : ideal;   /* > 250 ms behind: resync */
+    }
     g_timers[g_ntimers++] = (mmtimer_t){ .id = id, .delay = a[0], .proc = a[2], .user = a[3], .flags = a[4],
-                                         .due_ns = now_ns() + (uint64_t)a[0] * 1000000ull };
+                                         .due_ns = due };
     pthread_cond_signal(&g_tcv);
     pthread_mutex_unlock(&g_tmu);
     static int logged;
