@@ -69,6 +69,52 @@ static void *pacer(void *arg) {
     return NULL;
 }
 
+#ifdef __EMSCRIPTEN__
+/* Browser output: the mixer runs on the pacer thread (never on the busy main thread) and writes
+ * into a ring in shared memory; an AudioWorklet drains it. ctl: [0] frames written, [1] frames
+ * read, [2] 1 once the AudioContext is running (browsers keep it suspended until a user gesture;
+ * until then the pacer runs on the wall clock, as the headless pacer does). */
+#include <emscripten.h>
+enum { RING_FRAMES = 16384, RING_TARGET = 3072 };
+static float g_ring[RING_FRAMES * 2];
+static int32_t g_ctl[4];
+
+static void web_audio_init(void) {
+    MAIN_THREAD_ASYNC_EM_ASM(Module.rtAudioInit($0, $1, $2, $3), g_ring, RING_FRAMES, g_ctl, PLAT_AUDIO_RATE);
+}
+
+static void web_pacer(void) {
+    float buf[BLOCK * 2];
+    web_audio_init();
+    uint64_t due = SDL_GetPerformanceCounter(), hz = SDL_GetPerformanceFrequency();
+    for (;;) {
+        int running = __atomic_load_n(&g_ctl[2], __ATOMIC_ACQUIRE);
+        int32_t wr = __atomic_load_n(&g_ctl[0], __ATOMIC_ACQUIRE), rd = __atomic_load_n(&g_ctl[1], __ATOMIC_ACQUIRE);
+        if (running && wr - rd >= RING_TARGET) {      /* the device clock paces the mixer */
+            struct timespec t = { 0, 2000000 };
+            nanosleep(&t, NULL);
+            due = SDL_GetPerformanceCounter();
+            continue;
+        }
+        pull(buf, BLOCK);
+        for (int i = 0; i < BLOCK; i++) {
+            int32_t j = (int32_t)((uint32_t)(wr + i) % RING_FRAMES) * 2;
+            g_ring[j] = buf[2 * i]; g_ring[j + 1] = buf[2 * i + 1];
+        }
+        __atomic_store_n(&g_ctl[0], wr + BLOCK, __ATOMIC_RELEASE);
+        if (running) continue;
+        due += hz * BLOCK / PLAT_AUDIO_RATE;
+        uint64_t now = SDL_GetPerformanceCounter();
+        if (due > now) {
+            uint64_t ns = (due - now) * 1000000000ull / hz;
+            struct timespec t = { (time_t)(ns / 1000000000ull), (long)(ns % 1000000000ull) };
+            nanosleep(&t, NULL);
+        } else if (now - due > hz / 4) due = now;
+    }
+}
+static void *web_pacer_thread(void *arg) { (void)arg; web_pacer(); return NULL; }
+#endif
+
 int plat_audio_start(plat_audio_mix_fn mix) {
     static int started, result;
     if (started) return result;
@@ -83,14 +129,23 @@ int plat_audio_start(plat_audio_mix_fn mix) {
     want.freq = PLAT_AUDIO_RATE; want.format = AUDIO_F32SYS; want.channels = 2; want.samples = BLOCK;
     want.callback = callback;
     SDL_AudioDeviceID dev = 0;
+#ifndef __EMSCRIPTEN__   /* the browser keeps audio suspended until a user gesture and runs SDL's callback on the busy main thread: clock the mixer by the pacer instead */
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+#endif
     if (dev) {
         SDL_PauseAudioDevice(dev, 0);
         rt_log("audio: SDL device '%s', %d Hz, %d-frame blocks", SDL_GetCurrentAudioDriver(), have.freq, have.samples);
         return result = 0;
     }
+#ifdef __EMSCRIPTEN__
+    rt_log("audio: AudioWorklet fed by a mixer thread");
+    pthread_t th;
+    pthread_create(&th, NULL, web_pacer_thread, NULL);
+    return result = 0;
+#else
     rt_log("audio: no output device (%s); pacing the mixer without one", SDL_GetError());
     pthread_t th;
     pthread_create(&th, NULL, pacer, NULL);
+#endif
     return result = 1;
 }

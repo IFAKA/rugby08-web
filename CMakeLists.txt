@@ -103,16 +103,18 @@ if(EMSCRIPTEN)
     RUNTIME_OUTPUT_DIRECTORY ${ROOT}/build/web)
   # setjmp/longjmp (C++ EH landing pads) and C++ exceptions (libc++ throws) as wasm exceptions, not JS
   # invoke_* trampolines: JSPI can only suspend a stack of wasm frames, and the two modes cannot mix
-  target_compile_options(rugby08 PRIVATE -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
+  target_compile_options(rugby08 PRIVATE -pthread -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
   target_compile_options(rt_core PRIVATE -pthread -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
   target_compile_options(mojoshader PRIVATE -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
   # wasm tail calls: RECOMP_ITAIL is musttail (tools/vendor_recomp_types.py), so a jmp never grows the stack
   target_compile_options(recomp_gen PRIVATE -pthread -mtail-call -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
   # -O0 at link skips the wasm-opt -O3 pass (>1h and >24 GB on the 91 MB module); revisit for release builds.
   target_link_options(rugby08 PRIVATE -O0 -pthread -sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
-    -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=4 -sEXIT_RUNTIME=1
+    -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=16 -sEXIT_RUNTIME=1
     -sJSPI   # the Windows loop yields to the browser at every Present (d3d8_device.cpp) without Asyncify
     -sSUPPORT_LONGJMP=wasm -fwasm-exceptions
+    --pre-js=${ROOT}/platform/web/gamefs.js --shell-file=${ROOT}/platform/web/shell.html
     --preload-file=${ROOT}/Rugby08_unpacked.exe@/Rugby08_unpacked.exe)
+  set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/gamefs.js ${ROOT}/platform/web/shell.html)
   add_custom_command(TARGET rugby08 POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:rugby08>/rugby08.html $<TARGET_FILE_DIR:rugby08>/index.html)
 endif()

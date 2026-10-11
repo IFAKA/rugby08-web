@@ -29,7 +29,7 @@ SRV=$!
 for i in 1 2 3 4 5 6 7 8 9 10; do curl -sf -o /dev/null http://127.0.0.1:$PORT/index.html && break; sleep 0.5; done
 "$SHELL_BIN" $HEADLESS --user-data-dir="$PWD/build/web_check_profile" --enable-logging=stderr --v=0 --no-first-run \
   --remote-debugging-port=0 --enable-unsafe-swiftshader --use-angle=swiftshader --mute-audio \
-  "http://127.0.0.1:$PORT/index.html" >"$LOG" 2>&1 &
+  "http://127.0.0.1:$PORT/index.html?log" >"$LOG" 2>&1 &
 BR=$!
 trap 'kill $BR $SRV 2>/dev/null' EXIT
 i=0
