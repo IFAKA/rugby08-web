@@ -19,12 +19,12 @@ build/rugby08-server -addr 127.0.0.1:$PORT -dir build/web >logs/net_server.log 2
 sleep 0.5
 ROOM=T$$
 run() {   # $1 player number, $2 replay
-  RT_FPS=0 SDL_AUDIODRIVER=dummy timeout -s KILL "$TMO" build/native/rugby08 --frames "$FRAMES" --replay "$2" \
-    --log "logs/net_p$1.log" --net ws://127.0.0.1:$PORT/ws --net-room "$ROOM" --net-players 2 --net-delay "$DELAY" \
+  RT_FPS=${RT_FPS:-0} SDL_AUDIODRIVER=dummy timeout -s KILL "$TMO" build/native/rugby08 --frames "$FRAMES" --replay "$2" \
+    --log "logs/net_p$1.log" --net ws://127.0.0.1:$PORT/ws --net-room "$ROOM" --net-delay "$DELAY" \
     --net-name "P$1" >"logs/net_out$1.log" 2>&1
 }
-run 1 "$P1" & A=$!
-sleep 0.3
+RT_FPS=${FPS1:-0} run 1 "$P1" & A=$!   # FPS1=60: player 1 plays in real time (a late joiner catches up)
+sleep ${JOIN_AFTER:-0.3}   # JOIN_AFTER=S: player 2 drops in S seconds into player 1's game
 RT_NET_FAULT=${FAULT:-} RT_POV=${POV2:-0} run 2 "$P2" & B=$!   # POV2: player 2 watches through its own camera
 wait $A; RA=$?; wait $B; RB=$?
 kill $SRV 2>/dev/null; wait $SRV 2>/dev/null

@@ -68,7 +68,8 @@ uint64_t det_clock_read(void) {
 }
 int det_thread_id(void) { return t_id; }
 
-void det_init_main(void) {            /* the boot thread: slot 0, holds the baton */
+void det_init_main(void) {
+    { extern int rt_ff; if (getenv("RT_FF")) rt_ff = 1; }   /* tests: run as if catching up (no drawing, no sound) */            /* the boot thread: slot 0, holds the baton */
     pthread_mutex_lock(&g_mu);
     pthread_cond_init(&g_t[0].cv, NULL);
     g_t[0].state = T_RUN;
@@ -245,6 +246,10 @@ static void hash_frame(uint32_t frame) {
                 uint32_t e = a + 0x10000 < ranges[r][1] ? a + 0x10000 : ranges[r][1];
                 rt_log("det: page %08X %016llX", a, (unsigned long long)hash_range(0, a, e));
             }
+        const char *d = getenv("RT_DET_DUMP");   /* RT_DET_DUMP=ADDR: that 64 KiB page's bytes, logs/det_dump_<log name> */
+        if (d) { char path[256]; snprintf(path, sizeof path, "logs/det_dump_%d.bin", (int)getpid());
+                 FILE *f = fopen(path, "wb"); uint32_t a = (uint32_t)strtoul(d, NULL, 16);
+                 if (f) { for (uint32_t i = 0; i < 0x10000; i++) fputc(rd8(a + i), f); fclose(f); } }
     }
 }
 

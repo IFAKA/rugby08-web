@@ -21,9 +21,10 @@ EM_JS(int, js_net_recv, (void *p, int cap), {
   HEAPU8.set(m.subarray(0, n), p);
   return n;
 });
-EM_JS(void, js_net_status, (int waiting_frames), {
-  if (Module.rugbyNetStatus) Module.rugbyNetStatus(waiting_frames);
+EM_JS(void, js_net_status, (int kind, int value), {
+  if (Module.rugbyNetStatus) Module.rugbyNetStatus(kind, value);
 });
+EM_JS(int, js_net_delay, (void), { return Module.rugbyNetDelay ? Module.rugbyNetDelay() | 0 : 0; });
 
 EM_JS(int, Module_has_net, (void), { return Module.rugbyNet ? 1 : 0; });
 int net_tx_open(const char *url) { (void)url; return Module_has_net() ? 0 : -1; }
@@ -33,4 +34,5 @@ int net_tx_recv(void *buf, int cap, int wait_ms) {
     if (n == 0 && wait_ms > 0) { emscripten_sleep((unsigned)wait_ms); n = js_net_recv(buf, cap); }
     return n;
 }
-void net_tx_status(int waiting_frames) { js_net_status(waiting_frames); }
+void net_tx_status(int kind, int value) { js_net_status(kind, value); }
+int net_tx_delay(void) { return js_net_delay(); }

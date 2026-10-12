@@ -67,13 +67,16 @@ void plat_local_pad(rt_pad_t *p);        /* this player's live devices -> p (unc
 
 /* Netplay (runtime/core/netplay.c). Transport: platform/native/net_native.c, platform/web/. */
 extern int rt_net;
+extern int rt_ff;                         /* catching up (netplay): skip drawing and sound */
 int rt_net_start(int argc, char **argv);  /* --net URL --net-room CODE ...: 1 if a session started */
-int rt_net_begin(int slot, int players, int delay);
+int rt_net_begin(int slot, int creator);
 rt_pad_t *rt_net_local_pad(void);
 int  net_tx_open(const char *url);        /* 0 = connected */
 int  net_tx_send(const void *data, int len, int text);
 int  net_tx_recv(void *buf, int cap, int wait_ms);   /* >0 length, 0 none, -1 closed */
-void net_tx_status(int waiting_frames);   /* 0: running; >0: frames spent waiting for other players (UI) */   /* replay "pad N tap|down|up NAME"; 0 = unknown name */
+int  net_tx_delay(void);                  /* this player's input delay in frames (0: no preference) */
+void net_tx_status(int kind, int value);  /* for the page: 0 running, 1 waiting for slot value,
+                                             2 catching up value %, 3 connection lost (offline) */
 
 /* Input replay (--replay FILE, tests/replays/): lines "<frame> tap|down|up <SDL key name>", '#'
  * comments. Called once per presented frame; due events become ordinary SDL key events, so they

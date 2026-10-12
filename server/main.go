@@ -1,21 +1,26 @@
-// Rugby 08 online relay: serves the web build and relays lockstep inputs between the players of a room.
+// Rugby 08 online relay: serves the web build and runs the rooms: drop-in lockstep play between friends.
 // Standard library only (WebSocket implemented here). One process, no external services.
 //
 //	go run ./server -addr :8090 -dir build/web [-password SECRET] [-cert FULLCHAIN.pem -key KEY.pem]
 //
-// Lobby protocol (JSON text messages):
+// A room is one running game: its creator plays from the first frame; friends join at any time (up to
+// 4 players, the game's controller limit). The server keeps the room's log of game messages and
+// replays it to a newcomer, whose game catches up from boot (runtime/core/netplay.c).
 //
-//	-> {"t":"host","name":N,"players":P}            create a room with a fresh code (you are player 1)
-//	-> {"t":"join","room":C,"name":N[,"players":P,"delay":D,"auto":true]}  join (creates C if missing)
-//	<- {"t":"joined","room":C,"slot":S,"host":bool}
-//	<- {"t":"lobby","room":C,"players":[names],"need":P}
-//	-> {"t":"start","delay":D}                       host only
-//	<- {"t":"start","players":P,"delay":D}
-//	<- {"t":"left","slot":S}                          a player disconnected (the session ends)
-//	-> {"t":"ping","ts":X}  <- {"t":"pong","ts":X}
+// Lobby messages (JSON text):
+//
+//	-> {"t":"host","name":N}                         create a room (you are player 1)
+//	-> {"t":"join","room":C,"name":N[,"auto":true]}  join (auto: create C if missing; tests)
+//	<- {"t":"joined","room":C,"slot":S,"creator":bool}  then the room's log, then live messages
+//	<- {"t":"members","room":C,"players":[{slot,name,rtt,joining,pct}]}
+//	-> {"t":"ping","ts":X}  <- {"t":"pong","ts":X}    -> {"t":"rtt","rtt":MS}
+//	-> {"t":"name","name":N}                          -> {"t":"progress","pct":P}  (catching up)
 //	<- {"t":"error","msg":M}
 //
-// Binary messages (game inputs and state hashes) are relayed unchanged to the other players.
+// Game messages (binary, netplay.c): 'I' inputs and 'H' state hashes from each player and 'A' join
+// grants from the room's authority are logged and relayed in one order to everyone else; the server
+// adds 'D' when a player leaves (after that player's last input), sends 'W' (a newcomer waits) to the
+// authority and 'R' to a player that becomes the authority when the previous one leaves.
 package main
 
 import (
@@ -36,28 +41,56 @@ import (
 	"sync"
 )
 
+const maxPlayers = 4
+
+type outMsg struct {
+	op int
+	p  []byte
+}
+
 type client struct {
-	conn net.Conn
-	mu   sync.Mutex // writes
-	room *room
-	slot int
-	name string
-	rtt  int // ms, as the client last measured it (lobby)
+	conn     net.Conn
+	mu       sync.Mutex // the outgoing queue
+	cond     *sync.Cond
+	queue    []outMsg
+	queued   int
+	closed   bool
+	room     *room
+	slot     int
+	name     string
+	rtt      int // ms, as the client last measured it
+	pct      int // catching up: percent done
+	caughtUp bool
 }
 
 type room struct {
 	code    string
-	players []*client
-	need    int
-	delay   int
-	auto    bool
-	started bool
+	slots   [maxPlayers]*client
+	auth    int               // slot that grants joins
+	log     []byte            // every game message since frame 0, in relay order
+	from    [maxPlayers]int64 // slot plays from this frame (-1: not granted)
+	last    [maxPlayers]int64 // last input frame received from the slot
+	pending [maxPlayers]bool  // waiting for a grant
 }
 
 var (
-	roomsMu sync.Mutex
+	roomsMu sync.Mutex // rooms and everything in them; held while queueing, so all players see one order
 	rooms   = map[string]*room{}
 )
+
+func msgLen(t byte) int {
+	switch t {
+	case 'I':
+		return 18
+	case 'H':
+		return 14
+	case 'A', 'D':
+		return 6
+	case 'W', 'R':
+		return 2
+	}
+	return 0
+}
 
 // ---- WebSocket (RFC 6455), server side ---------------------------------------------------------
 
@@ -129,7 +162,7 @@ func (c *client) readMessage(br *bufio.Reader) (int, []byte, error) {
 		case 8:
 			return 0, nil, io.EOF
 		case 9:
-			c.write(10, p)
+			c.enqueue(10, p)
 			continue
 		case 10:
 			continue
@@ -140,6 +173,48 @@ func (c *client) readMessage(br *bufio.Reader) (int, []byte, error) {
 		msg = append(msg, p...)
 		if fin {
 			return op, msg, nil
+		}
+	}
+}
+
+// ---- outgoing: one ordered queue and one writer goroutine per client ------------------------------
+
+const maxQueued = 64 << 20 // a client this far behind is dropped
+
+func (c *client) enqueue(op int, p []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return
+	}
+	if c.queued += len(p); c.queued > maxQueued {
+		c.closed = true
+		c.conn.Close()
+		return
+	}
+	c.queue = append(c.queue, outMsg{op, p})
+	c.cond.Signal()
+}
+
+func (c *client) writer() {
+	for {
+		c.mu.Lock()
+		for len(c.queue) == 0 && !c.closed {
+			c.cond.Wait()
+		}
+		if c.closed && len(c.queue) == 0 {
+			c.mu.Unlock()
+			return
+		}
+		batch := c.queue
+		c.queue = nil
+		c.queued = 0
+		c.mu.Unlock()
+		for _, m := range batch {
+			if c.write(m.op, m.p) != nil {
+				c.conn.Close()
+				return
+			}
 		}
 	}
 }
@@ -156,21 +231,16 @@ func (c *client) write(op int, p []byte) error {
 		binary.BigEndian.PutUint64(b[:], uint64(n))
 		h = append(append(h, 127), b[:]...)
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, err := c.conn.Write(h); err != nil {
-		return err
-	}
-	_, err := c.conn.Write(p)
+	_, err := c.conn.Write(append(h, p...))
 	return err
 }
 
 func (c *client) send(v any) {
 	b, _ := json.Marshal(v)
-	c.write(1, b)
+	c.enqueue(1, b)
 }
 
-// ---- rooms --------------------------------------------------------------------------------------
+// ---- rooms (all under roomsMu) --------------------------------------------------------------------
 
 func newCode() string {
 	const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -182,33 +252,100 @@ func newCode() string {
 	return string(b)
 }
 
-func (r *room) lobby() {
-	names, rtts := []string{}, []int{}
-	for _, p := range r.players {
-		names, rtts = append(names, p.name), append(rtts, p.rtt)
+func (r *room) members() {
+	type member struct {
+		Slot    int    `json:"slot"`
+		Name    string `json:"name"`
+		RTT     int    `json:"rtt"`
+		Joining bool   `json:"joining"`
+		Pct     int    `json:"pct"`
 	}
-	for _, p := range r.players {
-		p.send(map[string]any{"t": "lobby", "room": r.code, "players": names, "rtt": rtts, "need": r.need})
+	list := []member{}
+	for k, p := range r.slots {
+		if p != nil {
+			list = append(list, member{k, p.name, p.rtt, !p.caughtUp, p.pct})
+		}
+	}
+	for _, p := range r.slots {
+		if p != nil {
+			p.send(map[string]any{"t": "members", "room": r.code, "players": list, "auth": r.auth})
+		}
 	}
 }
 
-func (r *room) start() {
-	r.started = true
-	for _, p := range r.players {
-		p.send(map[string]any{"t": "start", "players": len(r.players), "delay": r.delay})
+// relay logs a game message and queues it for every player but skip (-1: everyone).
+func (r *room) relay(m []byte, skip int) {
+	r.log = append(r.log, m...)
+	for k, p := range r.slots {
+		if p != nil && k != skip {
+			p.enqueue(2, m)
+		}
 	}
-	log.Printf("room %s: started with %d players, delay %d", r.code, len(r.players), r.delay)
+}
+
+func frameMsg(t byte, slot int, frame int64) []byte {
+	m := []byte{t, byte(slot), 0, 0, 0, 0}
+	binary.LittleEndian.PutUint32(m[2:], uint32(frame))
+	return m
+}
+
+// dump queues the room's log for a newcomer, in chunks of whole messages.
+func (r *room) dump(c *client) {
+	for p := 0; p < len(r.log); {
+		q := p
+		for q < len(r.log) && q-p < 1800 {
+			n := msgLen(r.log[q])
+			if n == 0 {
+				q = len(r.log)
+				break
+			}
+			q += n
+		}
+		c.enqueue(2, append([]byte(nil), r.log[p:q]...))
+		p = q
+	}
+}
+
+func (r *room) setAuth() {
+	best := -1
+	for k, p := range r.slots { // a playing slot if there is one, else anyone
+		if p != nil && (best < 0 || (r.from[k] >= 0 && r.from[best] < 0)) {
+			best = k
+		}
+	}
+	if best < 0 || best == r.auth {
+		return
+	}
+	r.auth = best
+	a := r.slots[best]
+	a.enqueue(2, []byte{'R', byte(best)})
+	for k, w := range r.pending {
+		if w && r.slots[k] != nil {
+			a.enqueue(2, []byte{'W', byte(k)})
+		}
+	}
+	log.Printf("room %s: player %d admits newcomers now", r.code, best+1)
 }
 
 type request struct {
-	T       string `json:"t"`
-	Room    string `json:"room"`
-	Name    string `json:"name"`
-	Players int    `json:"players"`
-	Delay   int    `json:"delay"`
-	Auto    bool   `json:"auto"`
-	TS      any    `json:"ts"`
-	RTT     int    `json:"rtt"`
+	T    string `json:"t"`
+	Room string `json:"room"`
+	Name string `json:"name"`
+	Auto bool   `json:"auto"`
+	TS   any    `json:"ts"`
+	RTT  int    `json:"rtt"`
+	Pct  int    `json:"pct"`
+}
+
+func cleanName(n string, slot int) string {
+	n = strings.TrimSpace(n)
+	if len(n) > 16 {
+		n = n[:16]
+	}
+	if n == "" {
+		n = "Player " + string(rune('1'+slot))
+	}
+	return n
 }
 
 func (c *client) handle(req request) {
@@ -217,58 +354,116 @@ func (c *client) handle(req request) {
 	switch req.T {
 	case "host", "join":
 		if c.room != nil {
-			c.send(map[string]any{"t": "error", "msg": "already in a room"})
+			c.send(map[string]any{"t": "error", "msg": "already in a game"})
 			return
 		}
 		code := strings.ToUpper(strings.TrimSpace(req.Room))
-		if req.T == "host" {
-			for code = newCode(); rooms[code] != nil; code = newCode() {
-			}
-		}
 		r := rooms[code]
-		if r == nil {
-			if req.T == "join" && !req.Auto {
-				c.send(map[string]any{"t": "error", "msg": "no game with that code"})
-				return
+		creator := false
+		if req.T == "host" || (r == nil && req.Auto) {
+			if req.T == "host" {
+				for code = newCode(); rooms[code] != nil; code = newCode() {
+				}
 			}
-			need := req.Players
-			if need < 1 || need > 4 {
-				need = 2
+			r = &room{code: code}
+			for k := range r.from {
+				r.from[k], r.last[k] = -1, -1
 			}
-			delay := req.Delay
-			if delay < 1 {
-				delay = 4
-			}
-			r = &room{code: code, need: need, delay: delay, auto: req.Auto}
+			r.from[0] = 0 // the creator plays from the first frame
 			rooms[code] = r
+			creator = true
+			log.Printf("room %s: created", code)
 		}
-		if r.started || len(r.players) >= 4 {
-			c.send(map[string]any{"t": "error", "msg": "that game is full or already playing"})
+		if r == nil {
+			c.send(map[string]any{"t": "error", "msg": "There is no game with that code. Ask your friend for a new link."})
 			return
 		}
-		c.room, c.slot, c.name = r, len(r.players), req.Name
-		if c.name == "" {
-			c.name = "Player " + string(rune('1'+c.slot))
-		}
-		r.players = append(r.players, c)
-		c.send(map[string]any{"t": "joined", "room": r.code, "slot": c.slot, "host": c.slot == 0})
-		r.lobby()
-		if r.auto && len(r.players) == r.need {
-			r.start()
-		}
-	case "start":
-		if r := c.room; r != nil && c.slot == 0 && !r.started {
-			if req.Delay > 0 {
-				r.delay = req.Delay
+		slot := -1 // the creator is player 1; a newcomer takes the lowest free controller
+		for k, p := range r.slots {
+			if creator || (p == nil && r.from[k] < 0) {
+				slot = k
+				break
 			}
-			r.start()
 		}
+		if slot < 0 {
+			c.send(map[string]any{"t": "error", "msg": "That game is full (4 players)."})
+			return
+		}
+		c.room, c.slot, c.name, c.caughtUp = r, slot, cleanName(req.Name, slot), creator
+		r.slots[slot] = c
+		c.send(map[string]any{"t": "joined", "room": r.code, "slot": slot, "creator": creator})
+		if !creator {
+			r.dump(c)
+			r.pending[slot] = true
+			if a := r.slots[r.auth]; a != nil && r.auth != slot {
+				a.enqueue(2, []byte{'W', byte(slot)})
+			} else {
+				r.setAuth()
+			}
+			log.Printf("room %s: %s joins as player %d (log %d bytes)", r.code, c.name, slot+1, len(r.log))
+		}
+		r.members()
 	case "ping":
 		c.send(map[string]any{"t": "pong", "ts": req.TS})
-	case "rtt": // the client's measured round trip, shown in the lobby and used for the input delay
+	case "rtt":
 		c.rtt = req.RTT
-		if c.room != nil && !c.room.started {
-			c.room.lobby()
+		if c.room != nil {
+			c.room.members()
+		}
+	case "name":
+		if c.room != nil {
+			c.name = cleanName(req.Name, c.slot)
+			c.room.members()
+		}
+	case "progress":
+		if c.room != nil {
+			c.pct, c.caughtUp = req.Pct, req.Pct >= 100
+			c.room.members()
+		}
+	}
+}
+
+// game handles one binary message from c (possibly several game messages back to back).
+func (c *client) game(b []byte) {
+	roomsMu.Lock()
+	defer roomsMu.Unlock()
+	r := c.room
+	if r == nil {
+		return
+	}
+	for len(b) > 0 {
+		n := msgLen(b[0])
+		if n == 0 || n > len(b) {
+			return
+		}
+		m := append([]byte(nil), b[:n]...)
+		b = b[n:]
+		k := int(m[1])
+		if k >= maxPlayers {
+			continue
+		}
+		switch m[0] {
+		case 'I', 'H':
+			if k != c.slot {
+				continue
+			}
+			if f := int64(binary.LittleEndian.Uint32(m[2:])); m[0] == 'I' && f > r.last[k] {
+				r.last[k] = f
+			}
+			r.relay(m, c.slot)
+		case 'A': // a join grant from the authority: relayed as is (the authority applied it already)
+			if c.slot != r.auth {
+				continue
+			}
+			f := int64(binary.LittleEndian.Uint32(m[2:]))
+			r.relay(m, c.slot)
+			if r.slots[k] == nil { // the newcomer left before the grant: it leaves at once
+				r.relay(frameMsg('D', k, f), -1)
+				continue
+			}
+			if r.pending[k] {
+				r.pending[k], r.from[k] = false, f
+			}
 		}
 	}
 }
@@ -277,29 +472,37 @@ func (c *client) leave() {
 	roomsMu.Lock()
 	defer roomsMu.Unlock()
 	r := c.room
-	if r == nil {
+	if r == nil || r.slots[c.slot] != c {
 		return
 	}
-	for i, p := range r.players {
-		if p == c {
-			r.players = append(r.players[:i], r.players[i+1:]...)
-			break
+	k := c.slot
+	r.slots[k] = nil
+	r.pending[k] = false
+	if r.from[k] >= 0 { // after the leaver's last input
+		l := r.last[k] + 1
+		if r.from[k] > l {
+			l = r.from[k]
+		}
+		r.relay(frameMsg('D', k, l), -1)
+		r.from[k], r.last[k] = -1, -1
+	}
+	log.Printf("room %s: %s (player %d) left", r.code, c.name, k+1)
+	empty := true
+	for _, p := range r.slots {
+		if p != nil {
+			empty = false
 		}
 	}
-	if r.started {
-		for _, p := range r.players {
-			p.send(map[string]any{"t": "left", "slot": c.slot})
-		}
-	} else {
-		for i, p := range r.players { // renumber the lobby
-			p.slot = i
-			p.send(map[string]any{"t": "joined", "room": r.code, "slot": i, "host": i == 0})
-		}
-		r.lobby()
-	}
-	if len(r.players) == 0 {
+	if empty {
 		delete(rooms, r.code)
+		log.Printf("room %s: closed", r.code)
+		return
 	}
+	if r.auth == k {
+		r.auth = -1
+		r.setAuth()
+	}
+	r.members()
 }
 
 func serveWS(w http.ResponseWriter, r *http.Request) {
@@ -309,7 +512,16 @@ func serveWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := &client{conn: conn}
-	defer func() { c.leave(); conn.Close() }()
+	c.cond = sync.NewCond(&c.mu)
+	go c.writer()
+	defer func() {
+		c.leave()
+		c.mu.Lock()
+		c.closed = true
+		c.cond.Signal()
+		c.mu.Unlock()
+		conn.Close()
+	}()
 	for {
 		op, msg, err := c.readMessage(br)
 		if err != nil {
@@ -322,19 +534,7 @@ func serveWS(w http.ResponseWriter, r *http.Request) {
 			}
 			continue
 		}
-		roomsMu.Lock() // binary: relay to the other players
-		var peers []*client
-		if c.room != nil && c.room.started {
-			for _, p := range c.room.players {
-				if p != c {
-					peers = append(peers, p)
-				}
-			}
-		}
-		roomsMu.Unlock()
-		for _, p := range peers {
-			p.write(2, msg)
-		}
+		c.game(msg)
 	}
 }
 

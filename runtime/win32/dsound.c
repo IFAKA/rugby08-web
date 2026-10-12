@@ -105,6 +105,7 @@ static int det_follow(dsbuf_t *b) {
 
 static void mix(float *out, int frames) {
     memset(out, 0, sizeof(float) * 2 * (size_t)frames);
+    if (rt_ff) return;   /* catching up (netplay): silent; det_follow re-aligns the cursors afterwards */
     pthread_mutex_lock(&g_mu);
     for (dsbuf_t *b = g_bufs; b; b = b->next)
         if (b->playing && (b != g_primary || g_coop == DSSCL_WRITEPRIMARY) && (rt_det != 1 || det_follow(b))) mix_buffer(b, out, frames);

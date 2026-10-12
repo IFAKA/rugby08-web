@@ -28,7 +28,13 @@
 #define NO_MALLINFO 1
 #define DLMALLOC_EXPORT static
 #define MALLOC_FAILURE_ACTION
+/* dlmalloc seeds its heap-check "magic" (stored in the heap header, guest memory) from time(0): a
+ * constant instead, so the guest heap does not depend on the second the game started (netplay and
+ * deterministic replays compare whole-memory hashes between instances started at different times). */
+static time_t rt_heap_no_time(time_t *t) { (void)t; return 0; }
+#define time(t) rt_heap_no_time(t)
 #include "../third_party/dlmalloc/dlmalloc.c"
+#undef time
 #ifdef RT_WAS_EMSCRIPTEN
 #define __EMSCRIPTEN__ 1
 #endif
