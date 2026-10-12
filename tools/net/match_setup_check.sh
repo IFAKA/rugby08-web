@@ -6,6 +6,7 @@
 # setup bytes, teams and stadium equal the host's, and its picture 1000 frames after launch is the
 # host's match (much closer to the host's than the friend's own match is). One summary line.
 # Details: logs/match_setup/.
+# RT_PADS=0: the original game's controllers (no virtual pads), as the reference replays were recorded.
 cd "$(dirname "$0")/../.." || exit 1
 D=logs/match_setup
 rm -rf "$D" && mkdir -p "$D/host" "$D/own" "$D/friend"
@@ -14,7 +15,7 @@ run() { # name, replay, extra env...
   name=$1 replay=$2
   shift 2
   grep -v ' shot ' "$replay" >"$D/$name.replay"
-  env "$@" RT_DET=1 RT_FPS=0 RT_MS_AFTER_LAUNCH="$K:$D/$name.png" SDL_AUDIODRIVER=dummy timeout -s KILL 1500 \
+  env "$@" RT_PADS=0 RT_DET=1 RT_FPS=0 RT_MS_AFTER_LAUNCH="$K:$D/$name.png" SDL_AUDIODRIVER=dummy timeout -s KILL 1500 \
     build/native/rugby08 --user-dir "$D/$name" --frames 18000 --replay "$D/$name.replay" --log "$D/$name.log" \
     >"$D/$name.out" 2>&1
 }

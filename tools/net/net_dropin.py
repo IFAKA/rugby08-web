@@ -60,7 +60,7 @@ try:
         def has(i, pat):
             return any(re.search(pat, l) for l in logs[i])
 
-        a = open_page(f"http://127.0.0.1:{port}/index.html?log")
+        a = open_page(f"http://127.0.0.1:{port}/index.html?log&panel")
         if not wait(lambda: has(0, "session started as player 1"), 120):
             fail("page 1 did not start its game")
         a.wait_for_selector("#friends-btn:not([hidden])", timeout=30000)
@@ -69,7 +69,7 @@ try:
         if not re.fullmatch(r"[A-Z0-9]{4,8}", code):
             fail(f"no game code in the Online panel ({code!r})")
         a.click("#friends-btn")
-        b = open_page(f"http://127.0.0.1:{port}/index.html?log")  # the friend's own game
+        b = open_page(f"http://127.0.0.1:{port}/index.html?log&panel")  # the friend's own game (the page lobby: ?panel)
         b.wait_for_selector("#friends-btn:not([hidden])", timeout=120000)
         a.wait_for_timeout(int(join_after * 1000))
         b.click("#friends-btn")
@@ -86,6 +86,7 @@ try:
             toast = ""
         if "You're in" not in toast:
             fail(f"no 'You're in' toast on page 2 ({toast!r})")
+        b.bring_to_front()  # the focused window (a player's keys count only while its page has focus)
         b.locator("canvas").focus()
         b.keyboard.down("s")
         b.wait_for_timeout(400)

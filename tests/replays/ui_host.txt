@@ -1,0 +1,22 @@
+# on.ingame_ui host: at the main menu open the Online screens (F2, shot), HOST A GAME (Return,
+# shot with the code), close them (F2), then match_play.txt's PLAY NOW menus into a match. SHOTS: the
+# check's directory.
+8100 click 320 240
+8400 tap Return
+8600 shot SHOTS/before.png
+8620 tap F2
+8650 tap Return
+8800 shot SHOTS/code.png
+8850 tap F2
+9000 tap S
+9300 tap S
+9600 tap S
+9900 tap S
+10400 tap S
+11200 tap S
+11700 down Left
+11760 up Left
+12100 tap S
+12600 tap S
+13000 tap S
+13400 tap S

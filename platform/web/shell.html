@@ -124,7 +124,9 @@
         setStatus(text) { if (!started && text) $('cover-text').textContent = text.replace(/\(.*\)/, '').trim() || 'Loading the game…'; },
         onRuntimeInitialized() {
           if (q.has('solo')) { play([]); return; }   // offline, no server (checks, direct links)
-          connect();
+          // lockstep play from the page's own lobby: checks (net=auto), the old panel (panel), shared join links
+          if (q.get('net') === 'auto' || q.has('panel') || joinCode) { connect(); return; }
+          play([]);   // online play is in the game's own screens (F2: runtime/core/ui_online.c)
         },
         onExit(code) {
           if (code === 3 && room) {   // this copy fell out of sync: rebuild it by joining again

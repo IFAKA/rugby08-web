@@ -62,6 +62,7 @@ static uint32_t di_EnumDevices(const uint32_t *a) { /* (this, dwDevType, callbac
         if (guest_call(a[2], 2, inst, a[3]) == 0) break; /* DIENUM_STOP */
     }
     gfree(inst);
+    rt_trace("DirectInput EnumDevices type %u: %d devices (%d pads) at frame %u", type, n, np, rt_present_frame);
     return DI_OK;
 }
 

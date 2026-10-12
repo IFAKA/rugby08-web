@@ -3,6 +3,7 @@
 #include "d3d8_dev.hpp"
 extern "C" void rt_coverage_frame(uint32_t frame);
 #include "match_state.h"
+#include "ui.h"
 #include "plat.h"
 #include <GLES3/gl3.h>
 #include <cstdlib>
@@ -141,6 +142,12 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     Obj *o = d3d8_obj(a[0]);
     DevState *s = o->dev;
     if (!rt_ff) dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
+    {   // the in-game Online screens (runtime/core/ui_online.c), before screenshots see the frame
+        const uint8_t *img;
+        int changed;
+        if (!rt_ff && ui_present(s->frame, (int)o->w, (int)o->h, &img, &changed))
+            d3d9w_overlay_draw(img, (int)o->w, (int)o->h, changed);
+    }
     s->frame++;
     plat_replay_tick(s->frame);
     net_ha_present(s->frame);   // host-authoritative online play: friends' pads in, this player's out

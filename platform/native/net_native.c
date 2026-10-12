@@ -24,6 +24,12 @@ static int read_some(int wait_ms) {
     return (int)n;
 }
 
+void net_tx_close(void) {
+    if (g_fd >= 0) close(g_fd);
+    g_fd = -1;
+    g_rn = 0;
+}
+
 int net_tx_open(const char *url) {   /* ws://host:port/path */
     char host[256] = "127.0.0.1", path[256] = "/ws";
     int port = 80;

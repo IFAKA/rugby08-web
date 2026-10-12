@@ -18,6 +18,7 @@
 #include "netplay_int.h"
 #include "match_state.h"
 #include "../debug/debug.h"
+#include "ui.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -178,7 +179,8 @@ static void pump(void) {
     for (;;) {
         int n = net_tx_recv(g_rx + g_rx_n, (int)sizeof g_rx - g_rx_n, 0);
         if (n <= 0) break;
-        if (g_rx[g_rx_n] != '{') g_rx_n += n;   /* text: lobby JSON */
+        if (g_rx[g_rx_n] == '{') ui_lobby_text((const char *)g_rx + g_rx_n, n);   /* lobby JSON: members */
+        else g_rx_n += n;
         int p = 0;
         while (p < g_rx_n) {
             int len = msg_len(g_rx + p, g_rx_n - p);
@@ -245,12 +247,26 @@ const uint8_t *net_ha_newest(int *fresh) {
     return g_have ? g_newest : NULL;
 }
 
+/* Back to playing alone: friends' pads let go, no frames kept. */
+void rt_net_end_ha(void) {
+    static const rt_pad_t zero;
+    for (int k = 0; k < RT_MAX_PADS; k++)
+        if (k != N.slot) rt_pads[k] = zero;
+    memset(g_pad_at, 0, sizeof g_pad_at);
+    g_pk_n = g_dec_at = 0;
+    g_have = g_rx_n = 0;
+    g_rx_at = 0;
+    rt_net_ha = 0;
+    rt_net = 0;
+    rt_trace("netplay: host-authoritative session ended");
+}
+
 /* Start host mode (net_join.c --net-mode ha): the room's creator hosts. */
 int rt_net_begin_ha(int slot, int creator) {
     N.slot = slot;
     rt_net = 1;   /* pads.c: replay pad events are this player's (N.local) */
     rt_net_ha = creator ? 1 : 2;
-    if (rt_npads < RT_MAX_PADS) rt_npads = creator ? RT_MAX_PADS : 1;
+    if (rt_npads < (creator ? RT_MAX_PADS : 1)) rt_npads = creator ? RT_MAX_PADS : 1;   /* (from boot by default) */
     rt_trace("netplay: host-authoritative session as player %d (%s)", slot + 1, creator ? "host" : "friend");
     return 1;
 }

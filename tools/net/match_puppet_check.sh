@@ -7,6 +7,7 @@
 # what the friend's own recorder writes (every player's position and heading, the ball) is the host's
 # within 1 cm, the friend ends with the host's score, and at fixed match times its picture is much
 # closer to the host's than the control's is. One summary line; details in logs/match_puppet/.
+# RT_PADS=0: the original game's controllers (no virtual pads), as the reference replays were recorded.
 cd "$(dirname "$0")/../.." || exit 1
 D=logs/match_puppet
 rm -rf "$D" && mkdir -p "$D/host" "$D/friend" "$D/control"
@@ -15,7 +16,7 @@ run() { # name, replay, frames, extra env...
   name=$1 replay=$2 frames=$3
   shift 3
   grep -v ' shot ' "$replay" >"$D/$name.replay"
-  env "$@" RT_DET=1 RT_FPS=0 RT_MS_POS=1 RT_MS_SHOT_T="$D/$name:$T" SDL_AUDIODRIVER=dummy timeout -s KILL 2400 \
+  env "$@" RT_PADS=0 RT_DET=1 RT_FPS=0 RT_MS_POS=1 RT_MS_SHOT_T="$D/$name:$T" SDL_AUDIODRIVER=dummy timeout -s KILL 2400 \
     build/native/rugby08 --user-dir "$D/$name" --frames "$frames" --replay "$D/$name.replay" --log "$D/$name.log" \
     >"$D/$name.out" 2>&1
 }

@@ -646,3 +646,5 @@ extern "C" void d3d9w_progps_use(D3D9WProgPS *p, const float (*consts)[4]);
 extern "C" void d3d9w_trace_draws(int on);
 // GL texture name of a texture (0 if none): lets the D3D8 bridge read a render-target texture back.
 extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t);
+// overlay.cpp: an RGBA image (w x h, the back buffer's size) over the finished frame; changed: re-upload
+extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int changed);

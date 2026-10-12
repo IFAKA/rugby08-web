@@ -97,6 +97,13 @@ each friend's own game loads the same match and shows the host's state.
    Present, game-like style, keyboard/mouse/pad): Online → Host (code) / Join (type code) / party
    badge / leave. Remove the HTML panel. Check: native replay + Playwright: host code shown in the
    frame, friend types it with game keys, both in one party.
+   As built (2026-10-12, tools/net/ingame_ui_check.sh): every game (web and native, no flag) has F2 -> ONLINE (HOST A GAME / JOIN A GAME / BACK), the room code screen, a
+   typing screen and a corner badge, drawn by the runtime (runtime/core/ui_*.c, a 5x7 bitmap font) through
+   render/webgl/overlay.cpp; keys pressed while open never reach the game. The page's HTML panel is hidden
+   (kept behind ?panel / ?net=auto for the lockstep checks). Known: the game enumerates controllers once
+   at boot, so all 4 virtual pads exist from boot. Found on the way: a browser AudioContext that runs but drains nothing (muted
+   headless pages, a busy machine) froze DirectSound's play cursor and the game restored its device until it
+   died; the web audio pacer now falls back to the wall clock then (platform/sdl/sdl_audio.c).
 7. **on.cross_platform** — Mac native host + browser friend (and the reverse) in one match.
 8. **on.deploy_ready** — server with TLS on the user's own server; docs/ONLINE.md for players.
    (Deploying itself needs the user's go.)

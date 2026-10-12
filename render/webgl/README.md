@@ -9,6 +9,7 @@ its only client. Public API: `d3d9.h` (types + interfaces, grep it) plus the `d3
 - `program_ff.cpp` the fixed-function program (`glsl/ffp.vert`, `glsl/ffp.frag`, embedded at configure time)
   · `program_vs.cpp` / `program_ps.cpp` D3D8 shaders (MojoShader GLSL) · `locations.cpp` attribute/uniform table.
 - `texture.cpp` `surface.cpp` `buffers.cpp` `sampler.cpp` `lighting.cpp` `trace.cpp` (draw trace) `factory.cpp` (IDirect3D9).
+- `overlay.cpp` `d3d9w_overlay_draw`: an RGBA image over the finished frame (the in-game Online screens).
 - `internal.h` shared state and helpers.
 
 Verification: `tools/check/regress.sh` (deterministic runs: every pixel and state hash must match).

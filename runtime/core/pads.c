@@ -76,7 +76,8 @@ int rt_pad_event(int pad, const char *name, int down) {
 int rt_pad_count(void) {
     if (rt_npads < 0) {
         const char *e = getenv("RT_PADS");
-        rt_npads = e ? atoi(e) : 0;
+        rt_npads = e ? atoi(e) : RT_MAX_PADS;   /* every controller exists from boot: the game enumerates
+                                                   them once, and online friends' pads must be among them */
         if (rt_npads > RT_MAX_PADS) rt_npads = RT_MAX_PADS;
     }
     return rt_npads;

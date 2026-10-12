@@ -105,9 +105,12 @@ rt_pad_t *rt_net_local_pad(void);
 /* Host-authoritative mode (runtime/core/net_ha.c, --net-mode ha) */
 extern int rt_net_ha;                       /* 1 host, 2 friend */
 int rt_net_begin_ha(int slot, int creator);
+void rt_net_end_ha(void);                   /* back to playing alone (the Online screens' LEAVE) */
+extern const char *rt_net_url;              /* the relay (--net URL; ui_lobby.c) */
 void net_ha_present(uint32_t frame);        /* d3d8 Present, before the frame's input */
 int net_tx_open(const char *url); /* 0 = connected */
 int net_tx_send(const void *data, int len, int text);
+void net_tx_close(void);
 int net_tx_recv(void *buf, int cap, int wait_ms); /* >0 length, 0 none, -1 closed */
 int net_tx_delay(void);                           /* this player's input delay in frames (0: no preference) */
 void net_tx_status(int kind, int value);          /* for the page: 0 running, 1 waiting for slot value,

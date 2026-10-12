@@ -123,6 +123,12 @@ controller+0x54. A friend re-applies the host's 16 floats after its own step
   menu (one without a side does not); Cross on RESUME (highlighted first) resumes; Esc on the open menu
   does nothing. FUN_00575F90 is the menu's resume.
 
+## Controllers: enumeration
+The game enumerates DirectInput devices once, at boot (frame 5: CPCControlMgr vf7 0x0081F1A0 -> FUN_0081F300
+-> FUN_007ACD70 EnumDevices); controllers that appear later are not seen. Calling vf7 again from a Present
+hook crashed (null in FUN_00871EE0): not a safe rebuild. So the 4 virtual pads exist from boot (Team
+Select shows 3 idle pad icons; RT_PADS=N overrides).
+
 ## Controllers
 CRugbyTeam+0xC0..+0xCC CPlayerControl*[4] (one per human on that side, 0 = none).
 CPlayerControl (vtable 0x008EE9D8): +0xC team, +0x10 controlled CRugbyPlayer* (0 at set pieces),

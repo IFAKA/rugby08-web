@@ -1,5 +1,6 @@
 /* sdl_events.c -- SDL events translated to the Win32 messages the game's WndProc expects. */
 #include "sdl_int.h"
+#include "ui.h"
 
 #define WM_SIZE_        0x0005
 #define WM_ACTIVATE_    0x0006
@@ -139,7 +140,12 @@ void translate(const SDL_Event *e) {
     case SDL_QUIT: push(WM_CLOSE_, 0, 0); break;
     case SDL_WINDOWEVENT: window_event(&e->window); break;
     case SDL_KEYDOWN:
-    case SDL_KEYUP: key_event(&e->key); break;
+    case SDL_KEYUP: {   /* the in-game Online screens take keys first (runtime/core/ui_online.c) */
+        int down = e->type == SDL_KEYDOWN, sc = (int)e->key.keysym.scancode;
+        if (down && e->key.repeat ? ui_open() : ui_key(sc, down)) break;
+        key_event(&e->key);
+        break;
+    }
     case SDL_MOUSEMOTION: motion_event(&e->motion); break;
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP: button_event(&e->button); break;

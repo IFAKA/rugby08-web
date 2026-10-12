@@ -492,7 +492,7 @@
       ],
       "desc": "Online screens drawn inside the game (Host code, Join by typing the code, party badge, leave), keyboard/mouse/pad; no HTML panel; native and browser.",
       "check": "tools/net/ingame_ui_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "on.cross_platform",

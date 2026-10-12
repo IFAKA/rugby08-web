@@ -6,6 +6,7 @@
 # the score the HUD shows (0-3 from frame 17500 on, screenshots in docs/MATCH_STATE.md). One summary line.
 #   tools/net/match_state_check.sh [--frames N] [--timeout S]
 # Run output: logs/match_state_check.log.
+# RT_PADS=0: the original game's controllers (no virtual pads), as the reference replays were recorded.
 cd "$(dirname "$0")/../.." || exit 1
 FRAMES=30000 TMO=2400
 while [ $# -gt 0 ]; do
@@ -27,6 +28,6 @@ done
 mkdir -p logs
 OUT=logs/match_state_check.log
 grep -v ' shot ' tests/replays/match_play.txt >logs/match_state_replay.txt
-RT_DET=1 RT_FPS=0 RT_MS_LOG=60 SDL_AUDIODRIVER=dummy timeout -s KILL "$TMO" build/native/rugby08 --frames "$FRAMES" \
+RT_PADS=0 RT_DET=1 RT_FPS=0 RT_MS_LOG=60 SDL_AUDIODRIVER=dummy timeout -s KILL "$TMO" build/native/rugby08 --frames "$FRAMES" \
   --replay logs/match_state_replay.txt --log logs/match_state_run.log >"$OUT" 2>&1
 .venv/bin/python -I tools/net/match_state_eval.py "$OUT"
