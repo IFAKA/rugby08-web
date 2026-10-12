@@ -215,6 +215,7 @@ void rt_com_free(uint32_t this_va) {
 }
 
 /* ---- guest_call ------------------------------------------------------------ */
+RECOMP_TLS int guest_call_broke;
 uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
     recomp_func_t fn = recomp_lookup_manual(va);
     if (!fn) fn = recomp_lookup(va);
@@ -231,6 +232,10 @@ uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
     if (fn) fn();
     else { recomp_miss(0, va, sv_cur); rt_interp(va); }   /* no lifted body: interpret it */
     uint32_t ret = g_eax;
+    /* the callee kept the calling convention: callee-saved registers intact, esp past the return
+       address and, for stdcall, the arguments (selftests check it; the restore below hides it) */
+    guest_call_broke = g_ebx != sv_ebx || g_esi != sv_esi || g_edi != sv_edi || g_ebp != sv_ebp
+                       || (g_esp != sv_esp && g_esp != sv_esp - 4u * (uint32_t)n);
     g_esp = sv_esp; g_ebx = sv_ebx; g_esi = sv_esi; g_edi = sv_edi; g_ebp = sv_ebp;
     g_cur_func = sv_cur;
     if (take) big_unlock();
@@ -275,7 +280,11 @@ static void dyncode_capture(uint32_t va) {
 #endif
 }
 
+static uint32_t g_miss_calls;   /* every miss, repeats included (selftests) */
+uint32_t recomp_miss_calls(void) { return __atomic_load_n(&g_miss_calls, __ATOMIC_RELAXED); }
+
 void recomp_miss(int tail, uint32_t va, uint32_t from) {
+    __atomic_add_fetch(&g_miss_calls, 1, __ATOMIC_RELAXED);
     pthread_mutex_lock(&g_miss_mu);
     if (va == 0) {
         if (g_miss_zero) { pthread_mutex_unlock(&g_miss_mu); return; }

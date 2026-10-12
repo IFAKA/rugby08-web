@@ -1,0 +1,9 @@
+# Main menu -> MY RUGBY (keyboard, det mode). The user's crash on selecting it (2026-10-12).
+8100 click 320 240
+8400 tap Return
+9500 down Down
+9520 up Down
+9700 tap S
+10000 tap S
+9900 shot logs/mr/s9900.png
+10300 shot logs/mr/s10300.png

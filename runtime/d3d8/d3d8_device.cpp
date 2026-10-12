@@ -193,9 +193,23 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
         if (from >= 0) d3d9w_trace_draws(on);
         g_trace_vsc = on;
     }
+#ifdef __EMSCRIPTEN__
+    double t0 = emscripten_get_now();
+#endif
     if (!rt_ff) plat_gl_swap();   // catching up (netplay): frames are not shown, nor paced
 #ifdef __EMSCRIPTEN__
     if (!rt_ff || s->frame % 16 == 0) emscripten_sleep(0);   // JSPI: hand the frame to the browser (present, input, timers), then resume
+    {   // perf: game work per frame (resume to Present) vs time handed to the browser, every 600 frames
+        static double last, work, worst, wait; static int n;
+        double t1 = emscripten_get_now();
+        if (last > 0) { double w = t0 - last; work += w; if (w > worst) worst = w; wait += t1 - t0; n++; }
+        last = t1;
+        if (n == 600) {
+            rt_trace("web perf: %.0f fps, work %.1f ms/frame (worst %.1f), browser %.1f ms/frame",
+                     600000.0 / (work + wait), work / n, worst, wait / n);
+            work = worst = wait = 0; n = 0;
+        }
+    }
 #endif
     return D3D_OK_;
 }

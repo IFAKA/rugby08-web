@@ -74,6 +74,11 @@
   function mkdirs(path) { try { FS.mkdirTree(path); } catch (e) {} }
 
   Module.preRun = Module.preRun || [];
+  // ?env=RT_A=1,RT_B=2 (diagnosis): the runtime's environment switches, as natively (RT_DET_PAGES...)
+  Module.preRun.push(function () {
+    var e = new URLSearchParams(location.search).get('env');
+    if (e) e.split(',').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) ENV[kv.slice(0, i)] = kv.slice(i + 1); });
+  });
   Module.preRun.push(function () {
     addRunDependency('gamefs');
     fetch('data/manifest.json').then(function (r) { return r.json(); }).then(function (man) {

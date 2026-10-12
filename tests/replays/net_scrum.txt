@@ -1,0 +1,30 @@
+# Netplay pad 0: PLAY NOW -> Team Select (controller to the home side) -> match; the browser run that crashed at the first scrum (2026-10-12)
+8100 pad 0 tap cross
+8400 pad 0 tap cross
+8700 pad 0 tap cross
+9000 pad 0 tap cross
+9300 pad 0 tap cross
+9600 pad 0 tap cross
+9900 pad 0 tap cross
+10200 pad 0 tap cross
+10500 pad 0 tap cross
+10800 pad 0 tap cross
+11100 pad 0 tap cross
+11400 pad 0 tap cross
+11700 pad 0 tap cross
+12100 pad 0 down lleft
+12112 pad 0 up lleft
+12300 pad 0 tap cross
+12600 pad 0 tap cross
+12900 pad 0 tap cross
+13200 pad 0 tap cross
+13500 pad 0 tap cross
+13800 pad 0 tap cross
+14100 pad 0 tap cross
+14400 pad 0 tap cross
+14700 pad 0 tap cross
+15000 shot logs/mr/sc15000.png
+15500 shot logs/mr/sc15500.png
+16000 shot logs/mr/sc16000.png
+17000 shot logs/mr/sc17000.png
+18000 shot logs/mr/sc18000.png

@@ -85,6 +85,8 @@ static int runnable(dthr_t *t) {
     return 0;
 }
 
+static uint32_t g_scheds, g_handoffs;   /* stats: scheduling points, and those that changed thread */
+
 /* g_mu held. Pick the next thread after `me` (me itself last), advancing virtual time while
  * every thread waits; hand it the baton and wait until it comes back (unless me is dead). */
 static void schedule(int me) {
@@ -103,7 +105,9 @@ static void schedule(int me) {
         __atomic_store_n(&g_vt, m, __ATOMIC_RELAXED);
         g_slices = 0;
     }
+    g_scheds++;
     if (next == me) return;
+    g_handoffs++;
     static int chaos = -1;   /* RT_DET_CHAOS=1: random host delays at every hand-over (synctest) */
     if (chaos < 0) { const char *e = getenv("RT_DET_CHAOS"); chaos = e && *e == '1'; }
     if (chaos) { pthread_mutex_unlock(&g_mu); usleep((useconds_t)(rand() % 40)); pthread_mutex_lock(&g_mu); }
@@ -246,10 +250,16 @@ static void hash_frame(uint32_t frame) {
                 uint32_t e = a + 0x10000 < ranges[r][1] ? a + 0x10000 : ranges[r][1];
                 rt_log("det: page %08X %016llX", a, (unsigned long long)hash_range(0, a, e));
             }
-        const char *d = getenv("RT_DET_DUMP");   /* RT_DET_DUMP=ADDR: that 64 KiB page's bytes, logs/det_dump_<log name> */
-        if (d) { char path[256]; snprintf(path, sizeof path, "logs/det_dump_%d.bin", (int)getpid());
-                 FILE *f = fopen(path, "wb"); uint32_t a = (uint32_t)strtoul(d, NULL, 16);
-                 if (f) { for (uint32_t i = 0; i < 0x10000; i++) fputc(rd8(a + i), f); fclose(f); } }
+        /* RT_DET_DUMP=ADDR[:ADDR...]: those 64 KiB pages' bytes in the log ("det: dump ADDR hex", 32
+         * bytes a line, all-zero lines skipped), so two runs (native, browser) can be diffed */
+        for (const char *d = getenv("RT_DET_DUMP"); d && *d; d = strchr(d, ':') ? strchr(d, ':') + 1 : "") {
+            uint32_t a = (uint32_t)strtoul(d, NULL, 16) & ~0xFFFFu;
+            for (uint32_t o = 0; o < 0x10000; o += 32) {
+                char hex[65]; int nz = 0;
+                for (int i = 0; i < 32; i++) { uint8_t b = rd8(a + o + (uint32_t)i); nz |= b; snprintf(hex + 2 * i, 3, "%02x", b); }
+                if (nz) rt_log("det: dump %08X %s", a + o, hex);
+            }
+        }
     }
 }
 
@@ -261,7 +271,11 @@ void det_frame(uint32_t frame) {
     static unsigned over, n;   /* frames whose work ran past their 1/60 s slot (dt > 1/60 there) */
     if (slot > g_vt) __atomic_store_n(&g_vt, slot, __ATOMIC_RELAXED); else over++;
     g_slices = 0;
-    if (++n == 600) { rt_log("det: %u of 600 frames ran past their slot", over); over = n = 0; }
+    if (++n == 600) {
+        rt_log("det: %u of 600 frames ran past their slot; per frame %u scheduling points, %u thread hand-overs",
+               over, g_scheds / 600, g_handoffs / 600);
+        over = n = 0; g_scheds = g_handoffs = 0;
+    }
     det_yield();
     hash_frame(frame);
 }

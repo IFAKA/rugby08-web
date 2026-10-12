@@ -406,6 +406,25 @@
       "desc": "Drop-in in real browser pages, as players use it: the game boots straight in, the invite link comes from the in-game Friends panel, a friend opens it 20 s later, catches up, gets the \"You are in\" toast, its keys reach its pad, hashes stay equal, and the host plays on after the friend leaves.",
       "check": "timeout 1200 /opt/homebrew/bin/python3 tools/net_dropin.py   # system Python: Playwright",
       "passes": true
+    },
+    {
+      "id": "web.split_check",
+      "deps": [
+        "web.smoke"
+      ],
+      "desc": "The web build's split giant functions behave like the originals: a native build with build/web-gen opens MY RUGBY and Squad Management without a fault (the split jump tables sent computed jumps to the wrong exit; MY RUGBY crashed in the browser).",
+      "check": "tools/split_check.sh",
+      "passes": false
+    },
+    {
+      "id": "web.crt_math",
+      "deps": [
+        "web.smoke",
+        "lift.crt_math"
+      ],
+      "desc": "The CRT math self-test passes in the browser build too, where no interpreter stands behind the lift: every arm of the CRT's x87 dispatcher that the grid reaches (zero, negative, overflow, underflow, infinities, NaN, denormal) is lifted and keeps the calling convention (an unlifted exp arm unbalanced the stack and crashed the game at the first scrum).",
+      "check": "timeout 600 /opt/homebrew/bin/python3 tools/web_selftest.py   # system Python: Playwright",
+      "passes": true
     }
   ]
 }

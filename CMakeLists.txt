@@ -136,6 +136,7 @@ if(EMSCRIPTEN)
     -sJSPI   # the Windows loop yields to the browser at every Present (d3d8_device.cpp) without Asyncify
     -sEXPORTED_RUNTIME_METHODS=callMain   # the page (shell.html) starts the game: solo, or an online session
     -sSUPPORT_LONGJMP=wasm -fwasm-exceptions
+    --profiling-funcs   # function names in the wasm: a crash's stack names the guest function
     --pre-js=${ROOT}/platform/web/gamefs.js --shell-file=${ROOT}/platform/web/shell.html
     --preload-file=${ROOT}/Rugby08_unpacked.exe@/Rugby08_unpacked.exe)
   set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/gamefs.js ${ROOT}/platform/web/shell.html)
