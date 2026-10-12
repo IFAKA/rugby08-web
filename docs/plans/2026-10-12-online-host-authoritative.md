@@ -53,6 +53,15 @@ each friend's own game loads the same match and shows the host's state.
    and the received state is applied every frame; animation/rendering/camera/sound stay local.
    Check `tools/match_puppet_check.sh`: run A records host state to a file; run B (other menu route)
    plays it back: positions equal within 1 cm for 3000 frames, screenshots match.
+   Design (found 2026-10-12, docs/MATCH_STATE.md "Replay system"): reuse the game's instant-replay
+   path. The host's game records every match frame into its replay stream (PlayBack::CReplayManager,
+   src/rep/replaymanager.cpp): a 0x118C-byte frame (30 players: 128-byte pose block, x/y/z/heading,
+   u16 sequence; ball position and matrix; timestamp +0x116C; markers; flags) delta-coded against the
+   previous frame (FUN_00458620 decodes, FUN_00457A40/457C40 pack/unpack, records carry their length).
+   In replay mode the match logic is stopped and UpdatePlayers (FUN_0045A560) drives players, ball and
+   poses (ReplayPoseSource) from frames A/B of the playback object. The friend stays in that mode and
+   is fed the host's records: its simulation is suppressed by the game itself, the pictures come from
+   the game's own playback code, and the wire format is the game's own compressed stream.
 4. **on.match_net** — host takes friends' pads from the network as real controllers; host sends
    state (quantized, delta vs last ack, ~60 Hz) through the server. Check: two natives over the
    server, friend's pad moves its player on the host, friend's view follows within 6 frames.

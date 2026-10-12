@@ -90,6 +90,23 @@ CRugbyTeam+0xC0..+0xCC CPlayerControl*[4] (one per human on that side, 0 = none)
 CPlayerControl (vtable 0x008EE9D8): +0xC team, +0x10 controlled CRugbyPlayer* (0 at set pieces),
 +0x14 current set-piece object (CRugbyRuck / CRugbyLineOut), +0x1C PhysicalInputBlock* (its pad).
 
+## Replay system (PlayBack::CReplayManager, src/rep/replaymanager.cpp): the puppet path
+The game records every match frame and can redraw the match from those records with its logic
+stopped (instant replays, highlights). Found 2026-10-12 (snapshot during the f27100 cutscene).
+- Replay manager: one heap object (0x024BFE00 in that run; HbsActor@Ai replay actors x30 at +0x12A0
+  are its signature). +0x08 interpolation fraction (fixed point), +0x0C/+0x10 counters, +0x14..+0x1C
+  the compressed record stream (records carry their u16 length, walkable both ways), +0x24 cursor,
+  +0x28/+0x2C decoded frames A/B, +0x30 a single frame, +0x38 flags (bit 2: interpolate A->B, bit 3:
+  single frame). While recording the cursor sits at the tail and A/B are the last two frames.
+- Frame (0x118C bytes): +0x000 30 x 128-byte per-player animation block (ids, times, weights);
+  +0xF00 30 x {x, y, z, heading} with positions in centimetres; +0x10E0 30 x u16 (sequence/state);
+  +0x111C ball position (metres), +0x1128 ball 4x4 matrix; +0x1168 u8; +0x116C timestamp (s);
+  +0x1170..+0x117C; +0x117D 8 controller-marker bytes (4 home, 4 away); +0x1188 flags.
+- Code: FUN_0045A560 UpdatePlayers (thiscall on the manager: frames -> replay actors, ball, markers),
+  FUN_0045B1F0 picks frames A/B/single, FUN_00459C00 advances playback by dt (decodes records),
+  FUN_00458620 / FUN_004589AA Huffman delta decoders (1100 ints per frame), FUN_00457A40 / FUN_00457C40
+  frame <-> packed ints (cm and radians as ints). Highlights save these records to disk.
+
 ## Player motion is animation-driven
 No velocity is stored in CRugbyPlayer or any object it points at (per-frame position deltas correlate
 with no field, r < 0.7, 22k samples): FIFAANIM root motion moves the players. So the state to replicate
