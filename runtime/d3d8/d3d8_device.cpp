@@ -2,6 +2,7 @@
 // draws. States: d3d8_state.cpp; shaders: d3d8_dev_shaders.cpp; shared state: d3d8_dev.hpp.
 #include "d3d8_dev.hpp"
 extern "C" void rt_coverage_frame(uint32_t frame);
+extern "C" void ms_frame(uint32_t frame);   // match_state.c
 #include "plat.h"
 #include <GLES3/gl3.h>
 #include <cstdlib>
@@ -139,17 +140,20 @@ HLE_D3D(IDirect3DDevice8, Reset) {
 HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     Obj *o = d3d8_obj(a[0]);
     DevState *s = o->dev;
-    dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
+    if (!rt_ff) dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
     s->frame++;
     plat_replay_tick(s->frame);
     if (rt_det == 1) det_frame(s->frame);   // input for this frame reaches the guest, virtual time advances
     rt_coverage_frame(s->frame);
+    ms_frame(s->frame);
     d3d8_debug_present(s->frame, (int)o->w, (int)o->h);   // runtime/debug/frames.cpp
-    plat_gl_swap();   // web: also yields the frame to the browser (platform/web)
+    if (!rt_ff)
+        plat_gl_swap(); // web: also yields the frame to the browser (platform/web); catching up: not shown nor paced
+    else if (s->frame % 16 == 0) plat_frame_yield(); // catching up (netplay): let the page breathe (input, network)
     return D3D_OK_;
 }
 
-HLE_D3D(IDirect3DDevice8, GetBackBuffer) {   // (this, index, type, ppSurface)
+HLE_D3D(IDirect3DDevice8, GetBackBuffer) { // (this, index, type, ppSurface)
     DevState *s = S(a);
     addref(s->backbuffer);
     wr32(a[3], s->backbuffer);
@@ -160,8 +164,8 @@ HLE_D3D(IDirect3DDevice8, GetRasterStatus) {
     wr32(a[1], 0);
     wr32(a[1] + 4, 0);
     return D3D_OK_;
-}   // {InVBlank, ScanLine}
-HLE_D3D(IDirect3DDevice8, SetGammaRamp) {    // (this, flags, D3DGAMMARAMP*: 3 x 256 WORD)
+} // {InVBlank, ScanLine}
+HLE_D3D(IDirect3DDevice8, SetGammaRamp) { // (this, flags, D3DGAMMARAMP*: 3 x 256 WORD)
     for (int i = 0; i < 768; i++) S(a)->gamma[i] = rd16(a[2] + 2u * (uint32_t)i);
     uint16_t ramp[768];
     for (int i = 0; i < 768; i++) ramp[i] = (uint16_t)S(a)->gamma[i];
@@ -176,7 +180,7 @@ HLE_D3D(IDirect3DDevice8, GetGammaRamp) {
 
 // ---- render targets ------------------------------------------------------------------------
 
-HLE_D3D(IDirect3DDevice8, SetRenderTarget) {   // (this, pRenderTarget, pNewZStencil)
+HLE_D3D(IDirect3DDevice8, SetRenderTarget) { // (this, pRenderTarget, pNewZStencil)
     DevState *s = S(a);
     IDirect3DDevice9 *d = D(a);
     if (a[1]) {
@@ -185,7 +189,7 @@ HLE_D3D(IDirect3DDevice8, SetRenderTarget) {   // (this, pRenderTarget, pNewZSte
         addref(a[1]);
         release(s->rt);
         s->rt = a[1];
-        D3DVIEWPORT9 vp = { 0, 0, rt->w, rt->h, 0.f, 1.f };     // D3D resets the viewport to the target
+        D3DVIEWPORT9 vp = { 0, 0, rt->w, rt->h, 0.f, 1.f }; // D3D resets the viewport to the target
         s->vp = vp;
         d->SetViewport(&vp);
     }
@@ -207,7 +211,7 @@ HLE_D3D(IDirect3DDevice8, GetDepthStencilSurface) {
     if (!s->zs) {
         wr32(a[1], 0);
         return 0x88760870u;
-    }   // D3DERR_NOTFOUND
+    } // D3DERR_NOTFOUND
     addref(s->zs);
     wr32(a[1], s->zs);
     return D3D_OK_;
@@ -217,7 +221,8 @@ HLE_D3D(IDirect3DDevice8, GetDepthStencilSurface) {
 HLE_D3D(IDirect3DDevice8, BeginScene) { return D(a)->BeginScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_; }
 HLE_D3D(IDirect3DDevice8, EndScene) { return D(a)->EndScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_; }
 
-HLE_D3D(IDirect3DDevice8, Clear) {   // (this, Count, D3DRECT*, Flags, Color, float Z, Stencil)
+HLE_D3D(IDirect3DDevice8, Clear) { // (this, Count, D3DRECT*, Flags, Color, float Z, Stencil)
+    if (rt_ff) return D3D_OK_;
     std::vector<D3DRECT> r(a[1]);
     for (uint32_t i = 0; i < a[1] && a[2]; i++) {
         uint32_t p = a[2] + 16 * i;
@@ -231,29 +236,40 @@ HLE_D3D(IDirect3DDevice8, Clear) {   // (this, Count, D3DRECT*, Flags, Color, fl
 }
 
 // ---- draws -----------------------------------------------------------------------------------
+// This player's camera: d3d8_pov.cpp (d3d8_pov_pre / d3d8_pov_post around each draw).
 HLE_D3D(IDirect3DDevice8, DrawPrimitive) {
-    D(a)->DrawPrimitive((D3DPRIMITIVETYPE)a[1], a[2], a[3]);
+    bool p = !rt_ff && d3d8_pov_pre(a); // catching up (netplay): nothing is drawn
+    if (!rt_ff) D(a)->DrawPrimitive((D3DPRIMITIVETYPE)a[1], a[2], a[3]);
+    d3d8_pov_post(a, p);
     return D3D_OK_;
 }
 
-HLE_D3D(IDirect3DDevice8, DrawIndexedPrimitive) {   // (this, type, minIndex, numVertices, startIndex, primCount)
-    D(a)->DrawIndexedPrimitive((D3DPRIMITIVETYPE)a[1], (INT)S(a)->base_vertex, a[2], a[3], a[4], a[5]);
+HLE_D3D(IDirect3DDevice8, DrawIndexedPrimitive) { // (this, type, minIndex, numVertices, startIndex, primCount)
+    bool p = !rt_ff && d3d8_pov_pre(a); // catching up (netplay): nothing is drawn
+    if (!rt_ff) D(a)->DrawIndexedPrimitive((D3DPRIMITIVETYPE)a[1], (INT)S(a)->base_vertex, a[2], a[3], a[4], a[5]);
+    d3d8_pov_post(a, p);
     return D3D_OK_;
 }
 
-HLE_D3D(IDirect3DDevice8, DrawPrimitiveUP) {        // (this, type, primCount, data, stride)
+HLE_D3D(IDirect3DDevice8, DrawPrimitiveUP) { // (this, type, primCount, data, stride)
     DevState *s = S(a);
-    D(a)->DrawPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], G2H(a[3]), a[4]);
+    bool p = !rt_ff && d3d8_pov_pre(a); // catching up (netplay): nothing is drawn
+    if (!rt_ff) D(a)->DrawPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], G2H(a[3]), a[4]);
+    d3d8_pov_post(a, p);
     release(s->stream[0]);
     s->stream[0] = 0;
-    s->stride[0] = 0;   // D3D clears stream 0 after *UP
+    s->stride[0] = 0; // D3D clears stream 0 after *UP
     return D3D_OK_;
 }
 
 HLE_D3D(IDirect3DDevice8,
         DrawIndexedPrimitiveUP) { // (this, type, minIndex, numVerts, primCount, idx, idxFmt, verts, stride)
     DevState *s = S(a);
-    D(a)->DrawIndexedPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], a[3], a[4], G2H(a[5]), (D3DFORMAT)a[6], G2H(a[7]), a[8]);
+    bool p = !rt_ff && d3d8_pov_pre(a); // catching up (netplay): nothing is drawn
+    if (!rt_ff)
+        D(a)->DrawIndexedPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], a[3], a[4], G2H(a[5]), (D3DFORMAT)a[6], G2H(a[7]),
+                                     a[8]);
+    d3d8_pov_post(a, p);
     release(s->stream[0]);
     s->stream[0] = 0;
     s->stride[0] = 0;
@@ -262,4 +278,4 @@ HLE_D3D(IDirect3DDevice8,
     return D3D_OK_;
 }
 
-}  // extern "C"
+} // extern "C"

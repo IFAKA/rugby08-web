@@ -14,8 +14,10 @@ void plat_mouse_delta(int *dx, int *dy, int *dw) {
     *dw = g_mdw;
     g_mdx = g_mdy = g_mdw = 0;
 }
+/* The real mouse buttons, or none when only the replay/netplay may drive input. */
+uint32_t live_mouse(void) { return g_inited && !virtual_cursor() ? SDL_GetMouseState(NULL, NULL) : 0; }
 uint8_t plat_mouse_buttons(void) {
-    uint32_t b = g_inited ? SDL_GetMouseState(NULL, NULL) : 0;
+    uint32_t b = live_mouse();
     return (uint8_t)((b & SDL_BUTTON_LMASK ? 1 : 0) | (b & SDL_BUTTON_RMASK ? 2 : 0) | (b & SDL_BUTTON_MMASK ? 4 : 0) |
                      g_replay_buttons);
 }
@@ -76,7 +78,7 @@ uint32_t plat_vk_to_scancode(uint32_t vk) {
 }
 
 uint8_t plat_vk_toggled(uint32_t vk) {
-    SDL_Keymod m = SDL_GetModState();
+    SDL_Keymod m = virtual_cursor() ? KMOD_NONE : SDL_GetModState();
     return vk == 0x14 ? (m & KMOD_CAPS) != 0 : vk == 0x90 ? (m & KMOD_NUM) != 0 : 0;
 }
 

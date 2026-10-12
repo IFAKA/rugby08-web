@@ -17,9 +17,10 @@ static void frame_pace(void) {
         next = 0;
     }
     if (period <= 0) return;
-    double now = (double)SDL_GetPerformanceCounter();
+    /* deterministic mode: the virtual time this Present advanced (det_period_ms) */
+    double now = (double)SDL_GetPerformanceCounter(), dp = det_period_ms();
     if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
-    next += period;
+    next += dp < 0 ? period : dp * (double)SDL_GetPerformanceFrequency() / 1000.0;
     double wait = next - now;
     if (wait > 0) {
         uint32_t ms = (uint32_t)(wait * 1000.0 / (double)SDL_GetPerformanceFrequency());
@@ -82,3 +83,5 @@ void plat_gl_swap(void) {
     frame_pace();
     frame_stats(sw);
 }
+
+void plat_frame_yield(void) {}   /* the browser's JSPI yield; natively the OS schedules us */

@@ -175,6 +175,7 @@ recomp_func_t recomp_lookup(uint32_t va) {
 }
 
 /* ---- guest_call ------------------------------------------------------------ */
+RECOMP_TLS int guest_call_broke;
 uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
     recomp_func_t fn = recomp_lookup_manual(va);
     if (!fn) fn = recomp_lookup(va);
@@ -198,6 +199,10 @@ uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
         rt_interp(va);
     } /* no lifted body: interpret it */
     uint32_t ret = g_eax;
+    /* the callee kept the calling convention: callee-saved registers intact, esp past the return
+       address and, for stdcall, the arguments (selftests check it; the restore below hides it) */
+    guest_call_broke = g_ebx != sv_ebx || g_esi != sv_esi || g_edi != sv_edi || g_ebp != sv_ebp ||
+                       (g_esp != sv_esp && g_esp != sv_esp - 4u * (uint32_t)n);
     g_esp = sv_esp;
     g_ebx = sv_ebx;
     g_esi = sv_esi;

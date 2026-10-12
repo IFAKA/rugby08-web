@@ -1,5 +1,6 @@
 /* main.c -- boot: arena, image, imports, main thread, then the game's own CRT entry point. */
 #include "rt.h"
+#include "plat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,7 @@ static void usage(void) {
 
 int main(int argc, char **argv) {
     const char *log_path = "logs/native_run.log";
+    if (getenv("RT_LOG_INPUT")) rt_log_input = 1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--exe") && i + 1 < argc) snprintf(rt_exe_path, sizeof rt_exe_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--game-dir") && i + 1 < argc)
@@ -47,12 +49,14 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--replay-live") && i + 1 < argc) {
             snprintf(rt_replay_path, sizeof rt_replay_path, "%s", argv[++i]);
             rt_replay_live = 1;
-        } else if (!strcmp(argv[i], "--log-input")) rt_log_input = 1;
+        } else if (!strcmp(argv[i], "--log-input")) rt_log_input = 1; /* also RT_LOG_INPUT=1 (the browser: ?env=) */
         else if (!strcmp(argv[i], "-v")) rt_verbose = 1;
+        else if (!strncmp(argv[i], "--net", 5) && i + 1 < argc) i++; /* netplay options: rt_net_start */
         else if (!strncmp(argv[i], "--", 2)) { /* platform options are parsed by rt_platform_init */ } else
             usage();
     }
     rt_log_open(log_path);
+    rt_net_start(argc, argv); /* before anything reads a clock: a session runs in deterministic mode */
     rt_platform_init(argc, argv);
     rt_mem_init();
     uint32_t entry;

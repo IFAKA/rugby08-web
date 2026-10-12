@@ -8,3 +8,4 @@ Guest COM objects `{vtbl, host index}`; vtables are generated (`tools/gen_d3d8_b
   transforms, lights, streams · `d3d8_dev_shaders.cpp` shader handles · shared: `d3d8_dev.hpp`, `d3d8_int.hpp`.
 - `d3d8_levels.cpp` texture formats and levels (guest shadows, upload, readback) · `d3d8_textures.cpp` texture
   and surface interfaces · `d3d8_buffers.cpp` vertex/index buffers · `d3d8_vshader.cpp` vs/ps translation (MojoShader).
+- `d3d8_pov.cpp` this player's own camera, applied only when drawing (registers 96..99 for shader draws).

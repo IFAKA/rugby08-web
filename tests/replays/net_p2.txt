@@ -1,0 +1,5 @@
+# Netplay test, player 2: at Team Select move own pad to AWAY, then run forward in the match.
+11300 pad 0 down lright
+11360 pad 0 up lright
+14000 pad 0 down lup
+14600 pad 0 up lup

@@ -106,6 +106,7 @@ def split_function(name, static, lines):
     CASE = re.compile(r"^(\s*case 0x[0-9A-Fa-f]+u:) goto (L_[0-9A-Fa-f]+);\s*$")
     for k, p in enumerate(parts):
         txt, used, is_lj = [], set(), bool(ljump) and k == len(parts) - 1
+        sw_depth = None  # brace depth inside the dispatcher's `switch (_itail_tgt) {`, once it opens
         for l in p:
             m = CASE.match(l) if is_lj else None
             if m:  # the jump-table dispatcher: pick (part, entry) here, jump once after the switch
@@ -113,13 +114,20 @@ def split_function(name, static, lines):
                 used.add(label_part[m.group(2)])
                 txt.append(f"{m.group(1)} _spp = {label_part[m.group(2)]}; g_sp_entry = {ids[m.group(2)]}; break;")
                 continue
-            if is_lj and l.strip() == "RECOMP_REGS_OUT();":
-                txt.append("    switch (_spp) {")
-                for kk in sorted(used):
-                    txt.append(f"      case {kk}: SPJ({pname(kk)}, g_sp_entry);")
-                txt.append("    }")
-                txt.append("    RECOMP_REGS_OUT();")
-                continue
+            if is_lj and sw_depth is None and l.lstrip().startswith("switch ("):
+                sw_depth = 0
+            if is_lj and sw_depth is not None and sw_depth >= 0:
+                sw_depth += l.count("{") - l.count("}")
+                if sw_depth == 0 and "}" in l:
+                    # the switch closed: a rewritten case `break`s to here, so the jump goes right here.
+                    # (Labels after the switch, the function's exits to outside VAs, must not see it.)
+                    txt.append(l)
+                    txt.append("    switch (_spp) {")
+                    for kk in sorted(used):
+                        txt.append(f"      case {kk}: SPJ({pname(kk)}, g_sp_entry);")
+                    txt.append("    }")
+                    sw_depth = -1
+                    continue
             l = LOCAL_RE.sub(lambda m: LOCALS[m.group(1)], l)
 
             def rep(m):

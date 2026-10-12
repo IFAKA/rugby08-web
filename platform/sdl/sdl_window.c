@@ -7,7 +7,10 @@
    cursor in screen coordinates instead; replay clicks set it. */
 int g_vcur_x, g_vcur_y;
 int g_rel, g_cx, g_cy;   /* captured-pointer mode and in-window position */
-int virtual_cursor(void) { return rt_frame_limit > 0 || (rt_replay_path[0] && !rt_replay_live); }
+int automated_run(void) { return rt_frame_limit > 0 || (rt_replay_path[0] && !rt_replay_live); }
+/* Deterministic mode (every netplay session) also keeps a virtual cursor: the guest must never see
+   this machine's real pointer, buttons or lock keys. */
+int virtual_cursor(void) { return automated_run() || det_on(); }
 
 /* ---- window --------------------------------------------------------------------------------- */
 SDL_Window *g_win;
@@ -16,12 +19,14 @@ static void video_init(void) {
     if (g_inited) return;
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) rt_fatal("SDL_Init: %s", SDL_GetError());
+    SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER); /* plat_local_pad (netplay); failure only disables controllers */
     keymap_init();
     g_inited = 1;
 }
 
 int g_activate_pending;   /* plat_window_show in an automated run: WM_ACTIVATE* at the next pump */
 
+static int g_gx, g_gy, g_gw = 800, g_gh = 600; /* the window as the guest set it (deterministic mode) */
 int plat_window_open(const char *title, int x, int y, int w, int h) {
     video_init();
     if (g_win) return 0;
@@ -32,7 +37,11 @@ int plat_window_open(const char *title, int x, int y, int w, int h) {
     (void)x;
     (void)y;     /* the host decides placement */
     int flags = SDL_WINDOW_OPENGL;
-    if (virtual_cursor()) flags |= SDL_WINDOW_HIDDEN;   /* hide in automated tests; show for interactive play */
+    if (automated_run()) flags |= SDL_WINDOW_HIDDEN;   /* hide in automated tests; show for interactive play */
+    g_gx = x;
+    g_gy = y;
+    g_gw = w;
+    g_gh = h;
     g_win = SDL_CreateWindow(title ? title : "Rugby 08", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, flags);
     if (!g_win) {
         rt_log("SDL_CreateWindow: %s", SDL_GetError());
@@ -55,8 +64,8 @@ void plat_window_show(int show) {
     if (!g_win) return;
     if (show && virtual_cursor()) { /* automated runs stay hidden even when the game calls ShowWindow, */
         g_activate_pending = 1; /* but are active as a shown window is on Windows: a hidden window */
-        return; /* never gains focus, and the game ignored device input until it did */
-    }
+        if (automated_run()) return; /* never gains focus, and the game ignored device input until it did. */
+    } /* Deterministic mode: activation at a guest-chosen point, window shown */
     if (show) {
         SDL_ShowWindow(g_win);
     } else {
@@ -66,10 +75,20 @@ void plat_window_show(int show) {
 void plat_window_title(const char *t) {
     if (g_win) SDL_SetWindowTitle(g_win, t ? t : "");
 }
-int plat_window_minimized(void) { return g_win && (SDL_GetWindowFlags(g_win) & SDL_WINDOW_MINIMIZED); }
+/* Deterministic mode: what the guest sees of the window is what the guest itself set (plat_window_open
+   / _move) and the desktop is a fixed 1920x1080, never this machine's display or window manager. */
+int plat_window_minimized(void) { return !det_on() && g_win && (SDL_GetWindowFlags(g_win) & SDL_WINDOW_MINIMIZED); }
 int plat_window_focused(void) { return g_win && (SDL_GetWindowFlags(g_win) & SDL_WINDOW_INPUT_FOCUS); }
 
 void plat_window_move(int x, int y, int w, int h, int move, int size) {
+    if (size && w > 0 && h > 0) {
+        g_gw = w;
+        g_gh = h;
+    }
+    if (move) {
+        g_gx = x;
+        g_gy = y;
+    }
     if (!g_win) return;
     if (size && w > 0 && h > 0) SDL_SetWindowSize(g_win, w, h);
     if (move) SDL_SetWindowPosition(g_win, x, y);
@@ -77,7 +96,12 @@ void plat_window_move(int x, int y, int w, int h, int move, int size) {
 
 void plat_window_rect(int *x, int *y, int *w, int *h) {
     int px = 0, py = 0, pw = 800, ph = 600;
-    if (g_win) {
+    if (det_on()) {
+        px = g_gx;
+        py = g_gy;
+        pw = g_gw;
+        ph = g_gh;
+    } else if (g_win) {
         SDL_GetWindowPosition(g_win, &px, &py);
         SDL_GetWindowSize(g_win, &pw, &ph);
     }
@@ -88,6 +112,11 @@ void plat_window_rect(int *x, int *y, int *w, int *h) {
 }
 
 void plat_desktop_size(int *w, int *h) {
+    if (det_on()) {
+        *w = 1920;
+        *h = 1080;
+        return;
+    }
     video_init();
     SDL_DisplayMode m;
     if (SDL_GetDesktopDisplayMode(0, &m) != 0) {

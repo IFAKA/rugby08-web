@@ -22,10 +22,13 @@ static void push(uint32_t msg, uint32_t wp, uint32_t lp) {
 }
 
 static uint32_t mk_buttons(void) {
-    uint32_t b = SDL_GetMouseState(NULL, NULL), mk = 0;
+    uint32_t b = live_mouse(), mk = 0;
     if (b & SDL_BUTTON_LMASK) mk |= 0x01;
     if (b & SDL_BUTTON_RMASK) mk |= 0x02;
     if (b & SDL_BUTTON_MMASK) mk |= 0x10;
+    if (g_replay_buttons & 1) mk |= 0x01; /* injected (replay, netplay) */
+    if (g_replay_buttons & 2) mk |= 0x02;
+    if (g_replay_buttons & 4) mk |= 0x10;
     if (plat_vk_down(0x10)) mk |= 0x04;
     if (plat_vk_down(0x11)) mk |= 0x08;
     return mk;
@@ -33,8 +36,9 @@ static uint32_t mk_buttons(void) {
 
 /* Interactive play captures the pointer (SDL relative mode) and tracks the in-window position from
    the deltas, so the pointer can never stall at a window edge while the game cursor still has room. */
-static void rel_set(int on) {
-    if (virtual_cursor() || !g_win || on == g_rel) return;
+void rel_set(int on) {
+    /* netplay host: its real pointer is captured even under the virtual cursor */
+    if (g_desk_applying || (virtual_cursor() && !g_desk_on) || !g_win || on == g_rel) return;
     if (on) {
         int x, y;
         SDL_GetMouseState(&x, &y);
@@ -158,7 +162,7 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
     }
     if (det_on()) {   /* deterministic mode: the host window's own events never reach the guest; only
                          what the replay/netplay pushed at Present and the initial activation do */
-        while (SDL_PollEvent(&e)) {}
+        while (SDL_PollEvent(&e)) desk_record(&e);
         if (!g_npending) return 0;
         *m = g_pending[0];
         memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);

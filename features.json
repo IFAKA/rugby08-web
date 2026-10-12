@@ -318,6 +318,199 @@
       "desc": "Formatters and linters clean: clang-format + clang-tidy (C/C++), ruff (Python), shfmt + shellcheck (sh), Prettier + ESLint (web JS)",
       "check": "tools/check/lint.sh",
       "passes": true
+    },
+    {
+      "id": "net.det_synctest",
+      "deps": [
+        "native.menu"
+      ],
+      "desc": "Deterministic mode: two native runs of play_now_match.txt (RT_DET=1) are state-hash identical at every 300th frame up to frame 15000 (into a match).",
+      "check": "tools/check/det_synctest.sh --frames 15000 --every 300 --timeout 1800",
+      "passes": true
+    },
+    {
+      "id": "net.det_chaos",
+      "deps": [
+        "net.det_synctest"
+      ],
+      "desc": "Deterministic mode ignores host timing: random host delays at every guest thread hand-over (RT_DET_CHAOS) leave the state hashes unchanged.",
+      "check": "tools/check/det_synctest.sh --frames 6000 --every 300 --timeout 1200 --chaos",
+      "passes": true
+    },
+    {
+      "id": "net.lockstep",
+      "deps": [
+        "net.det_synctest"
+      ],
+      "desc": "Netplay 1v1 over the relay server (server/): two native instances, each driving its own virtual pad, Scotland v New Zealand from Team Select into the match; equal state hashes over 15000 frames.",
+      "check": "tools/net/net_test.sh --frames 15000 --timeout 1500",
+      "passes": true
+    },
+    {
+      "id": "net.desync_detect",
+      "deps": [
+        "net.lockstep"
+      ],
+      "desc": "A desync is detected: one flipped guest byte on one instance (RT_NET_FAULT) stops both with a DESYNC report.",
+      "check": "! FAULT=500 tools/net/net_test.sh --frames 1500 --timeout 400 && grep -q DESYNC logs/net_out1.log && grep -q DESYNC logs/net_out2.log",
+      "passes": true
+    },
+    {
+      "id": "net.web_lockstep",
+      "deps": [
+        "net.lockstep",
+        "web.smoke"
+      ],
+      "desc": "Netplay in the browser: two headless Chromium pages join one room through the relay (?net=auto) and keep equal state hashes.",
+      "check": "tools/net/net_web_test.sh --hashes 4 --timeout 600",
+      "passes": true
+    },
+    {
+      "id": "net.pov_view",
+      "deps": [
+        "net.det_synctest"
+      ],
+      "desc": "Per-player camera (d3d8_pov.cpp): a camera preset re-projects the match view (screenshot differs from the game camera).",
+      "check": "tools/net/pov_check.sh --preset 3",
+      "passes": true
+    },
+    {
+      "id": "net.pov_independent",
+      "deps": [
+        "net.lockstep",
+        "net.pov_view"
+      ],
+      "desc": "Independent cameras online: player 2 watches through its own camera preset (RT_POV=3) while player 1 uses the game camera; the match state hashes stay equal over 15000 frames.",
+      "check": "POV2=3 tools/net/net_test.sh --frames 15000 --timeout 1500",
+      "passes": true
+    },
+    {
+      "id": "net.live_input",
+      "deps": [
+        "net.web_lockstep"
+      ],
+      "desc": "Live input in real browser pages: the host's (controller 1's) real mouse clicks and keys are the game's own keyboard and mouse and reach the game on both pages at the same frame (original controls, Esc pause); a friend's keyboard is its controller; state hashes stay equal.",
+      "check": "timeout 600 /opt/homebrew/bin/python3 tools/net/net_live_input.py   # system Python: Playwright is not in .venv",
+      "passes": true
+    },
+    {
+      "id": "net.dropin",
+      "deps": [
+        "net.lockstep"
+      ],
+      "desc": "Drop-in online play (native): player 2 joins 15 s into player 1s running game (player 1 paced at 60 fps), replays the room log, catches up without drawing and plays on with equal state hashes.",
+      "check": "FPS1=60 JOIN_AFTER=15 tools/net/net_test.sh --frames 2400 --timeout 400",
+      "passes": true
+    },
+    {
+      "id": "net.handoff",
+      "deps": [
+        "net.dropin"
+      ],
+      "desc": "The room outlives its creator: player 1 leaves, player 2 takes over admitting newcomers, a third player joins later and agrees with player 2 on every state hash.",
+      "check": "tools/net/net_handoff.sh",
+      "passes": true
+    },
+    {
+      "id": "net.web_dropin",
+      "deps": [
+        "net.dropin",
+        "net.live_input"
+      ],
+      "desc": "Drop-in in real browser pages, as players use it: the game boots straight in, the host's code comes from its Online panel, a friend opens their own game and types the code into the Join box 20 s later, catches up, gets the \"You're in\" toast, its keys reach its controller, hashes stay equal, and the host plays on after the friend leaves.",
+      "check": "timeout 1200 /opt/homebrew/bin/python3 tools/net/net_dropin.py   # system Python: Playwright",
+      "passes": true
+    },
+    {
+      "id": "web.split_check",
+      "deps": [
+        "web.smoke"
+      ],
+      "desc": "The web build's split giant functions behave like the originals: a native build with build/web-gen opens MY RUGBY and Squad Management without a fault (the split jump tables sent computed jumps to the wrong exit; MY RUGBY crashed in the browser).",
+      "check": "tools/check/split_check.sh",
+      "passes": false
+    },
+    {
+      "id": "web.crt_math",
+      "deps": [
+        "web.smoke",
+        "lift.crt_math"
+      ],
+      "desc": "The CRT math self-test passes in the browser build too, where no interpreter stands behind the lift: every arm of the CRT's x87 dispatcher that the grid reaches (zero, negative, overflow, underflow, infinities, NaN, denormal) is lifted and keeps the calling convention (an unlifted exp arm unbalanced the stack and crashed the game at the first scrum).",
+      "check": "timeout 600 /opt/homebrew/bin/python3 tools/web/web_selftest.py   # system Python: Playwright",
+      "passes": true
+    },
+    {
+      "id": "on.match_map",
+      "deps": [
+        "native.smoke"
+      ],
+      "desc": "Match state found in guest memory and read by runtime/core/match_state.c (docs/MATCH_STATE.md): 30 players, ball, score, clock, phase, controlled player per pad, match setup.",
+      "check": "tools/net/match_state_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.match_setup",
+      "deps": [
+        "on.match_map"
+      ],
+      "desc": "The host's match setup applied on a friend whose own game took another menu route: both reach kickoff with identical setup bytes, same teams and stadium.",
+      "check": "tools/net/match_setup_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.match_puppet",
+      "deps": [
+        "on.match_setup"
+      ],
+      "desc": "Friend mode: local match simulation suppressed, host state applied every frame; a recorded host match plays back in another game within 1 cm for 3000 frames.",
+      "check": "tools/net/match_puppet_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.match_net",
+      "deps": [
+        "on.match_puppet"
+      ],
+      "desc": "Host-authoritative over the server: friends' pads drive their players on the host, host state reaches friends within 6 frames.",
+      "check": "tools/net/match_net_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.match_flow",
+      "deps": [
+        "on.match_net"
+      ],
+      "desc": "Party flow: host starts, friends' own games enter Team Select and the match; pauser drives the pause menu; full time returns everyone to their own menus; twice in one party.",
+      "check": "tools/net/match_flow_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.ingame_ui",
+      "deps": [
+        "on.match_flow"
+      ],
+      "desc": "Online screens drawn inside the game (Host code, Join by typing the code, party badge, leave), keyboard/mouse/pad; no HTML panel; native and browser.",
+      "check": "tools/net/ingame_ui_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.cross_platform",
+      "deps": [
+        "on.ingame_ui"
+      ],
+      "desc": "Mac native and browser players share one match (both directions).",
+      "check": "tools/net/cross_platform_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.deploy_ready",
+      "deps": [
+        "on.cross_platform"
+      ],
+      "desc": "Server runs with TLS on the user's own server; players' guide in docs/ONLINE.md (deploying needs the user's go).",
+      "check": "tools/net/deploy_check.sh",
+      "passes": false
     }
   ]
 }

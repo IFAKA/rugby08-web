@@ -32,6 +32,19 @@ int plat_gl_create(void);                                   /* 0 = ok */
 void plat_gl_size(int *w, int *h);                           /* drawable size in pixels */
 void plat_gl_set_size(int w, int h);                         /* resize the window to w x h */
 void plat_gl_swap(void);
+/* Netplay keyboard and mouse ("desk"): the host's real key and mouse events travel with its input
+ * and every instance injects them at the same frame, like replay input (deterministic). */
+typedef struct {
+    uint8_t type, a;
+    int16_t x, y;
+} plat_desk_ev_t;   /* 6 bytes on the wire */
+enum { PLAT_DESK_KEY = 1, PLAT_DESK_MOVE, PLAT_DESK_BUTTON, PLAT_DESK_WHEEL };
+/* KEY: a = down, x = SDL scancode. MOVE: x, y = relative motion. BUTTON: a = down, x = 1 left,
+ * 2 middle, 3 right. WHEEL: y = notches. */
+void plat_desk_capture(int on);                             /* record this machine's events */
+int plat_desk_take(plat_desk_ev_t *out, int max);           /* recorded events, oldest first */
+void plat_desk_apply(const plat_desk_ev_t *ev);             /* inject one into the guest */
+void plat_frame_yield(void);   /* web: hand control to the browser and come back at once (JSPI); native: nothing */
 void plat_set_gamma(const uint16_t *ramp);                   /* 3 x 256 WORDs (R, G, B), D3DGAMMARAMP layout */
 
 /* Next pending event as a WM_* message (hwnd filled in by user32). 1 = got one, 0 = none.
@@ -80,6 +93,21 @@ extern int rt_npads; /* pads the game can see (RT_PADS=N, netplay players) */
 extern int rt_pads_first; /* 1: pads enumerate before the keyboard (netplay) */
 int rt_pad_event(int pad, const char *name, int down);
 int rt_pad_count(void); /* replay "pad N tap|down|up NAME"; 0 = unknown name */
+void plat_local_pad(rt_pad_t *p); /* this player's live devices -> p (unchanged in replay runs) */
+
+/* Netplay (runtime/core/netplay.c). Transport: platform/native/net_native.c, platform/web/. */
+extern int rt_net;
+extern int rt_ff; /* catching up (netplay): skip drawing and sound */
+int rt_net_start(int argc, char **argv); /* --net URL --net-room CODE ...: 1 if a session started */
+int rt_net_begin(int slot, int creator);
+extern int rt_net_cfg_delay; /* --net-delay D (net_join.c; 0: default) */
+rt_pad_t *rt_net_local_pad(void);
+int net_tx_open(const char *url); /* 0 = connected */
+int net_tx_send(const void *data, int len, int text);
+int net_tx_recv(void *buf, int cap, int wait_ms); /* >0 length, 0 none, -1 closed */
+int net_tx_delay(void);                           /* this player's input delay in frames (0: no preference) */
+void net_tx_status(int kind, int value);          /* for the page: 0 running, 1 waiting for slot value,
+                                                     2 catching up value %, 3 connection lost (offline) */
 
 /* Input replay (--replay FILE, tests/replays/): lines "<frame> tap|down|up <SDL key name>", '#'
  * comments. Called once per presented frame; due events become ordinary SDL key events, so they

@@ -144,7 +144,9 @@ if(EMSCRIPTEN)
   target_link_options(rugby08 PRIVATE -O0 -pthread -sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=16 -sEXIT_RUNTIME=1
     -sJSPI   # the Windows loop yields to the browser at every Present (d3d8_device.cpp) without Asyncify
+    -sEXPORTED_RUNTIME_METHODS=callMain   # the page (shell.html) starts the game: solo, or an online session
     -sSUPPORT_LONGJMP=wasm -fwasm-exceptions
+    --profiling-funcs   # function names in the wasm: a crash's stack names the guest function
     --pre-js=${ROOT}/platform/web/js/gamefs.js --pre-js=${ROOT}/platform/web/js/audio.js
     --pre-js=${ROOT}/platform/web/js/errors.js --shell-file=${ROOT}/platform/web/shell.html
     --preload-file=${ROOT}/Rugby08_unpacked.exe@/Rugby08_unpacked.exe)

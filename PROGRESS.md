@@ -326,3 +326,35 @@ Next: `./init.sh next` shows what to fix.
 - Referee: tools/check/regress.sh (RT_DET runs, fresh user dir) — screenshots, audio, log signature and the guest state hash every 60 frames identical to master's binary.
 - Learned: the hash was only hermetic by luck. dlmalloc seeded its heap magic from time(0) (online's 289992c fix ported), and the arena must sit at a fixed address (host pointers in chunk headers). Runs started in different seconds never matched before.
 - Next: merge online's changes onto this layout when the user asks.
+
+## 2026-10-12 — online mode (branch `online`, worktree ../rugby08-online)
+- Deterministic mode (runtime/core/det.c, RT_DET=1): one virtual clock for every guest-visible time source; one guest thread runs at a time, hand-overs decided by guest state + virtual time only; host input crosses only at Present; guest never sees the host window/desktop/cursor. Polling (32 clock reads <64 calls apart) and long stalls (>256 slices without Present) advance time; ordinary match frames are exactly 1/60 s.
+- Netplay (runtime/core/netplay.c): lockstep from boot, inputs for frame f+delay, incremental state hash (one 1/120 slice per frame) exchanged every 120 frames, DESYNC stops both. Virtual DirectInput pads (Logitech DualAction per controltypes.csv; game reads sticks only, d-pad mapped to the stick). server/main.go: stdlib relay (rooms, lobby, COOP/COEP static, password). Web lobby in platform/web/shell.html.
+- Checks: net.det_synctest, net.det_chaos, net.lockstep (1v1 into a match), net.desync_detect, net.web_lockstep all PASS. Browser vs native cross-play desyncs (different builds): online is browser-to-browser.
+- Next: per-player camera (render-side view correction), live-input check in a real browser, deployment notes.
+- 2026-10-12 (later): per-player camera (runtime/d3d8/d3d8_pov.cpp, key C): local view swap for fixed-function draws, clip correction for shader draws (registers 96..99, tools/patch_d3d9w.py). The visible match is fixed-function. Independence proven: net.pov_independent (player 2 on its own camera, 15000 frames of equal hashes). Live browser input: net.live_input (Playwright). docs/ONLINE.md: how to host. Server TLS flags. Regression: native.smoke/menu/audio, lift.crt_math, web.smoke PASS.
+- Not done: browser-vs-native cross-play (desyncs: different builds), rejoin into a running match, spectators.
+
+## 2026-10-12 — online: drop-in party inside the game (branch `online`)
+- User test showed "Out of sync" on the legal screen. Two root causes: the guest saw this machine's mouse buttons/lock keys in det mode (a click skipped the legal screen on one side), and dlmalloc seeded its heap "magic" from time(0) (copies started in different seconds differed from frame 1). Both fixed; tests now click the canvas and start copies seconds apart.
+- Redesign per user: no lobby page. The game boots straight in with its room open; friends join any time from the in-game Friends panel's invite link (server replays the room log; the newcomer catches up without drawing/sound), roster changes ride in the message stream, per-player input delay, room outlives its creator, desynced copies auto-rejoin, lost connection = play on offline. Web det mode now paced at 60 fps.
+- New checks pass: net.dropin, net.handoff, net.web_dropin. Limit: joining cost grows with time played (native catch-up ~1.3x real time with drawing).
+
+## 2026-10-12 — intro movie 7 fps in the browser: deterministic clock stood still in Sleep(0) wait loops
+- Root cause: the movie player waits per frame in `while (!frame_due()) { tasks; SleepEx(0, TRUE); }` (sub_006BD92A -> sub_007ED528, EA's sound clock). In det mode Sleep(0) passed no time and the loop body is too long for the clock-read spin rule, so time crept by the stall rule only: 7 fps browser, ~14 native det, 25 native normal (the movie's own rate). The mixer only looked hot because it is the spin body.
+- Fix: det_sleep_ms(0) — from the DET_SPIN-th Sleep(0) since the last Present, each passes DET_SPIN_NS. Pacers (frame_pace, web_pace) in det mode wait the virtual time each Present advanced (det_period_ms), else the fixed intro ran up to 2.4x fast. Native det: 91 movie frames at exactly 40.0 ms; browser ~23-25 fps, page 78% idle.
+- Lifter speedups (any mode): `call` to a `jcc rel8; ret` leaf (MSVC /RTC _RTC_CheckEsp, 741 sites) lifted inline; MSVC 7.1 _ftol2 matched by bytes (5 copies, 204 sites) -> recomp_ftol2; RECOMP_ENTER fast path inline. Selftest compares recomp_ftol2 with the lifted body in all 4 rounding modes (836 cases, 0 wrong). tools/web_profile.py: headless Chrome CPU profile per lifted function.
+- This worktree now lifts into its own gen/recomp (was a symlink into ../rugby08; renamed to gen/recomp.main-link).
+- Checks after the change: native.video, native.menu, net.det_synctest, net.det_chaos, lift.crt_math PASS; net.*/web.* batch was still running at commit time. Next: menu transition dips (35 fps) and the "save roster?" dialog (18 fps) in det mode.
+
+## 2026-10-12 online: crashes, controls, decision for host-authoritative
+- Fixed browser crashes: split jump tables (MY RUGBY), unlifted CRT exp arms (scrum); checks web.split_check, web.crt_math, lift.crt_math (special args, misses).
+- Online lockstep improvements: host keyboard+mouse in the input stream, code-based Join, rAF pacing, cheaper desync hash.
+- Decision (user): online must be inside the game, everyone in their own game, shared matches, any device/network -> host-authoritative netcode. Plan: docs/plans/2026-10-12-online-host-authoritative.md, items on.* in features.json.
+- Next: on.match_map.
+
+## 2026-10-12 — online: host keyboard did nothing in menus / intro (fixed, user-verified in Brave)
+- Root cause: in a session DirectInput lists the 4 virtual pads before the keyboard (rt_pads_first), so the keyboard is controller 5; the game only reads controllers 1-4 (FUN_0081A5A0(i, 4): movie skip loop sub_006BD870, menus, Team Select). The mouse is read separately, so it kept working.
+- Fix: the host's keyboard also drives player 1's virtual pad (plat_local_pad, same mapping as friends: Enter/S accept, Esc Start, arrows), and still feeds the game's keyboard device. Replays are unaffected (automated runs skip plat_local_pad).
+- shell.html: an Esc that releases pointer lock (the browser keeps the key) is handed to the game as an Esc tap.
+- Verified: headless Chrome, Enter during inenpc.vp6 -> title screen. Found by native det RT_COVERAGE/RT_PROBE diff vs web (?env=RT_COVERAGE=a-b:/dev/stdout prints coverage to the console).

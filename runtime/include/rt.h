@@ -101,8 +101,12 @@ void det_thread_begin(int id);
 void det_thread_end(void);
 void det_set_deadline_fn(uint64_t (*fn)(void));   /* extra wake-up time (timers) */
 void det_on_frame(det_frame_fn fn);   /* called first at each det_frame, in registration order */
+double det_period_ms(void);          /* virtual ms the last Present advanced (pacers); -1 outside det mode */
 void det_frame(uint32_t frame);       /* Present */
 uint64_t det_hash(void);
+void det_hash_frame(uint32_t frame);   /* det_hash.c: per-frame diagnosis switches (det_frame calls it) */
+int det_hash_step(uint32_t frame, uint32_t parts, uint32_t every,
+                  uint64_t *out);   /* incremental: 1 + hash of the last `every` slices */
 void rt_thread_tls_set_all(uint32_t slot, uint32_t v);   /* TLS slot of every thread (TlsFree clears it) */
 extern RECOMP_TLS uint32_t rt_last_error;
 

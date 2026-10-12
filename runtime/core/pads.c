@@ -24,7 +24,7 @@ static const struct {
  * stick rup/rdown/rleft/rright (full deflection while held). */
 int rt_pad_event(int pad, const char *name, int down) {
     if (pad < 0 || pad >= RT_MAX_PADS) return 0;
-    rt_pad_t *p = &rt_pads[pad];
+    rt_pad_t *p = rt_net ? rt_net_local_pad() : &rt_pads[pad]; /* netplay: replay pad events are this player's input */
     for (size_t i = 0; i < sizeof k_buttons / sizeof *k_buttons; i++)
         if (!strcmp(name, k_buttons[i].name)) {
             p->buttons = down ? p->buttons | k_buttons[i].bit : p->buttons & ~k_buttons[i].bit;
