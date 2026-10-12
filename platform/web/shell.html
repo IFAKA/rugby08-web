@@ -3,11 +3,22 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Emscripten-Generated Code</title>
-    <style>{{{ SHELL_CSS }}}</style>
+    <title>Rugby 08</title>
+    <!-- platform/web/shell.html: the page around the game canvas (emcc --shell-file). Local only. -->
+    <style>
+      body { margin: 0; padding: 8px; background: #111; color: #ccc; font: 13px system-ui, sans-serif; }
+      .emscripten { display: block; margin: 0 auto; text-align: center; }
+      .emscripten_border { margin: 8px auto; }
+      canvas.emscripten { border: 0; background: #000; }
+      #controls { display: block; text-align: center; margin: 4px 0; }
+      #output { display: block; width: 100%; max-width: 960px; margin: 8px auto; background: #000; color: #8f8;
+                border: 0; font: 11px monospace; }
+      .spinner { height: 24px; width: 24px; margin: 8px auto; border: 3px solid #333; border-top-color: #8f8;
+                 border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <a href="http://emscripten.org">{{{ SHELL_LOGO }}}</a>
 
     <div class="spinner" id='spinner'></div>
     <div class="emscripten" id="status">Downloading...</div>
@@ -38,11 +49,9 @@
       var spinnerElement = document.getElementById('spinner');
       var canvasElement = document.getElementById('canvas');
       var outputElement = document.getElementById('output');
-      if (outputElement) outputElement.value = ''; // clear browser cache
+      if (outputElement) outputElement.value = ''; // the browser may restore old text
 
-      // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-      // application robust, you may want to override this behavior before shipping!
-      // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
+      // A lost WebGL context cannot be restored: the game's textures and buffers are gone with it.
       canvasElement.addEventListener('webglcontextlost', (e) => {
         alert('WebGL context lost. You will need to reload the page.');
         e.preventDefault();
@@ -111,7 +120,6 @@
         (document.fullscreenElement || document.getElementById('view')).appendChild(fpsElement);
       });
       window.onerror = window.onunhandledrejection = () => {
-        // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
         setStatus('Exception thrown, see JavaScript console');
         spinnerElement.style.display = 'none';
         setStatus = (text) => {

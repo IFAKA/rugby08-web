@@ -1,0 +1,141 @@
+/* sdl_events.c -- SDL events translated to the Win32 messages the game's WndProc expects. */
+#include "sdl_int.h"
+
+#define WM_SIZE_ 0x0005
+#define WM_ACTIVATE_ 0x0006
+#define WM_PAINT_ 0x000F
+#define WM_CLOSE_ 0x0010
+#define WM_ACTIVATEAPP_ 0x001C
+#define WM_KEYDOWN_ 0x0100
+#define WM_KEYUP_ 0x0101
+#define WM_CHAR_ 0x0102
+#define WM_SYSKEYDOWN_ 0x0104
+#define WM_SYSKEYUP_ 0x0105
+#define WM_MOUSEMOVE_ 0x0200
+#define WM_LBUTTONDOWN_ 0x0201
+#define WM_MOUSEWHEEL_ 0x020A
+
+static plat_msg_t g_pending[8];
+static int g_npending;
+
+static void push(uint32_t msg, uint32_t wp, uint32_t lp) {
+    if (g_npending < 8) g_pending[g_npending++] = (plat_msg_t){ msg, wp, lp };
+}
+
+static uint32_t mk_buttons(void) {
+    uint32_t b = SDL_GetMouseState(NULL, NULL), mk = 0;
+    if (b & SDL_BUTTON_LMASK) mk |= 0x01;
+    if (b & SDL_BUTTON_RMASK) mk |= 0x02;
+    if (b & SDL_BUTTON_MMASK) mk |= 0x10;
+    if (plat_vk_down(0x10)) mk |= 0x04;
+    if (plat_vk_down(0x11)) mk |= 0x08;
+    return mk;
+}
+
+/* Interactive play captures the pointer (SDL relative mode) and tracks the in-window position from
+   the deltas, so the pointer can never stall at a window edge while the game cursor still has room. */
+static void rel_set(int on) {
+    if (virtual_cursor() || !g_win || on == g_rel) return;
+    if (on) { int x, y; SDL_GetMouseState(&x, &y); g_cx = x; g_cy = y; }
+    SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
+    g_rel = on;
+}
+static void rel_move(int dx, int dy) {
+    int w = 640, h = 480;
+    if (g_win) SDL_GetWindowSize(g_win, &w, &h);
+    g_cx += dx; g_cy += dy;
+    if (g_cx < 0) g_cx = 0; else if (g_cx > w - 1) g_cx = w - 1;
+    if (g_cy < 0) g_cy = 0; else if (g_cy > h - 1) g_cy = h - 1;
+}
+
+void translate(const SDL_Event *e) {
+    if (rt_log_input) {
+        if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP)
+            rt_log("input: key %s %s (vk 0x%02X)", SDL_GetScancodeName(e->key.keysym.scancode),
+                   e->type == SDL_KEYDOWN ? "down" : "up", g_keys[e->key.keysym.scancode].vk);
+        else if (e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEBUTTONUP)
+            rt_log("input: mouse button %d %s at %d,%d", e->button.button, e->type == SDL_MOUSEBUTTONDOWN ? "down" : "up", e->button.x, e->button.y);
+        else if (e->type == SDL_WINDOWEVENT && (e->window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e->window.event == SDL_WINDOWEVENT_FOCUS_LOST))
+            rt_log("input: window focus %s", e->window.event == SDL_WINDOWEVENT_FOCUS_GAINED ? "gained" : "lost");
+    }
+    switch (e->type) {
+    case SDL_QUIT: push(WM_CLOSE_, 0, 0); break;
+    case SDL_WINDOWEVENT:
+        switch (e->window.event) {
+        case SDL_WINDOWEVENT_CLOSE: push(WM_CLOSE_, 0, 0); break;
+        case SDL_WINDOWEVENT_FOCUS_GAINED: rel_set(1); push(WM_ACTIVATEAPP_, 1, 0); push(WM_ACTIVATE_, 1, 0); break;
+        case SDL_WINDOWEVENT_FOCUS_LOST: rel_set(0); push(WM_ACTIVATE_, 0, 0); push(WM_ACTIVATEAPP_, 0, 0); break;
+        case SDL_WINDOWEVENT_SIZE_CHANGED:
+            push(WM_SIZE_, 0, ((uint32_t)e->window.data2 << 16) | ((uint32_t)e->window.data1 & 0xFFFF)); break;
+        case SDL_WINDOWEVENT_MINIMIZED: push(WM_SIZE_, 1, 0); break;
+        case SDL_WINDOWEVENT_EXPOSED: push(WM_PAINT_, 0, 0); break;
+        }
+        break;
+    case SDL_KEYDOWN: case SDL_KEYUP: {
+        keymap_t k = g_keys[e->key.keysym.scancode];
+        if (!k.vk) break;
+        int down = e->type == SDL_KEYDOWN, alt = plat_vk_down(0x12) || k.vk == 0xA4 || k.vk == 0xA5;
+        g_vk_down[k.vk] = (uint8_t)down;
+        g_dik_down[(k.scan | (k.ext ? 0x80 : 0)) & 0xFF] = (uint8_t)down;
+        uint32_t vk = k.vk;               /* WM_KEY* carry the generic modifier codes */
+        if (vk == 0xA0 || vk == 0xA1) vk = 0x10;
+        else if (vk == 0xA2 || vk == 0xA3) vk = 0x11;
+        else if (vk == 0xA4 || vk == 0xA5) vk = 0x12;
+        uint32_t lp = 1u | ((uint32_t)k.scan << 16) | ((uint32_t)k.ext << 24) | (alt ? 1u << 29 : 0);
+        if (!down) lp |= 3u << 30;
+        else if (e->key.repeat) lp |= 1u << 30;
+        push(alt ? (down ? WM_SYSKEYDOWN_ : WM_SYSKEYUP_) : (down ? WM_KEYDOWN_ : WM_KEYUP_), vk, lp);
+        break;                            /* WM_CHAR: the game's TranslateMessage (user32.c) */
+    }
+    case SDL_MOUSEMOTION:
+        g_mdx += e->motion.xrel; g_mdy += e->motion.yrel;
+        if (!g_rel && plat_window_focused()) rel_set(1);
+        if (g_rel) { rel_move(e->motion.xrel, e->motion.yrel); push(WM_MOUSEMOVE_, mk_buttons(), ((uint32_t)(g_cy & 0xFFFF) << 16) | (uint32_t)(g_cx & 0xFFFF)); break; }
+        push(WM_MOUSEMOVE_, mk_buttons(), ((uint32_t)(e->motion.y & 0xFFFF) << 16) | (uint32_t)(e->motion.x & 0xFFFF));
+        break;
+    case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: {
+        int b = e->button.button, up = e->type == SDL_MOUSEBUTTONUP;
+        uint32_t base = b == SDL_BUTTON_LEFT ? 0x201 : b == SDL_BUTTON_RIGHT ? 0x204 : b == SDL_BUTTON_MIDDLE ? 0x207 : 0;
+        uint8_t vk = b == SDL_BUTTON_LEFT ? 1 : b == SDL_BUTTON_RIGHT ? 2 : b == SDL_BUTTON_MIDDLE ? 4 : 0;
+        if (!base) break;
+        g_vk_down[vk] = (uint8_t)!up;
+        if (g_rel) { push(base + (uint32_t)up, mk_buttons(), ((uint32_t)(g_cy & 0xFFFF) << 16) | (uint32_t)(g_cx & 0xFFFF)); break; }
+        push(base + (uint32_t)up, mk_buttons(), ((uint32_t)(e->button.y & 0xFFFF) << 16) | (uint32_t)(e->button.x & 0xFFFF));
+        break;
+    }
+    case SDL_MOUSEWHEEL:
+        g_mdw += e->wheel.y * 120;
+        push(WM_MOUSEWHEEL_, ((uint32_t)(uint16_t)(int16_t)(e->wheel.y * 120) << 16) | mk_buttons(), 0);
+        break;
+    }
+    (void)WM_LBUTTONDOWN_;
+}
+
+int plat_pending(void) { return g_npending > 0 || g_activate_pending; }
+
+int plat_poll(plat_msg_t *m, int wait_ms) {
+    if (!g_inited) return 0;
+    SDL_Event e;
+    if (g_activate_pending) { g_activate_pending = 0; push(WM_ACTIVATEAPP_, 1, 0); push(WM_ACTIVATE_, 1, 0); }
+    if (det_on()) {   /* deterministic mode: the host window's own events never reach the guest; only
+                         what the replay/netplay pushed at Present and the initial activation do */
+        while (SDL_PollEvent(&e)) {}
+        if (!g_npending) return 0;
+        *m = g_pending[0];
+        memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);
+        return 1;
+    }
+    while (!g_npending) {
+        int got = wait_ms > 0 ? SDL_WaitEventTimeout(&e, wait_ms) : SDL_PollEvent(&e);
+        if (!got) return 0;
+        wait_ms = 0;
+        if (virtual_cursor() && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP || e.type == SDL_TEXTINPUT ||
+            e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
+            e.type == SDL_MOUSEWHEEL))
+            continue;                     /* automated runs: only the replay drives input, never the user's devices */
+        translate(&e);
+    }
+    *m = g_pending[0];
+    memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);
+    return 1;
+}

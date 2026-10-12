@@ -1,4 +1,4 @@
-/* dinputproxy.c -- dinput.dll for the Wine reference run only (tools/run_wine.sh), built with
+/* dinputproxy.c -- dinput.dll for the Wine reference run only (tools/check/run_wine.sh), built with
  * d3d8proxy.c by tools/oracle/build_proxy.sh; no CRT, no Windows SDK.
  *
  * Loads Wine's dinput.dll and patches IDirectInput::CreateDevice and the devices' GetDeviceState

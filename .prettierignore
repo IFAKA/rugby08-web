@@ -7,3 +7,4 @@ third_party/
 node_modules/
 *.md
 features.json
+platform/web/shell.html

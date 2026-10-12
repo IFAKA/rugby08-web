@@ -1,0 +1,38 @@
+From 46ee03b2b0c42ffeb596fe080dafe11596800f33 Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sat, 10 Oct 2026 23:51:18 +0200
+Subject: [PATCH 2/3] lift32: sar on 8/16-bit operands sign-extends from the
+ operand's top bit (was a logical shift)
+
+A byte/word read is a zero-extended uint32_t, so (int32_t)HI8(ecx) >> n shifted in zeros.
+The MSVC CRT transcendental dispatcher classifies arguments with fxam; fstsw; shl ch,1;
+sar ch,1; rol ch,1 -- atan2 took a special-case handler for ordinary arguments.
+---
+ tools/lift/lift32.py | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/tools/lift/lift32.py b/tools/lift/lift32.py
+index 38321f6..5fb8eac 100644
+--- a/tools/lift/lift32.py
++++ b/tools/lift/lift32.py
+@@ -989,11 +989,18 @@ class Lifter:
+                 a = self._fmt_read(ops[0])
+                 b, bn = self._shift_count(ops[1])
+                 w = op_bits(ops[0])
+-                res = f"((uint32_t)((int32_t){a} >> {b}))"
++                # The sign comes from the operand's own top bit. A byte or word read is a
++                # zero-extended uint32_t, so `(int32_t)HI8(ecx) >> 1` shifted a zero in --
++                # SAR on 8/16-bit registers ran as SHR. The MSVC CRT's transcendental
++                # dispatcher classifies each argument with `fxam; fstsw; shl ch,1; sar ch,1;
++                # rol ch,1`, so atan2 took a special-case handler for ordinary arguments
++                # and Rugby 08's run-direction math (atan2 of the stick) came out constant.
++                sx = {8: "(int32_t)(int8_t)", 16: "(int32_t)(int16_t)"}.get(w, "(int32_t)")
++                res = f"((uint32_t)({sx}({a}) >> {b}))"
+                 # sar must publish CF for a following rcr (the clip's `sar;rcr` lerp).
+                 lines.append(f"if ({b}) _cf = {self._shift_out_cf(a, b, bn, w, 'arith')}; {comment}")
+                 lines.append(self._shift_flags(res, b, w))
+-                lines.append(f"{self._fmt_write(ops[0], f'(uint32_t)((int32_t){a} >> {b})')};")
++                lines.append(f"{self._fmt_write(ops[0], res)};")
+                 self._flag_state = None
+ 
+         # shld/shrd: double-precision shift (64-bit window across dst:src). Used pervasively

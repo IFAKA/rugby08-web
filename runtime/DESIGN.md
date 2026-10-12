@@ -14,12 +14,12 @@
   - Per-thread TIB (`g_fs_base`): the SEH chain at fs:[0], the stack bounds, and the TLS slots array at fs:[0x2C].
 - Calls: `RECOMP_ICALL(va)` pushes a dummy return address, then looks up in order `recomp_lookup_manual`, the generated table, then `recomp_lookup_import`. We supply the manual and import lookups.
 
-## Lifter choice (measured with `tools/insn_stats.py` → `analysis/insn_stats.json`)
+## Lifter choice (measured with `tools/analysis/insn_stats.py` → `analysis/insn_stats.json`)
 - 2.2M instructions: 88k x87, 5.4k MMX (94 funcs), 3.1k SSE/SSE2 (65 funcs), and `fs:` in 2,151 funcs (SEH).
 - Lifter: `lift32` via `python -m tools`, the global-register model with RECOMP_TLS. It has MMX and `fs:`, but no XMM.
   - `lift32_cpu` handles XMM, but is a separate driver and slower (a CPU struct behind a pointer).
 - Modeled CPU: Pentium Pro (CPUID 0x619: FPU, TSC, CX8, CMOV/FCMOV; no MMX, SSE or 3DNow!). The MMX, SSE and 3DNow! code (math, D3DX-style kernels, codecs) is CPU-dispatched, so those paths never run.
-- `tools/lift_ext.py` gives every instruction that CPU's semantics:
+- `tools/lift/lift_ext.py` gives every instruction that CPU's semantics:
   - It implements what lift32 lacks (`fucompp`, `fcomi`, `fcmov`, `ficom`, BCD adjusts, `xadd`, `bound`, `arpl`, `lahf`…).
   - Extensions lift as #UD faults and privileged or I/O instructions as #GP faults. Both go to `recomp_fault` and are loud.
   - If a trace ever hits an XMM function, lift that one function with `lift32_cpu`, or add the ops to lift32.
@@ -30,7 +30,7 @@
 - The x87's 15-bit exponent range is not modeled (the model overflows and underflows at double range), and neither are the status-word exception flags (bits 0–5).
 - NaN payload and sign are not modeled. The x87 default NaN is negative and ARM's is positive, and wasm makes NaN bits nondeterministic, so the difftest's inputs contain no NaN or Inf patterns.
 
-## Function bodies (tools/lift.py `body_ends`)
+## Function bodies (tools/lift/lift.py `body_ends`)
 - A Ghidra function is lifted over its whole extent, capped at the next Ghidra start, decoding straight over any other entry inside it.
   - The old rule (stop at the next catalog entry) turned loops that crossed an inner entry into nested tail calls. That means unbounded host recursion.
 - An entry inside a Ghidra function runs to that function's end. Other entries stop at the next top-level entry.
@@ -46,18 +46,18 @@
   - Layout: `{ u32 vtbl_va; u32 host_index; }`.
   - Each vtable is a guest array of bridge VAs in the 0xFFE00000 range.
   - Bridges are `void f(void)`: they read args at `MEM32(esp+4+4k)`, set `eax`, and do `esp += 4 + 4*argc` (stdcall; `this` is arg 0 for COM).
-  - Bridge tables are generated from signature lists (`runtime/gen_bridges.py`), not hand-written.
+  - Bridge tables are generated, not hand-written: imports from the IAT and Wine `.spec` signatures (`tools/gen/gen_imports.py`), D3D8 vtables from d3d8to9's interface declarations (`tools/gen/gen_d3d8_bridges.py`).
 - Callbacks into guest code go through `guest_call(va, n, args…)` (WndProc, thread start, timeSetEvent, DirectInput/DirectSound enumerate callbacks):
   - Push args right to left, push RECOMP_RETADDR, then call `recomp_lookup(va)()`.
   - Save and restore callee-saved registers around the call.
 - Unimplemented imports: an auto-generated stub logs `UNIMPL <dll>!<name>` once, then returns 0.
 
 ## Graphics / audio / input / files
-- D3D8 → guest COM bridges (runtime/d3d8/) that translate each D3D8 call to D3D9 → d3d9-webgl.
-  - Not d3d8to9 itself: it does not compile against d3d9-webgl's `d3d9.h`, which is a subset (2,242 errors on 2026-10-03: no cube/volume textures, swap chains, IUnknown/resource base methods, ~40 device methods). The bridge layer has to convert every call for the guest anyway (32-bit structs, guest lock buffers), so it does the D3D8→D3D9 step too, using d3d8to9's sources as the reference for the conversion rules.
+- D3D8 → guest COM bridges (runtime/d3d8/) that translate each D3D8 call to the renderer's D3D9 API (`render/webgl/`, grown from d3d9-webgl).
+  - Not d3d8to9 itself: it does not compile against the renderer's `d3d9.h`, which is a subset (2,242 errors on 2026-10-03: no cube/volume textures, swap chains, IUnknown/resource base methods, ~40 device methods). The bridge layer has to convert every call for the guest anyway (32-bit structs, guest lock buffers), so it does the D3D8→D3D9 step too, using d3d8to9's sources as the reference for the conversion rules.
   - Web: WebGL2 as-is.
-  - Native: an SDL2 GL 3.3 core context, with the shader header swapped from `#version 300 es` to `#version 330 core`, patched in `platform/native/`.
-  - The game is fixed-function only (the exe has no shader strings), so d3d8to9's shader-assembly path is stubbed.
+  - Native: an SDL2 GL 4.1 core context; `platform/native/gl_native.c` rewrites the GLSL ES shaders to GLSL 4.10 core.
+  - Shaders: the game assembles vs.1.1 (and, with RT_PS_CAPS, ps.1.x) through its statically linked D3DX; the bytecode is translated to GLSL by MojoShader (`runtime/d3d8/d3d8_vshader.cpp`) and run by the renderer (`render/webgl/program_vs.cpp`, `program_ps.cpp`). Everything else is fixed-function, emulated in `render/webgl/glsl/`.
 - DirectSound → mixer on SDL audio. DirectInput → SDL keyboard and gamecontroller.
 - Files: guest paths (backslashes, any case) map to `Game Files/` through a case-insensitive lookup cache.
   - Native: host FS.

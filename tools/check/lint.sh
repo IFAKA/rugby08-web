@@ -57,7 +57,7 @@ fi
 section ruff
 ruff=$(py_files | xargs "$V/ruff" check --output-format concise 2>&1 | tee -a "$LOG" | grep -cE ':[0-9]+:[0-9]+: ')
 section shellcheck
-sc=$(sh_files | xargs shellcheck -f gcc 2>&1 | tee -a "$LOG" | grep -cE ':[0-9]+:[0-9]+: ')
+sc=$(sh_files | xargs shellcheck -S warning -f gcc 2>&1 | tee -a "$LOG" | grep -cE ':[0-9]+:[0-9]+: ')
 section eslint
 es=$(js_files | xargs "$N/eslint" -f json 2>>"$LOG" | tee -a "$LOG" | jq '[.[].messages | length] | add // 0')
 

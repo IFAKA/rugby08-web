@@ -67,7 +67,6 @@ static uint32_t func_tokens(uint32_t va) {
 }
 
 static void dump(int id, const Vs8 *vs, const uint32_t *tok, uint32_t n) {
-#ifndef __EMSCRIPTEN__
     mkdir("logs/shaders", 0755);
     char path[64];
     snprintf(path, sizeof path, "logs/shaders/vs_%03d.glsl", id);
@@ -86,9 +85,6 @@ static void dump(int id, const Vs8 *vs, const uint32_t *tok, uint32_t n) {
         fprintf(f, "// output %s usage %d index %d\n", pd->outputs[i].name, pd->outputs[i].usage, pd->outputs[i].index);
     if (pd->output) fwrite(pd->output, 1, (size_t)pd->output_len, f);
     fclose(f);
-#else
-    (void)id; (void)vs; (void)tok; (void)n;
-#endif
 }
 
 bool vs8_translate(uint32_t func_va, Vs8 *vs, int id) {
@@ -144,7 +140,6 @@ bool ps8_translate(uint32_t func_va, Ps8 *ps, int id) {
     for (uint32_t i = 0; i < n; i++) tok[i] = rd32(func_va + 4 * i);
     ps->pd = MOJOSHADER_parse(MOJOSHADER_PROFILE_GLSLES3, "main", (const unsigned char *)tok.data(),
                               (unsigned)(tok.size() * 4), nullptr, 0, nullptr, 0, nullptr, nullptr, nullptr);
-#ifndef __EMSCRIPTEN__
     {
         mkdir("logs/shaders", 0755);
         char path[64];
@@ -161,7 +156,6 @@ bool ps8_translate(uint32_t func_va, Ps8 *ps, int id) {
             fclose(f);
         }
     }
-#endif
     if (ps->pd->error_count) {
         rt_log("CreatePixelShader #%d: MojoShader: %s", id, ps->pd->errors[0].error);
         return false;

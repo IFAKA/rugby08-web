@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Project structure rules (docs/ARCHITECTURE.md). One summary line; details in logs/structure.log.
 #   size     hand-written sources stay <= 300 lines (declaration headers and vendored code are exempt)
-#   web      __EMSCRIPTEN__ only in platform/web/ and render/webgl/ (the rest of the code is target-neutral)
+#   web      runtime/ is target-neutral: __EMSCRIPTEN__ only in platform/ and render/ (and the dlmalloc
+#            configuration in runtime/core/heap.c)
 #   readme   every source directory has a README.md saying what lives there
 #   vendor   third_party/ submodules sit on an upstream commit (our changes live in third_party/patches/)
 #   tools/check/structure.sh [--report]   (--report: always exit 0)
@@ -24,9 +25,9 @@ while read -r f; do
 done < <(git ls-files 'runtime/*' 'platform/*' 'render/*' 'game/*' 'tools/*' 'scripts/*' |
   grep -E '\.(c|cpp|h|hpp|js|py|sh|html|glsl|vert|frag)$' | grep -vE "$EXEMPT")
 
-echo "==== web (__EMSCRIPTEN__ outside platform/web, render/webgl)" >>"$LOG"
+echo "==== web (__EMSCRIPTEN__ in runtime/)" >>"$LOG"
 web=$(git grep -c '__EMSCRIPTEN__' -- 'runtime/*' 'platform/*' 'render/*' 'game/*' |
-  grep -vE '^(platform/web/|render/webgl/|runtime/third_party/)' | tee -a "$LOG" | grep -c .)
+  grep -vE '^(platform/|render/|runtime/third_party/|runtime/core/heap\.c:)' | tee -a "$LOG" | grep -c .)
 
 echo "==== readme (source directories without README.md)" >>"$LOG"
 readme=0
@@ -38,19 +39,20 @@ for d in $(git ls-files 'runtime/*' 'platform/*' 'render/*' 'game/*' 'tools/*' |
   fi
 done
 
-echo "==== vendor (submodules with our own commits or edits)" >>"$LOG"
+echo "==== vendor (submodule commits of ours without a patch in third_party/patches/, or local edits)" >>"$LOG"
 vendor=0
 for s in $(git config -f .gitmodules --get-regexp 'submodule\..*\.path' | awk '{print $2}'); do
   [ -e "$s/.git" ] || continue
   ours=$(git -C "$s" log --oneline --author="$(git config user.email)" HEAD | wc -l | tr -d ' ')
-  if [ "$ours" != 0 ] || [ -n "$(git -C "$s" status --porcelain)" ]; then
-    echo "$s ($ours commits of ours inside the submodule)" >>"$LOG"
+  patches=$(ls "third_party/patches/$(basename "$s")"/*.patch 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$ours" != "$patches" ] || [ -n "$(git -C "$s" status --porcelain)" ]; then
+    echo "$s ($ours commits of ours, $patches patches)" >>"$LOG"
     vendor=$((vendor + 1))
   fi
 done
 
 total=$((size + web + readme + vendor))
-msg="files>${MAX}: $size, web code outside platform/web: $web, dirs without README: $readme, modified submodules: $vendor"
+msg="files>${MAX}: $size, target-specific code in runtime/: $web, dirs without README: $readme, unrecorded submodule changes: $vendor"
 if [ "$total" = 0 ]; then
   echo "structure: ok"
   exit 0

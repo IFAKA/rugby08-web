@@ -1,0 +1,30 @@
+From c53e5d3811b0c7bea3188da8ea94364ebc4c2192 Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 21:25:48 +0200
+Subject: [PATCH 8/8] Remap clip-space z from D3D [0,w] to GL [-w,w]
+
+---
+ d3d9.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/d3d9.cpp b/d3d9.cpp
+index 61df3f2..750f760 100644
+--- a/d3d9.cpp
++++ b/d3d9.cpp
+@@ -117,6 +117,7 @@ void main() {
+     // test must skip for XYZRHW vertices (check D3DFVF_XYZRHW in C++ before enabling clip plane).
+     v_position_world = u_world * a_position;
+     gl_Position = u_blend ? mix(u_mvp1 * a_position, u_mvp * a_position, a_blendweight) : u_mvp * a_position;
++    gl_Position.z = gl_Position.z * 2.0 - gl_Position.w;   // D3D clips z to [0,w], GL to [-w,w]: without this, geometry nearer than the near plane is drawn in front of everything
+     if (u_fbo_flip_y) gl_Position.y = -gl_Position.y;
+     v_texcoord = a_texcoord;
+     v_texcoord1 = a_texcoord1;
+@@ -898,7 +899,7 @@ static std::string progvs_vertex_source(const char* glsl, const std::vector<D3D9
+     size_t open = m == std::string::npos ? m : s.find('{', m);
+     size_t close = s.rfind('}');
+     if (open == std::string::npos || close == std::string::npos || close < open) return std::string();
+-    s.insert(close, "\tif (u_fbo_flip_y) gl_Position.y = -gl_Position.y;\n");
++    s.insert(close, "\tgl_Position.z = gl_Position.z * 2.0 - gl_Position.w;\n\tif (u_fbo_flip_y) gl_Position.y = -gl_Position.y;\n");
+     s.insert(open + 1, "\n" + prologue);
+     s.insert(m, decl);
+     return s;

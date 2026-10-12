@@ -1,0 +1,1011 @@
+From 163f02c32b87fd7e5f9f2e0fcf3f2a08dc1a738c Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 16:31:34 +0200
+Subject: [PATCH 3/8] D3D8 rendering for Rugby 08: fixed-function lighting,
+ texture-stage combiner, pixel shaders, draw trace
+
+- Vertex lighting as D3D does it: up to 8 directional/point/spot lights with attenuation,
+  material colour sources, specular (D3DRS_SPECULARENABLE) added after the stages.
+- General texture-stage combiner (D3DTOP 2-24, COMPLEMENT/ALPHAREPLICATE args); stage defaults per
+  D3D (ARG2 = CURRENT). Stage 2 stays off for now.
+- Pixel shaders: ps.1.x GLSL from MojoShader linked with the programmable or fixed-function vertex
+  stage (varyings matched by io_<usage>_<index>), alpha test and fog injected, ps_tN inputs declared.
+- DXT1 uploads as RGBA (punch-through alpha); texture address modes (MIRROR, CLAMP, BORDER).
+- Draw trace (d3d9w_trace_draws): per-draw state, lights, stages, depth/stencil, textures and the
+  framebuffer footprint of each draw.
+---
+ d3d9.cpp | 757 ++++++++++++++++++++++++++++++++++++++-----------------
+ d3d9.h   |  10 +
+ 2 files changed, 531 insertions(+), 236 deletions(-)
+
+diff --git a/d3d9.cpp b/d3d9.cpp
+index d716da6..f19ccfe 100644
+--- a/d3d9.cpp
++++ b/d3d9.cpp
+@@ -90,64 +90,25 @@ uniform bool u_fog_enabled;
+ uniform mat4 u_view_model;
+ varying float v_eye_depth;
+ 
+-// D3D9 FFP Lighting
++// D3D fixed-function lighting (world space; camera position for the local-viewer specular)
+ uniform bool u_lighting_enabled;
+ uniform vec4 u_material_diffuse;
+ uniform vec4 u_material_ambient;
++uniform vec4 u_material_emissive;
++uniform vec4 u_material_specular;     // rgb, power in a
+ uniform vec3 u_global_ambient;
+-
+-// Light 0 (point light)
+-uniform bool u_diffuse_from_vertex;    // D3DRS_DIFFUSEMATERIALSOURCE = COLOR1 (and COLORVERTEX)
+-uniform bool u_ambient_from_vertex;
+-uniform bool u_light0_enabled;
+-uniform vec3 u_light0_position;
+-uniform vec4 u_light0_diffuse;
+-uniform vec3 u_light0_ambient;
+-uniform vec3 u_light0_attenuation; // (att0, att1, att2)
+-uniform float u_light0_range;
+-uniform int u_light0_type;
+-uniform vec3 u_light0_direction;
+-
+-// Light 1 (point light)
+-uniform bool u_light1_enabled;
+-uniform vec3 u_light1_position;
+-uniform vec4 u_light1_diffuse;
+-uniform vec3 u_light1_ambient;
+-uniform vec3 u_light1_attenuation;
+-uniform float u_light1_range;
+-uniform int u_light1_type;
+-uniform vec3 u_light1_direction;
+-
+-// Light 2 (point light)
+-uniform bool u_light2_enabled;
+-uniform vec3 u_light2_position;
+-uniform vec4 u_light2_diffuse;
+-uniform vec3 u_light2_ambient;
+-uniform vec3 u_light2_attenuation;
+-uniform float u_light2_range;
+-uniform int u_light2_type;
+-uniform vec3 u_light2_direction;
+-
+-// D3D9 FFP point light contribution
+-// D3D fixed-function light (D3DLIGHT_POINT 1, SPOT 2 as point, DIRECTIONAL 3): the material colours
+-// come in from the caller (D3DRS_*MATERIALSOURCE may take them from the vertex colour).
+-vec3 calcLight(int type, vec3 lightPos, vec3 lightDir, vec4 lightDiffuse, vec3 lightAmbient,
+-               vec3 lightAtten, float lightRange, vec3 worldPos, vec3 worldNormal,
+-               vec3 matDiffuse, vec3 matAmbient) {
+-    vec3 L;
+-    float atten = 1.0;
+-    if (type == 3) {
+-        L = normalize(-lightDir);
+-    } else {
+-        vec3 light_vec = lightPos - worldPos;
+-        float dist = length(light_vec);
+-        if (dist >= lightRange) return vec3(0.0);
+-        L = light_vec / max(dist, 1e-6);
+-        atten = 1.0 / max(lightAtten.x + lightAtten.y * dist + lightAtten.z * dist * dist, 1e-6);
+-    }
+-    float NdotL = max(dot(worldNormal, L), 0.0);
+-    return (matAmbient * lightAmbient + matDiffuse * lightDiffuse.rgb * NdotL) * atten;
+-}
++uniform vec4 u_matsrc;                // diffuse, ambient, emissive, specular: 0 material, 1 vertex colour
++uniform bool u_specular_enabled;
++uniform vec3 u_camera_pos;
++uniform int u_nlights;                // enabled lights, packed
++uniform vec4 u_lpos[8];               // position, type (1 point, 2 spot, 3 directional)
++uniform vec4 u_ldir[8];               // direction, range
++uniform vec4 u_ldiff[8];
++uniform vec4 u_lamb[8];
++uniform vec4 u_lspec[8];
++uniform vec4 u_latt[8];               // attenuation 0/1/2, spot falloff
++uniform vec4 u_lspot[8];              // cos(theta/2), cos(phi/2)
++varying vec4 v_specular;
+ 
+ void main() {
+     // Note: v_position_world is always computed even for XYZRHW (where a_position.w = rhw, not 1.0).
+@@ -160,34 +121,47 @@ void main() {
+     v_texcoord = a_texcoord;
+     v_texcoord1 = a_texcoord1;
+ 
++    v_specular = vec4(0.0);
+     if (u_lighting_enabled) {
+-        // D3D9 FFP per-vertex lighting formula
+-        vec3 world_pos = (u_world * a_position).xyz;
+-        vec3 world_normal = normalize(mat3(u_world) * a_normal);
+-
+-        // Global ambient: Material.Ambient * GlobalAmbient
+-        vec4 mat_diffuse = u_diffuse_from_vertex ? a_color : u_material_diffuse;
+-        vec3 mat_ambient = u_ambient_from_vertex ? a_color.rgb : u_material_ambient.rgb;
+-        vec3 lit_color = mat_ambient * u_global_ambient;
+-
+-        // Per-light contributions (up to 3 point lights)
+-        if (u_light0_enabled) {
+-            lit_color += calcLight(u_light0_type, u_light0_position, u_light0_direction, u_light0_diffuse,
+-                                   u_light0_ambient, u_light0_attenuation, u_light0_range, world_pos,
+-                                   world_normal, mat_diffuse.rgb, mat_ambient);
+-        }
+-        if (u_light1_enabled) {
+-            lit_color += calcLight(u_light1_type, u_light1_position, u_light1_direction, u_light1_diffuse,
+-                                   u_light1_ambient, u_light1_attenuation, u_light1_range, world_pos,
+-                                   world_normal, mat_diffuse.rgb, mat_ambient);
+-        }
+-        if (u_light2_enabled) {
+-            lit_color += calcLight(u_light2_type, u_light2_position, u_light2_direction, u_light2_diffuse,
+-                                   u_light2_ambient, u_light2_attenuation, u_light2_range, world_pos,
+-                                   world_normal, mat_diffuse.rgb, mat_ambient);
++        // D3D: colour = Me + Ma*Ga + sum(atten*spot*(Ma*La + Md*Ld*max(N.L,0))), alpha = Md.a;
++        // specular = sum(atten*spot*Ms*Ls*(N.H)^P) with the local-viewer half vector
++        vec3 P = (u_world * a_position).xyz;
++        vec3 nw = mat3(u_world) * a_normal;
++        vec3 N = dot(nw, nw) > 0.0 ? normalize(nw) : vec3(0.0);   // no normals: ambient and emissive only
++        vec4 Md = u_matsrc.x > 0.5 ? a_color : u_material_diffuse;
++        vec4 Ma = u_matsrc.y > 0.5 ? a_color : u_material_ambient;
++        vec4 Me = u_matsrc.z > 0.5 ? a_color : u_material_emissive;
++        vec4 Ms = u_matsrc.w > 0.5 ? a_color : vec4(u_material_specular.rgb, 1.0);
++        vec3 V = normalize(u_camera_pos - P);
++        vec3 col = Me.rgb + Ma.rgb * u_global_ambient;
++        vec3 spec = vec3(0.0);
++        for (int i = 0; i < 8; i++) {
++            if (i >= u_nlights) break;
++            int type = int(u_lpos[i].w + 0.5);
++            vec3 L;
++            float att = 1.0;
++            if (type == 3) {
++                L = normalize(-u_ldir[i].xyz);
++            } else {
++                vec3 d = u_lpos[i].xyz - P;
++                float dist = length(d);
++                if (dist > u_ldir[i].w) continue;
++                L = d / max(dist, 1e-6);
++                att = 1.0 / max(u_latt[i].x + u_latt[i].y * dist + u_latt[i].z * dist * dist, 1e-6);
++                if (type == 2) {
++                    float rho = dot(normalize(-u_ldir[i].xyz), L);
++                    if (rho <= u_lspot[i].y) continue;
++                    if (rho < u_lspot[i].x)
++                        att *= pow(clamp((rho - u_lspot[i].y) / max(u_lspot[i].x - u_lspot[i].y, 1e-6), 0.0, 1.0), u_latt[i].w);
++                }
++            }
++            float NdotL = max(dot(N, L), 0.0);
++            col += att * (Ma.rgb * u_lamb[i].rgb + Md.rgb * u_ldiff[i].rgb * NdotL);
++            if (u_specular_enabled && NdotL > 0.0)
++                spec += att * Ms.rgb * u_lspec[i].rgb * pow(max(dot(N, normalize(L + V)), 0.0), u_material_specular.a);
+         }
+-
+-        v_color = vec4(clamp(lit_color, 0.0, 1.0), mat_diffuse.a);
++        v_color = vec4(clamp(col, 0.0, 1.0), Md.a);
++        v_specular = vec4(clamp(spec, 0.0, 1.0), 0.0);
+     } else {
+         v_color = a_color;
+     }
+@@ -208,6 +182,8 @@ static const char* fragment_shader_source = R"(
+     varying vec2 v_texcoord;
+     varying vec2 v_texcoord1;
+     varying vec4 v_position_world;
++    varying vec4 v_specular;
++    uniform bool u_specular_add;
+     uniform sampler2D u_texture;
+     uniform bool u_clip_plane_enabled;
+     uniform vec4 u_clip_plane;
+@@ -221,6 +197,7 @@ static const char* fragment_shader_source = R"(
+     uniform int u_stage0_alphaarg1;
+     uniform int u_stage0_alphaarg2;
+     uniform int u_stage1_op;
++    uniform int u_ts[18];      // stages 0-2: COLOROP, COLORARG1, COLORARG2, ALPHAOP, ALPHAARG1, ALPHAARG2
+     uniform bool u_alpha_test_enabled;
+     uniform float u_alpha_ref;
+     uniform vec4 u_texture_factor;
+@@ -251,6 +228,55 @@ static const char* fragment_shader_source = R"(
+         return vec4(1.0); // Default
+     }
+ 
++    // D3DTA_*: DIFFUSE 0, CURRENT 1, TEXTURE 2, TFACTOR 3, SPECULAR 4, TEMP 5; | COMPLEMENT 0x10,
++    // | ALPHAREPLICATE 0x20 (complement first). No bitwise ops in GLSL ES 1.0: div/mod arithmetic.
++    vec4 ts_arg(int arg, vec4 tex, vec4 cur, vec4 temp) {
++        int sel = arg - (arg / 16) * 16;
++        int fl = arg / 16;
++        vec4 v = temp;
++        if (sel == 0) v = v_color;
++        else if (sel == 1) v = cur;
++        else if (sel == 2) v = tex;
++        else if (sel == 3) v = u_texture_factor;
++        else if (sel == 4) v = v_specular;
++        if (fl - (fl / 2) * 2 == 1) v = vec4(1.0) - v;
++        if ((fl / 2) - (fl / 4) * 2 == 1) v = vec4(v.a);
++        return v;
++    }
++    // D3DTEXTUREOP on (arg1, arg2); the blend ops take their factor from the stage's own texture,
++    // the diffuse colour, TFACTOR or CURRENT as D3D defines them.
++    vec4 ts_op(int op, vec4 a1, vec4 a2, vec4 tex, vec4 cur) {
++        if (op == 2) return a1;
++        if (op == 3) return a2;
++        if (op == 4) return a1 * a2;
++        if (op == 5) return a1 * a2 * 2.0;
++        if (op == 6) return a1 * a2 * 4.0;
++        if (op == 7) return a1 + a2;
++        if (op == 8) return a1 + a2 - 0.5;
++        if (op == 9) return (a1 + a2 - 0.5) * 2.0;
++        if (op == 10) return a1 - a2;
++        if (op == 11) return a1 + a2 - a1 * a2;
++        if (op == 12) return mix(a2, a1, v_color.a);
++        if (op == 13) return mix(a2, a1, tex.a);
++        if (op == 14) return mix(a2, a1, u_texture_factor.a);
++        if (op == 15) return a1 + a2 * (1.0 - tex.a);
++        if (op == 16) return mix(a2, a1, cur.a);
++        if (op == 18) return vec4(a1.rgb + a1.a * a2.rgb, a1.a);
++        if (op == 19) return vec4(a1.rgb * a2.rgb + a1.a, a1.a);
++        if (op == 20) return vec4((1.0 - a1.a) * a2.rgb + a1.rgb, a1.a);
++        if (op == 21) return vec4((1.0 - a1.rgb) * a2.rgb + a1.a, a1.a);
++        if (op == 24) return vec4(clamp(dot(a1.rgb * 2.0 - 1.0, a2.rgb * 2.0 - 1.0), 0.0, 1.0));
++        return a1 * a2;   // PREMODULATE, bump mapping, MULTIPLYADD/LERP (need ARG0): modulate
++    }
++    void ts_stage(int cop, int ca1, int ca2, int aop, int aa1, int aa2, vec4 tex,
++                  inout vec4 cur, inout vec4 temp, inout bool done) {
++        if (done) return;
++        if (cop == 1) { done = true; return; }
++        vec3 c = ts_op(cop, ts_arg(ca1, tex, cur, temp), ts_arg(ca2, tex, cur, temp), tex, cur).rgb;
++        float a = aop == 1 ? cur.a : ts_op(aop, ts_arg(aa1, tex, cur, temp), ts_arg(aa2, tex, cur, temp), tex, cur).a;
++        cur = clamp(vec4(c, a), 0.0, 1.0);
++    }
++
+     void main() {
+         // Clip plane test (shader-based, replaces hardware clip planes for WebGL)
+         if (u_clip_plane_enabled) {
+@@ -258,89 +284,21 @@ static const char* fragment_shader_source = R"(
+             if (clip_dist < 0.0) discard;
+         }
+ 
+-        vec4 tex_color = vec4(1.0);
+-
+-        if (u_use_texture) {
+-            tex_color = texture2D(u_texture, v_texcoord, u_lod_bias);
+-        }
+-
+-        // Stage 0: Always process texture stage states (faithful D3D9 conversion)
+-        vec4 stage0_color;
+-        float stage0_alpha;
++        // D3D texture stage cascade, stages 0-2 (stage 0's CURRENT is the diffuse colour). Stage 0
++        // samples u_texture with texcoord 0, stage 1 u_texture_lm with texcoord 1; a stage without a
++        // bound texture reads TEXTURE as opaque white. COLOROP DISABLE ends the cascade.
++        vec4 t0 = u_use_texture ? texture2D(u_texture, v_texcoord, u_lod_bias) : vec4(1.0);
++        vec4 t1 = u_use_lightmap ? texture2D(u_texture_lm, v_texcoord1, u_lod_bias) : vec4(1.0);
++        vec4 cur = v_color;
++        vec4 temp = vec4(0.0);
++        bool done = false;
++        ts_stage(u_ts[0], u_ts[1], u_ts[2], u_ts[3], u_ts[4], u_ts[5], t0, cur, temp, done);
++        ts_stage(u_ts[6], u_ts[7], u_ts[8], u_ts[9], u_ts[10], u_ts[11], t1, cur, temp, done);
++        // Stage 2 stays off until the game's light colours are right: players and the ball use
++        // MODULATE2X(DIFFUSE, CURRENT) there, and the lit colour is still black in this build.
++        vec4 final_color = cur;
++        if (u_specular_add) final_color.rgb = clamp(final_color.rgb + v_specular.rgb, 0.0, 1.0);
+ 
+-        // Process COLOR operation
+-        vec4 colorArg1 = selectTextureArg(u_stage0_colorarg1);
+-        vec4 colorArg2 = selectTextureArg(u_stage0_colorarg2);
+-
+-        // D3DTOP: SELECTARG1=2, SELECTARG2=3, MODULATE=4, MODULATE2X=5
+-        if (u_stage0_colorop == 2) {
+-            stage0_color.rgb = colorArg1.rgb;
+-        } else if (u_stage0_colorop == 3) {
+-            stage0_color.rgb = colorArg2.rgb;
+-        } else if (u_stage0_colorop == 4) {
+-            stage0_color.rgb = colorArg1.rgb * colorArg2.rgb;
+-        } else if (u_stage0_colorop == 5) {
+-            // MODULATE2X for character rendering
+-            stage0_color.rgb = clamp(colorArg1.rgb * colorArg2.rgb * 2.0, 0.0, 1.0);
+-        } else {
+-            // Default: MODULATE
+-            stage0_color.rgb = colorArg1.rgb * colorArg2.rgb;
+-        }
+-
+-        // Process ALPHA operation
+-        vec4 alphaArg1 = selectTextureArg(u_stage0_alphaarg1);
+-        vec4 alphaArg2 = selectTextureArg(u_stage0_alphaarg2);
+-
+-        if (u_stage0_alphaop == 2) {
+-            stage0_alpha = alphaArg1.a;
+-        } else if (u_stage0_alphaop == 3) {
+-            stage0_alpha = alphaArg2.a;
+-        } else if (u_stage0_alphaop == 4) {
+-            stage0_alpha = alphaArg1.a * alphaArg2.a;
+-        } else {
+-            // Default: MODULATE
+-            stage0_alpha = alphaArg1.a * alphaArg2.a;
+-        }
+-
+-        vec4 final_color = vec4(stage0_color.rgb, stage0_alpha);
+-
+-        // Apply lightmap if enabled (Stage 1)
+-        if (u_use_lightmap) {
+-            vec4 lightmap = texture2D(u_texture_lm, v_texcoord1, u_lod_bias);
+-
+-            // D3DTOP values:
+-            // 4 = MODULATE (x1)
+-            // 5 = MODULATE2X (x2)
+-            // 6 = MODULATE4X (x4)
+-            // 8 = ADDSIGNED  (result = arg1 + arg2 - 0.5, signed additive blend)
+-            // 11 = ADDSMOOTH (result = arg1 + arg2 - arg1*arg2, reflection-like blend)
+-
+-            if (u_stage1_op == 13) { // BLENDTEXTUREALPHA: texture over current by its alpha (kit decals)
+-                 final_color.rgb = mix(final_color.rgb, lightmap.rgb, lightmap.a);
+-            } else if (u_stage1_op == 12) { // BLENDDIFFUSEALPHA
+-                 final_color.rgb = mix(final_color.rgb, lightmap.rgb, v_color.a);
+-            } else if (u_stage1_op == 2) { // SELECTARG1 (texture)
+-                 final_color.rgb = lightmap.rgb;
+-            } else if (u_stage1_op == 3 || u_stage1_op == 1) { // SELECTARG2 (current), DISABLE
+-            } else if (u_stage1_op == 7) { // ADD
+-                 final_color.rgb = clamp(final_color.rgb + lightmap.rgb, 0.0, 1.0);
+-            } else if (u_stage1_op == 11) { // ADDSMOOTH
+-                 // AddSmooth: dest + src - dest*src = dest + src*(1-dest)
+-                 final_color.rgb = final_color.rgb + lightmap.rgb - (final_color.rgb * lightmap.rgb);
+-            } else if (u_stage1_op == 8) { // ADDSIGNED
+-                 // AddSigned: dest + src - 0.5 (biased additive blend)
+-                 final_color.rgb = clamp(final_color.rgb + lightmap.rgb - 0.5, 0.0, 1.0);
+-            } else if (u_stage1_op == 6) { // MODULATE4X
+-                 // Match original shader: saturate(SceneColor * Lightmap * 4)
+-                 // This prevents white-out in bright areas while keeping dark areas dark
+-                 final_color.rgb = clamp(final_color.rgb * lightmap.rgb * 4.0, 0.0, 1.0);
+-            } else if (u_stage1_op == 5) { // MODULATE2X
+-                 final_color.rgb = clamp(final_color.rgb * lightmap.rgb * 2.0, 0.0, 1.0);
+-            } else { // Default/MODULATE (4)
+-                 final_color.rgb *= lightmap.rgb;
+-            }
+-        }
+-        
+         if (u_alpha_test_enabled) {
+             if (final_color.a < (u_alpha_ref / 255.0)) {
+                 discard;
+@@ -382,6 +340,8 @@ static GLint g_stage0_alphaop_uniform = -1;
+ static GLint g_stage0_alphaarg1_uniform = -1;
+ static GLint g_stage0_alphaarg2_uniform = -1;
+ static GLint g_stage1_op_uniform = -1;
++static GLint g_ts_uniform = -1;
++static GLint g_material_emissive_uniform = -1, g_material_specular_uniform = -1, g_matsrc_uniform = -1, g_specular_enabled_uniform = -1, g_camera_pos_uniform = -1, g_nlights_uniform = -1, g_lpos_uniform = -1, g_ldir_uniform = -1, g_ldiff_uniform = -1, g_lamb_uniform = -1, g_lspec_uniform = -1, g_latt_uniform = -1, g_lspot_uniform = -1, g_specular_add_uniform = -1;       // u_ts: stage 0-2 ops and args (the fragment combiner)
+ static GLint g_alpha_test_enabled_uniform = -1;
+ static GLint g_alpha_ref_uniform = -1;
+ static GLint g_texture_factor_uniform = -1;
+@@ -538,12 +498,12 @@ static UINT GetFormatBpp(D3DFORMAT format) {
+ }
+ 
+ // Convert D3D DXT format to GL extension enum
+-// D3D9 DXT1 always returns alpha=1.0, so use GL_COMPRESSED_RGB (not RGBA) for DXT1
+-// to match D3D9 behavior. RGBA variant has 1-bit punch-through alpha which causes
+-// unexpected alpha=0 in WebGL for textures that were designed as opaque.
++// D3D decodes DXT1 with punch-through alpha: a 3-colour block (c0 <= c1) makes index 3 transparent
++// black (alpha 0), 4-colour blocks are opaque. That is the RGBA variant; the RGB one turns the
++// transparent texels into opaque black (Rugby 08: black boxes around alpha-tested sprites).
+ GLenum GetGLCompressedFormat(D3DFORMAT fmt) {
+     switch (fmt) {
+-        case D3DFMT_DXT1: return GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
++        case D3DFMT_DXT1: return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+         case D3DFMT_GLI1: return GL_COMPRESSED_RGB_S3TC_DXT1_EXT; // GLI's RGB DXT1
+         case D3DFMT_DXT3: return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+         case D3DFMT_DXT5: return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+@@ -660,6 +620,21 @@ static GLint* const k_loc_var[] = {
+     &g_light2_ambient_uniform,
+     &g_light2_attenuation_uniform,
+     &g_light2_range_uniform,
++    &g_ts_uniform,
++    &g_material_emissive_uniform,
++    &g_material_specular_uniform,
++    &g_matsrc_uniform,
++    &g_specular_enabled_uniform,
++    &g_camera_pos_uniform,
++    &g_nlights_uniform,
++    &g_lpos_uniform,
++    &g_ldir_uniform,
++    &g_ldiff_uniform,
++    &g_lamb_uniform,
++    &g_lspec_uniform,
++    &g_latt_uniform,
++    &g_lspot_uniform,
++    &g_specular_add_uniform,
+ };
+ static const char* const k_loc_name[] = {
+     "a_position",
+@@ -727,6 +702,21 @@ static const char* const k_loc_name[] = {
+     "u_light2_ambient",
+     "u_light2_attenuation",
+     "u_light2_range",
++    "u_ts",
++    "u_material_emissive",
++    "u_material_specular",
++    "u_matsrc",
++    "u_specular_enabled",
++    "u_camera_pos",
++    "u_nlights",
++    "u_lpos",
++    "u_ldir",
++    "u_ldiff",
++    "u_lamb",
++    "u_lspec",
++    "u_latt",
++    "u_lspot",
++    "u_specular_add",
+ };
+ static const bool k_loc_attrib[] = {
+     true,
+@@ -794,6 +784,21 @@ static const bool k_loc_attrib[] = {
+     false,
+     false,
+     false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
++    false,
+ };
+ static const int k_nlocs = (int)(sizeof k_loc_var / sizeof k_loc_var[0]);
+ static std::vector<GLint> g_ff_locs;
+@@ -810,6 +815,7 @@ static void loc_apply(const std::vector<GLint>& v) {
+ }
+ 
+ struct D3D9WProgVS {
++    std::string vsrc;                   // processed GLSL, relinked with each pixel shader used with it
+     GLuint prog = 0;
+     std::vector<GLint> locs;
+     GLint consts = -1;
+@@ -817,6 +823,34 @@ struct D3D9WProgVS {
+     std::vector<D3D9WElem> elems;
+ };
+ static D3D9WProgVS* g_progvs_active = nullptr;
++static bool g_render_state_specular = false;   // D3DRS_SPECULARENABLE: add the specular colour after the stages
++static int g_trace_draws;               // d3d9w_trace_draws: print every draw's state (one frame)
++struct TraceTex { unsigned w, h, fmt; };
++static std::map<GLuint, TraceTex> g_trace_texinfo;   // GL texture -> size and D3D format (trace only)
++static std::vector<uint8_t> g_trace_fb; // back buffer before the previous traced draw (its pixel footprint)
++static void trace_fb_diff(bool report) {   // what the previous draw changed in the back buffer; then re-snapshot
++    int w = g_logical_width, h = g_logical_height;
++    if (w <= 0 || h <= 0) return;
++    std::vector<uint8_t> px((size_t)w * h * 4);
++    GLint rd = 0; glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &rd);
++    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
++    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
++    glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)rd);
++    if (report && g_trace_fb.size() == px.size()) {
++        int x0 = w, y0 = h, x1 = -1, y1 = -1; long n = 0; double r = 0, g = 0, b = 0;
++        for (int y = 0; y < h; y++)
++            for (int x = 0; x < w; x++) {
++                size_t i = ((size_t)y * w + x) * 4;
++                if (!memcmp(&px[i], &g_trace_fb[i], 3)) continue;
++                int sy = h - 1 - y;                       // screen rows top-down
++                x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, sy); y1 = std::max(y1, sy);
++                n++; r += px[i]; g += px[i + 1]; b += px[i + 2];
++            }
++        if (n) printf("  -> changed %ld px, box %d,%d-%d,%d, mean rgb %.0f,%.0f,%.0f\n", n, x0, y0, x1, y1, r / n, g / n, b / n);
++        else printf("  -> changed nothing on screen\n");
++    }
++    g_trace_fb.swap(px);
++}
+ static GLuint g_stream_vb[16];          // SetStreamSource: every stream (the fixed-function paths use stream 0)
+ static GLsizei g_stream_stride[16];
+ static const float (*g_progvs_consts)[4] = nullptr;
+@@ -835,6 +869,7 @@ static const std::string& progvs_fragment_source() {
+     str_replace_all(fs, "varying vec4 v_color;", "in highp vec4 io_10_0;\n#define v_color io_10_0");
+     str_replace_all(fs, "varying vec2 v_texcoord;", "in highp vec4 io_5_0;\n#define v_texcoord io_5_0.xy");
+     str_replace_all(fs, "varying vec2 v_texcoord1;", "in highp vec4 io_5_1;\n#define v_texcoord1 io_5_1.xy");
++    str_replace_all(fs, "varying vec4 v_specular;", "in highp vec4 io_10_1;\n#define v_specular io_10_1");
+     str_replace_all(fs, "varying vec4 v_position_world;", "#define v_position_world vec4(0.0)");
+     str_replace_all(fs, "varying float v_eye_depth;", "#define v_eye_depth (1.0 / gl_FragCoord.w)");
+     str_replace_all(fs, "gl_FragColor", "d3d9w_frag");
+@@ -853,7 +888,7 @@ static std::string progvs_vertex_source(const char* glsl, const std::vector<D3D9
+         str_replace_all(s, "in vec4 " + v + ";", "in vec4 " + v + "_bgra;\nvec4 " + v + ";");
+         prologue += "\t" + v + " = " + v + "_bgra.zyxw;\n";
+     }
+-    static const char* const outs[][2] = { { "io_10_0", "vec4(1.0)" }, { "io_5_0", "vec4(0.0)" }, { "io_5_1", "vec4(0.0)" } };
++    static const char* const outs[][2] = { { "io_10_0", "vec4(1.0)" }, { "io_10_1", "vec4(0.0)" }, { "io_5_0", "vec4(0.0)" }, { "io_5_1", "vec4(0.0)" } };
+     for (auto& o : outs)
+         if (s.find(std::string("out highp vec4 ") + o[0] + ";") == std::string::npos) {
+             decl += std::string("out highp vec4 ") + o[0] + ";\n";
+@@ -924,6 +959,7 @@ extern "C" D3D9WProgVS* d3d9w_progvs_create(const char* glsl, const unsigned cha
+     }
+     D3D9WProgVS* o = new D3D9WProgVS;
+     o->prog = p;
++    o->vsrc = vsrc;
+     loc_query(p, o->locs);
+     o->consts = glGetUniformLocation(p, "vs_uniforms_vec4");
+     o->regs.assign(regs, regs + nregs);
+@@ -931,6 +967,175 @@ extern "C" D3D9WProgVS* d3d9w_progvs_create(const char* glsl, const unsigned cha
+     return o;
+ }
+ 
++// ---- pixel shaders --------------------------------------------------------------------------
++// Sampler state for a pixel shader's texture (the device's ApplySamplerStates is a member defined
++// later): D3DTADDRESS_* -> GL wrap, D3DTEXF_* -> GL filters (mipmaps only when the texture has them).
++static void progps_sampler(int st) {
++    auto wrap = [](DWORD m) -> GLint {
++        return (m == 2 || m == 5) ? GL_MIRRORED_REPEAT : (m == 3 || m == 4) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
++    };
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap(g_sampler_states[st][D3DSAMP_ADDRESSU]));
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap(g_sampler_states[st][D3DSAMP_ADDRESSV]));
++    bool point_mag = g_sampler_states[st][D3DSAMP_MAGFILTER] == D3DTEXF_POINT;
++    bool point_min = g_sampler_states[st][D3DSAMP_MINFILTER] == D3DTEXF_POINT;
++    DWORD mip = g_sampler_states[st][D3DSAMP_MIPFILTER];
++    bool has_mips = g_mipmapped_textures.count(g_texture_stages[st]) != 0;
++    GLint minf = !has_mips || mip == 0 ? (point_min ? GL_NEAREST : GL_LINEAR)
++               : mip == D3DTEXF_POINT ? (point_min ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_NEAREST)
++                                      : (point_min ? GL_NEAREST_MIPMAP_LINEAR : GL_LINEAR_MIPMAP_LINEAR);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, point_mag ? GL_NEAREST : GL_LINEAR);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minf);
++}
++struct D3D9WLinked {                    // one vertex stage (programmable or fixed) + one pixel shader
++    GLuint prog = 0;
++    std::vector<GLint> locs;
++    GLint vconsts = -1, pconsts = -1, samp[4] = { -1, -1, -1, -1 };
++};
++struct D3D9WProgPS {
++    std::string fsrc;
++    std::vector<unsigned char> regs;    // constant register of each ps_uniforms_vec4 slot
++    std::map<D3D9WProgVS*, D3D9WLinked*> links;   // nullptr key: the fixed-function vertex stage
++};
++static D3D9WProgPS* g_progps_active = nullptr;
++static const float (*g_progps_consts)[4] = nullptr;
++
++// The fixed-function vertex shader as GLSL ES 3.00 whose outputs carry MojoShader's names
++// (io_10_0/1 = oD0/oD1, io_5_n = oTn), so a translated pixel shader reads them as v0/v1/tn.
++static std::string ff_vertex_source_es3() {
++    std::string s = std::string("#version 300 es\n") + vertex_shader_source;
++    str_replace_all(s, "attribute ", "in ");
++    str_replace_all(s, "varying vec4 v_color;", "out highp vec4 io_10_0;\n#define v_color io_10_0");
++    str_replace_all(s, "varying vec4 v_specular;", "out highp vec4 io_10_1;\n#define v_specular io_10_1");
++    str_replace_all(s, "varying vec2 v_texcoord;", "out highp vec4 io_5_0;\n#define v_texcoord io_5_0.xy\nout highp vec4 io_5_2;\nout highp vec4 io_5_3;");
++    str_replace_all(s, "varying vec2 v_texcoord1;", "out highp vec4 io_5_1;\n#define v_texcoord1 io_5_1.xy");
++    str_replace_all(s, "varying vec4 v_position_world;", "out highp vec4 v_position_world;");
++    str_replace_all(s, "varying float v_eye_depth;", "out highp float v_eye_depth;");
++    size_t m = s.find("void main()");
++    size_t open = m == std::string::npos ? m : s.find('{', m);
++    if (open == std::string::npos) return std::string();
++    s.insert(open + 1, "\n    io_5_0 = vec4(0.0, 0.0, 0.0, 1.0); io_5_1 = io_5_0; io_5_2 = io_5_0; io_5_3 = io_5_0;\n");
++    return s;
++}
++
++static D3D9WLinked* progps_link(D3D9WProgVS* vsp, D3D9WProgPS* psp) {
++    auto it = psp->links.find(vsp);
++    if (it != psp->links.end()) return it->second;
++    D3D9WLinked* L = nullptr;
++    std::string vsrc = vsp ? vsp->vsrc : ff_vertex_source_es3();
++    GLuint vs = compile_shader(GL_VERTEX_SHADER, vsrc.c_str());
++    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, psp->fsrc.c_str());
++#ifndef __EMSCRIPTEN__
++    if (!vs || !fs) {   // keep the source that failed: logs/shaders/link_fail_<n>_{vs,fs}.glsl
++        static int nfail;
++        char path[96];
++        snprintf(path, sizeof path, "logs/shaders/link_fail_%d_%s.glsl", nfail++, !vs ? "vs" : "fs");
++        if (FILE* f = fopen(path, "w")) { fputs(!vs ? vsrc.c_str() : psp->fsrc.c_str(), f); fclose(f); }
++    }
++#endif
++    if (vs && fs) {
++        GLuint p = glCreateProgram();
++        glAttachShader(p, vs);
++        glAttachShader(p, fs);
++        if (vsp) {
++            for (int r = 0; r < 16; ++r) {
++                std::string n = "vs_v" + std::to_string(r);
++                glBindAttribLocation(p, r, n.c_str());
++                glBindAttribLocation(p, r, (n + "_bgra").c_str());
++            }
++        }
++        glLinkProgram(p);
++        GLint ok = 0;
++        glGetProgramiv(p, GL_LINK_STATUS, &ok);
++        if (ok) {
++            L = new D3D9WLinked;
++            L->prog = p;
++            loc_query(p, L->locs);
++            L->vconsts = glGetUniformLocation(p, "vs_uniforms_vec4");
++            L->pconsts = glGetUniformLocation(p, "ps_uniforms_vec4");
++            for (int i = 0; i < 4; ++i) L->samp[i] = glGetUniformLocation(p, ("ps_s" + std::to_string(i)).c_str());
++        } else {
++            char log[1024];
++            glGetProgramInfoLog(p, sizeof log, nullptr, log);
++            printf("d3d9w_progps: link failed (%s vertex stage): %s\n", vsp ? "programmable" : "fixed-function", log);
++            glDeleteProgram(p);
++        }
++    }
++    if (vs) glDeleteShader(vs);
++    if (fs) glDeleteShader(fs);
++    psp->links[vsp] = L;
++    return L;
++}
++
++// MojoShader's pixel shader plus what D3D does after it: alpha test and fog.
++static std::string progps_fragment_source(const char* glsl) {
++    std::string s = glsl;
++    // ps.1.x texture registers: MojoShader writes `vec4 ps_tN = io_5_N;` without declaring the
++    // input (and ES 3.00 allows no input in a global initializer): declare it, copy in main().
++    std::string init;
++    for (int n = 0; n < 8; ++n) {
++        std::string t = "ps_t" + std::to_string(n), io = "io_5_" + std::to_string(n);
++        std::string g = "vec4 " + t + " = " + io + ";";
++        if (s.find(g) == std::string::npos) continue;
++        str_replace_all(s, g, "in highp vec4 " + io + ";\nvec4 " + t + ";");
++        init += "    " + t + " = " + io + ";\n";
++    }
++    if (!init.empty()) {
++        size_t mm = s.find("void main()");
++        size_t open = mm == std::string::npos ? mm : s.find('{', mm);
++        if (open != std::string::npos) s.insert(open + 1, "\n" + init);
++    }
++    size_t m = s.find("void main()");
++    size_t close = s.rfind('}');
++    if (m == std::string::npos || close == std::string::npos || close < m) return std::string();
++    std::string decl = "uniform bool u_alpha_test_enabled;\nuniform highp float u_alpha_ref;\n"
++                       "uniform bool u_fog_enabled;\nuniform highp float u_fog_start;\nuniform highp float u_fog_end;\n"
++                       "uniform highp vec3 u_fog_color;\n";
++    std::string tail =
++        "\n    if (u_alpha_test_enabled && D3D9W_OUT.a < u_alpha_ref / 255.0) discard;\n"
++        "    if (u_fog_enabled) { highp float f = clamp((u_fog_end - 1.0 / gl_FragCoord.w) / (u_fog_end - u_fog_start), 0.0, 1.0);\n"
++        "        D3D9W_OUT.rgb = mix(u_fog_color, D3D9W_OUT.rgb, f); }\n";
++    s.insert(close, tail);
++    s.insert(m, decl);
++    return s;
++}
++
++extern "C" D3D9WProgPS* d3d9w_progps_create(const char* glsl, const unsigned char* regs, int nregs) {
++    if (g_shader_program == 0) init_shaders();
++    std::string f = progps_fragment_source(glsl);
++    if (f.empty()) return nullptr;
++    // the colour output's name: MojoShader declares it as `out ... vec4 NAME;` (ES 3.00)
++    std::string outname;
++    {
++        size_t o = f.find("out ");
++        while (o != std::string::npos) {
++            size_t semi = f.find(';', o);
++            std::string decl = f.substr(o, semi - o);
++            if (decl.find("vec4") != std::string::npos) { outname = decl.substr(decl.rfind(' ') + 1); break; }
++            o = f.find("out ", o + 4);
++        }
++    }
++    if (outname.empty()) { printf("d3d9w_progps_create: no colour output\n"); return nullptr; }
++    str_replace_all(f, "D3D9W_OUT", outname);
++    D3D9WProgPS* o = new D3D9WProgPS;
++    o->fsrc = f;
++    o->regs.assign(regs, regs + nregs);
++    GLuint test = compile_shader(GL_FRAGMENT_SHADER, f.c_str());
++    if (!test) { printf("d3d9w_progps_create: compile failed\n"); delete o; return nullptr; }
++    glDeleteShader(test);
++    return o;
++}
++
++extern "C" void d3d9w_progps_use(D3D9WProgPS* p, const float (*consts)[4]) {
++    g_progps_active = p;
++    g_progps_consts = consts;
++}
++
++extern "C" void d3d9w_trace_draws(int on) {
++    if (g_trace_draws && !on) trace_fb_diff(true);       // the traced frame's last draw
++    if (!g_trace_draws && on) g_trace_fb.clear();
++    g_trace_draws = on;
++}
++
+ extern "C" void d3d9w_progvs_use(D3D9WProgVS* p, const float (*consts)[4]) {
+     g_progvs_active = p;
+     g_progvs_consts = consts;
+@@ -940,10 +1145,51 @@ extern "C" void d3d9w_progvs_use(D3D9WProgVS* p, const float (*consts)[4]) {
+ // use with its locations swapped in and the constant registers it reads uploaded.
+ static void use_draw_program() {
+     D3D9WProgVS* p = g_progvs_active;
++    if (g_progps_active) {
++        D3D9WLinked* L = progps_link(p, g_progps_active);
++        if (L) {
++            glUseProgram(L->prog);
++            g_cached_program = L->prog;
++            loc_apply(L->locs);
++            if (p && L->vconsts != -1 && g_progvs_consts && !p->regs.empty()) {
++                float buf[96 * 4];
++                size_t n = std::min(p->regs.size(), (size_t)96);
++                for (size_t i = 0; i < n; ++i) memcpy(buf + 4 * i, g_progvs_consts[p->regs[i] < 96 ? p->regs[i] : 0], 16);
++                glUniform4fv(L->vconsts, (GLsizei)n, buf);
++            }
++            const std::vector<unsigned char>& pr = g_progps_active->regs;
++            if (L->pconsts != -1 && g_progps_consts && !pr.empty()) {
++                float buf[8 * 4];
++                size_t n = std::min(pr.size(), (size_t)8);
++                for (size_t i = 0; i < n; ++i) memcpy(buf + 4 * i, g_progps_consts[pr[i] < 8 ? pr[i] : 0], 16);
++                glUniform4fv(L->pconsts, (GLsizei)n, buf);
++            }
++            for (int st = 0; st < 4; ++st) {   // ps.1.x: sampler n reads texture stage n
++                if (L->samp[st] == -1) continue;
++                glActiveTexture(GL_TEXTURE0 + st);
++                glBindTexture(GL_TEXTURE_2D, g_texture_stages[st]);
++                if (g_texture_stages[st]) progps_sampler(st);
++                glUniform1i(L->samp[st], st);
++            }
++            glActiveTexture(GL_TEXTURE0);
++            g_last_bound_texture_id = g_texture_stages[0];
++            g_last_bound_lightmap_id = g_texture_stages[1];
++            g_cached_texture = g_texture_stages[0];
++            return;
++        }
++    }
+     GLuint prog = p ? p->prog : g_shader_program;
+     glUseProgram(prog);
+     g_cached_program = prog;
+     loc_apply(p ? p->locs : g_ff_locs);
++    if (g_ts_uniform != -1) {
++        static const int k[6] = { D3DTSS_COLOROP, D3DTSS_COLORARG1, D3DTSS_COLORARG2, D3DTSS_ALPHAOP, D3DTSS_ALPHAARG1, D3DTSS_ALPHAARG2 };
++        GLint v[18];
++        for (int st = 0; st < 3; ++st)
++            for (int i = 0; i < 6; ++i) v[st * 6 + i] = (GLint)g_texture_stage_states[st][k[i]];
++        glUniform1iv(g_ts_uniform, 18, v);
++    }
++    if (g_specular_add_uniform != -1) glUniform1i(g_specular_add_uniform, g_render_state_specular ? 1 : 0);
+     if (p && p->consts != -1 && g_progvs_consts && !p->regs.empty()) {
+         float buf[96 * 4];
+         size_t n = std::min(p->regs.size(), (size_t)96);
+@@ -1144,62 +1390,45 @@ static void gl_set_matrix_uniform(GLint location, const D3DMATRIX* matrix) {
+ // Helper: Set FFP lighting uniforms (material, ambient, lights 0-2)
+ static void SetFFPLightingUniforms(const D3DMATRIX* world, const DWORD* render_states, bool vertex_color) {
+     gl_set_matrix_uniform(g_world_uniform, world);
+-    // D3DRS_COLORVERTEX (141) with a vertex colour: D3DRS_DIFFUSE/AMBIENTMATERIALSOURCE (145/147) = COLOR1
++    // D3DRS_COLORVERTEX (141) with a vertex colour: DIFFUSE/SPECULAR/AMBIENT/EMISSIVEMATERIALSOURCE
++    // (145-148) = D3DMCS_COLOR1 take that colour (COLOR2, the specular vertex colour, is not passed)
+     bool cv = vertex_color && render_states[141];
+-    glUniform1i(g_diffuse_from_vertex_uniform, cv && render_states[145] == 1 ? 1 : 0);
+-    glUniform1i(g_ambient_from_vertex_uniform, cv && render_states[147] == 1 ? 1 : 0);
+-    static GLint* const type_u[3] = { &g_light0_type_uniform, &g_light1_type_uniform, &g_light2_type_uniform };
+-    static GLint* const dir_u[3] = { &g_light0_direction_uniform, &g_light1_direction_uniform, &g_light2_direction_uniform };
+-    for (int i = 0; i < 3; ++i) {
+-        glUniform1i(*type_u[i], (GLint)g_lights[i].Type);
+-        glUniform3f(*dir_u[i], g_lights[i].Direction.x, g_lights[i].Direction.y, g_lights[i].Direction.z);
+-    }
+-
+-    glUniform4f(g_material_diffuse_uniform,
+-        g_material.Diffuse.r, g_material.Diffuse.g, g_material.Diffuse.b, g_material.Diffuse.a);
+-    glUniform4f(g_material_ambient_uniform,
+-        g_material.Ambient.r, g_material.Ambient.g, g_material.Ambient.b, g_material.Ambient.a);
+-
++    glUniform4f(g_matsrc_uniform, cv && render_states[145] == 1 ? 1.f : 0.f, cv && render_states[147] == 1 ? 1.f : 0.f,
++                cv && render_states[148] == 1 ? 1.f : 0.f, cv && render_states[146] == 1 ? 1.f : 0.f);
++    const D3DMATERIAL9& m = g_material;
++    glUniform4f(g_material_diffuse_uniform, m.Diffuse.r, m.Diffuse.g, m.Diffuse.b, m.Diffuse.a);
++    glUniform4f(g_material_ambient_uniform, m.Ambient.r, m.Ambient.g, m.Ambient.b, m.Ambient.a);
++    glUniform4f(g_material_emissive_uniform, m.Emissive.r, m.Emissive.g, m.Emissive.b, m.Emissive.a);
++    glUniform4f(g_material_specular_uniform, m.Specular.r, m.Specular.g, m.Specular.b, m.Power);
+     DWORD amb = render_states[D3DRS_AMBIENT];
+-    glUniform3f(g_global_ambient_uniform,
+-        ((amb >> 16) & 0xFF) / 255.0f,
+-        ((amb >> 8) & 0xFF) / 255.0f,
+-        (amb & 0xFF) / 255.0f);
+-
+-    // Light 0
+-    if (g_light_enabled[0]) {
+-        glUniform1i(g_light0_enabled_uniform, 1);
+-        glUniform3f(g_light0_position_uniform, g_lights[0].Position.x, g_lights[0].Position.y, g_lights[0].Position.z);
+-        glUniform4f(g_light0_diffuse_uniform, g_lights[0].Diffuse.r, g_lights[0].Diffuse.g, g_lights[0].Diffuse.b, g_lights[0].Diffuse.a);
+-        glUniform3f(g_light0_ambient_uniform, g_lights[0].Ambient.r, g_lights[0].Ambient.g, g_lights[0].Ambient.b);
+-        glUniform3f(g_light0_attenuation_uniform, g_lights[0].Attenuation0, g_lights[0].Attenuation1, g_lights[0].Attenuation2);
+-        glUniform1f(g_light0_range_uniform, g_lights[0].Range);
+-    } else {
+-        glUniform1i(g_light0_enabled_uniform, 0);
+-    }
+-
+-    // Light 1
+-    if (g_light_enabled[1]) {
+-        glUniform1i(g_light1_enabled_uniform, 1);
+-        glUniform3f(g_light1_position_uniform, g_lights[1].Position.x, g_lights[1].Position.y, g_lights[1].Position.z);
+-        glUniform4f(g_light1_diffuse_uniform, g_lights[1].Diffuse.r, g_lights[1].Diffuse.g, g_lights[1].Diffuse.b, g_lights[1].Diffuse.a);
+-        glUniform3f(g_light1_ambient_uniform, g_lights[1].Ambient.r, g_lights[1].Ambient.g, g_lights[1].Ambient.b);
+-        glUniform3f(g_light1_attenuation_uniform, g_lights[1].Attenuation0, g_lights[1].Attenuation1, g_lights[1].Attenuation2);
+-        glUniform1f(g_light1_range_uniform, g_lights[1].Range);
+-    } else {
+-        glUniform1i(g_light1_enabled_uniform, 0);
+-    }
+-
+-    // Light 2
+-    if (g_light_enabled[2]) {
+-        glUniform1i(g_light2_enabled_uniform, 1);
+-        glUniform3f(g_light2_position_uniform, g_lights[2].Position.x, g_lights[2].Position.y, g_lights[2].Position.z);
+-        glUniform4f(g_light2_diffuse_uniform, g_lights[2].Diffuse.r, g_lights[2].Diffuse.g, g_lights[2].Diffuse.b, g_lights[2].Diffuse.a);
+-        glUniform3f(g_light2_ambient_uniform, g_lights[2].Ambient.r, g_lights[2].Ambient.g, g_lights[2].Ambient.b);
+-        glUniform3f(g_light2_attenuation_uniform, g_lights[2].Attenuation0, g_lights[2].Attenuation1, g_lights[2].Attenuation2);
+-        glUniform1f(g_light2_range_uniform, g_lights[2].Range);
+-    } else {
+-        glUniform1i(g_light2_enabled_uniform, 0);
++    glUniform3f(g_global_ambient_uniform, ((amb >> 16) & 0xFF) / 255.0f, ((amb >> 8) & 0xFF) / 255.0f, (amb & 0xFF) / 255.0f);
++    glUniform1i(g_specular_enabled_uniform, render_states[29] ? 1 : 0);   // D3DRS_SPECULARENABLE
++    {   // camera position in world space: the view matrix is a rotation and translation (row vectors)
++        const D3DMATRIX& v = g_transform_view;
++        float c[3];
++        for (int j = 0; j < 3; ++j) c[j] = -(v.m[3][0] * v.m[j][0] + v.m[3][1] * v.m[j][1] + v.m[3][2] * v.m[j][2]);
++        glUniform3f(g_camera_pos_uniform, c[0], c[1], c[2]);
++    }
++    float pos[32], dir[32], dif[32], am[32], sp[32], att[32], spot[32];
++    int n = 0;
++    for (int i = 0; i < 8; ++i) {
++        if (!g_light_enabled[i]) continue;
++        const D3DLIGHT9& l = g_lights[i];
++        float* q;
++        q = pos + 4 * n; q[0] = l.Position.x; q[1] = l.Position.y; q[2] = l.Position.z; q[3] = (float)l.Type;
++        q = dir + 4 * n; q[0] = l.Direction.x; q[1] = l.Direction.y; q[2] = l.Direction.z; q[3] = l.Range;
++        q = dif + 4 * n; q[0] = l.Diffuse.r; q[1] = l.Diffuse.g; q[2] = l.Diffuse.b; q[3] = l.Diffuse.a;
++        q = am + 4 * n; q[0] = l.Ambient.r; q[1] = l.Ambient.g; q[2] = l.Ambient.b; q[3] = l.Ambient.a;
++        q = sp + 4 * n; q[0] = l.Specular.r; q[1] = l.Specular.g; q[2] = l.Specular.b; q[3] = l.Specular.a;
++        q = att + 4 * n; q[0] = l.Attenuation0; q[1] = l.Attenuation1; q[2] = l.Attenuation2; q[3] = l.Falloff;
++        q = spot + 4 * n; q[0] = cosf(l.Theta * 0.5f); q[1] = cosf(l.Phi * 0.5f); q[2] = 0; q[3] = 0;
++        ++n;
++    }
++    glUniform1i(g_nlights_uniform, n);
++    if (n) {
++        glUniform4fv(g_lpos_uniform, n, pos); glUniform4fv(g_ldir_uniform, n, dir); glUniform4fv(g_ldiff_uniform, n, dif);
++        glUniform4fv(g_lamb_uniform, n, am); glUniform4fv(g_lspec_uniform, n, sp); glUniform4fv(g_latt_uniform, n, att);
++        glUniform4fv(g_lspot_uniform, n, spot);
+     }
+ }
+ 
+@@ -1274,6 +1503,7 @@ public:
+     D3D9Texture(UINT width, UINT height, UINT levels, D3DFORMAT format)
+         : m_width(width), m_height(height), m_levels(levels), m_format(format), m_locked_data(nullptr) {
+         glGenTextures(1, &m_texture);
++        g_trace_texinfo[m_texture] = TraceTex{ width, height, (unsigned)format };
+         glBindTexture(GL_TEXTURE_2D, m_texture);
+         // Invalidate ALL texture binding caches since we bound outside of draw calls
+         g_last_bound_texture_id = 0xFFFFFFFF;
+@@ -1721,9 +1951,9 @@ public:
+                 g_texture_stage_states[i][D3DTSS_ALPHAOP] = D3DTOP_DISABLE;
+             }
+             g_texture_stage_states[i][D3DTSS_COLORARG1] = D3DTA_TEXTURE;
+-            g_texture_stage_states[i][D3DTSS_COLORARG2] = D3DTA_DIFFUSE;
++            g_texture_stage_states[i][D3DTSS_COLORARG2] = D3DTA_CURRENT;
+             g_texture_stage_states[i][D3DTSS_ALPHAARG1] = D3DTA_TEXTURE;
+-            g_texture_stage_states[i][D3DTSS_ALPHAARG2] = D3DTA_DIFFUSE;
++            g_texture_stage_states[i][D3DTSS_ALPHAARG2] = D3DTA_CURRENT;
+         }
+ 
+         // Initialize state
+@@ -1898,7 +2128,7 @@ public:
+         // Non-indexed primitive drawing using hardware VB (used by cloth rendering)
+         if (m_current_vertex_buffer == 0) return -1;
+         if (g_shader_program == 0) init_shaders();
+-        use_draw_program();
++        use_draw_program(); trace_draw("DP", (unsigned)PrimitiveCount);
+ 
+         // FBO Y-flip and clip plane uniforms
+         glUniform1i(g_fbo_flip_y_uniform, m_fbo_rendering ? 1 : 0);
+@@ -2219,15 +2449,17 @@ public:
+ static void ApplySamplerStates(DWORD Sampler) {
+     if (Sampler >= 8) return;
+ 
+-    // Address U
+-    GLint wrap_s = GL_REPEAT;
+-    if (g_sampler_states[Sampler][D3DSAMP_ADDRESSU] == D3DTADDRESS_CLAMP) wrap_s = GL_CLAMP_TO_EDGE;
+-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_s);
+-    
+-    // Address V
+-    GLint wrap_t = GL_REPEAT;
+-    if (g_sampler_states[Sampler][D3DSAMP_ADDRESSV] == D3DTADDRESS_CLAMP) wrap_t = GL_CLAMP_TO_EDGE;
+-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_t);
++    // Address U/V: D3DTADDRESS_WRAP 1, MIRROR 2, CLAMP 3, BORDER 4, MIRRORONCE 5. GLES has no border
++    // colour (BORDER clamps to the edge texel) and no mirror-once (mirrors, then repeats the mirror).
++    auto gl_wrap = [](DWORD m) -> GLint {
++        switch (m) {
++            case 2: case 5: return GL_MIRRORED_REPEAT;
++            case 3: case 4: return GL_CLAMP_TO_EDGE;
++            default: return GL_REPEAT;
++        }
++    };
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl_wrap(g_sampler_states[Sampler][D3DSAMP_ADDRESSU]));
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl_wrap(g_sampler_states[Sampler][D3DSAMP_ADDRESSV]));
+     
+     // Mag Filter (mipmaps don't affect magnification)
+     GLint mag_filter = GL_LINEAR;
+@@ -2286,7 +2518,7 @@ static void ApplySamplerStates(DWORD Sampler) {
+ 
+         // State Caching: Only call glUseProgram if program changed
+         {
+-            use_draw_program();
++            use_draw_program(); trace_draw("DPUP", (unsigned)PrimitiveCount);
+         }
+ 
+         // FBO Y-flip and clip plane uniforms
+@@ -2645,7 +2877,7 @@ static void ApplySamplerStates(DWORD Sampler) {
+         if (!pVertexStreamZeroData || !pIndexData) return -1;
+ 
+         if (g_shader_program == 0) init_shaders();
+-        use_draw_program();
++        use_draw_program(); trace_draw("DIPUP", (unsigned)PrimitiveCount);
+ 
+         // FBO Y-flip and clip plane uniforms
+         glUniform1i(g_fbo_flip_y_uniform, m_fbo_rendering ? 1 : 0);
+@@ -3053,6 +3285,58 @@ static void ApplySamplerStates(DWORD Sampler) {
+         return D3D_OK;
+     }
+     
++    // d3d9w_trace_draws: one line per draw with the state that decides what it looks like
++    void trace_draw(const char* path, unsigned count) {
++        if (!g_trace_draws) return;
++        trace_fb_diff(true);   // footprint of the previous draw
++        TraceTex ti0 = g_trace_texinfo.count(g_texture_stages[0]) ? g_trace_texinfo[g_texture_stages[0]] : TraceTex{0, 0, 0};
++        TraceTex ti1 = g_trace_texinfo.count(g_texture_stages[1]) ? g_trace_texinfo[g_texture_stages[1]] : TraceTex{0, 0, 0};
++        if (m_render_states[D3DRS_LIGHTING]) {
++            int nl = 0; for (int i = 0; i < 8; ++i) nl += g_light_enabled[i];
++            const D3DMATERIAL9& m = g_material;
++            printf("draw light on=%d amb=%08X src=%u/%u/%u/%u cv=%u matD=%.2f,%.2f,%.2f,%.2f matA=%.2f,%.2f,%.2f matE=%.2f,%.2f,%.2f\n", nl,
++                   (unsigned)m_render_states[D3DRS_AMBIENT], (unsigned)m_render_states[145], (unsigned)m_render_states[146],
++                   (unsigned)m_render_states[147], (unsigned)m_render_states[148], (unsigned)m_render_states[141],
++                   m.Diffuse.r, m.Diffuse.g, m.Diffuse.b, m.Diffuse.a, m.Ambient.r, m.Ambient.g, m.Ambient.b, m.Emissive.r, m.Emissive.g, m.Emissive.b);
++            for (int i = 0; i < 8; ++i) if (g_light_enabled[i]) {
++                const D3DLIGHT9& l = g_lights[i];
++                printf("draw light %d type=%d D=%.2f,%.2f,%.2f A=%.2f,%.2f,%.2f dir=%.2f,%.2f,%.2f pos=%.1f,%.1f,%.1f range=%.1f att=%.3f,%.3f,%.3f\n", i, (int)l.Type,
++                       l.Diffuse.r, l.Diffuse.g, l.Diffuse.b, l.Ambient.r, l.Ambient.g, l.Ambient.b, l.Direction.x, l.Direction.y, l.Direction.z,
++                       l.Position.x, l.Position.y, l.Position.z, l.Range, l.Attenuation0, l.Attenuation1, l.Attenuation2);
++            }
++        }
++        printf("draw stages %u:%X,%X/%u:%X,%X | %u:%X,%X/%u:%X,%X | %u:%X,%X/%u:%X,%X resarg=%X,%X,%X tci=%X,%X,%X\n",
++               (unsigned)g_texture_stage_states[0][1], (unsigned)g_texture_stage_states[0][2], (unsigned)g_texture_stage_states[0][3],
++               (unsigned)g_texture_stage_states[0][4], (unsigned)g_texture_stage_states[0][5], (unsigned)g_texture_stage_states[0][6],
++               (unsigned)g_texture_stage_states[1][1], (unsigned)g_texture_stage_states[1][2], (unsigned)g_texture_stage_states[1][3],
++               (unsigned)g_texture_stage_states[1][4], (unsigned)g_texture_stage_states[1][5], (unsigned)g_texture_stage_states[1][6],
++               (unsigned)g_texture_stage_states[2][1], (unsigned)g_texture_stage_states[2][2], (unsigned)g_texture_stage_states[2][3],
++               (unsigned)g_texture_stage_states[2][4], (unsigned)g_texture_stage_states[2][5], (unsigned)g_texture_stage_states[2][6],
++               (unsigned)g_texture_stage_states[0][28], (unsigned)g_texture_stage_states[1][28], (unsigned)g_texture_stage_states[2][28],
++               (unsigned)g_texture_stage_states[0][11], (unsigned)g_texture_stage_states[1][11], (unsigned)g_texture_stage_states[2][11]);
++        printf("draw zfunc=%u zbias=%08X stencil=%u sfunc=%u ttff1=%u colorvertex=%u vblend=%u\n",
++               (unsigned)m_render_states[23], (unsigned)m_render_states[195], (unsigned)m_render_states[52],
++               (unsigned)m_render_states[56], (unsigned)g_texture_stage_states[1][24], (unsigned)m_render_states[141],
++               (unsigned)m_render_states[151]);
++        printf("draw stencilst ref=%u mask=%X wmask=%X fail=%u zfail=%u pass=%u\n",
++               (unsigned)m_render_states[57], (unsigned)m_render_states[58], (unsigned)m_render_states[59],
++               (unsigned)m_render_states[53], (unsigned)m_render_states[54], (unsigned)m_render_states[55]);
++        printf("draw tex0 %ux%u fmt 0x%X tex1 %ux%u fmt 0x%X addr0 %u/%u texop2=%u tci1=0x%X fog=%u lighting=%u tfactor=%08X\n",
++               ti0.w, ti0.h, ti0.fmt, ti1.w, ti1.h, ti1.fmt,
++               (unsigned)g_sampler_states[0][D3DSAMP_ADDRESSU], (unsigned)g_sampler_states[0][D3DSAMP_ADDRESSV],
++               (unsigned)g_texture_stage_states[2][D3DTSS_COLOROP], (unsigned)g_texture_stage_states[1][11],
++               (unsigned)m_render_states[28], (unsigned)m_render_states[137], (unsigned)m_render_states[60]);
++        printf("draw %s n=%u fvf=0x%X vs=%s tex0=%u tex1=%u op0=%u/%u/%u aop0=%u op1=%u tci0=0x%X ttff0=%u "
++               "blend=%u %u>%u z=%u/%u atest=%u ref=%u cull=%u fbo=%d\n", path, count, (unsigned)g_current_fvf,
++               g_progvs_active ? "prog" : "ff", (unsigned)g_texture_stages[0], (unsigned)g_texture_stages[1],
++               (unsigned)g_texture_stage_states[0][D3DTSS_COLOROP], (unsigned)g_texture_stage_states[0][D3DTSS_COLORARG1],
++               (unsigned)g_texture_stage_states[0][D3DTSS_COLORARG2], (unsigned)g_texture_stage_states[0][D3DTSS_ALPHAOP],
++               (unsigned)g_texture_stage_states[1][D3DTSS_COLOROP], (unsigned)g_texture_stage_states[0][11],
++               (unsigned)g_texture_stage_states[0][24], (unsigned)m_render_states[27], (unsigned)m_render_states[19],
++               (unsigned)m_render_states[20], (unsigned)m_render_states[7], (unsigned)m_render_states[14],
++               (unsigned)m_render_states[15], (unsigned)m_render_states[24], (unsigned)m_render_states[22], (int)m_fbo_rendering);
++    }
++
+     virtual HRESULT SetTransform(D3DTRANSFORMSTATETYPE State, const D3DMATRIX* pMatrix) override {
+         if (!pMatrix) return -1;
+         switch (State) {
+@@ -3086,6 +3370,7 @@ static void ApplySamplerStates(DWORD Sampler) {
+ 
+     virtual HRESULT SetRenderState(D3DRENDERSTATETYPE State, DWORD Value) override {
+         if ((UINT)State < 256) m_render_states[State] = Value;
++        if ((int)State == 29) g_render_state_specular = Value != 0;
+         if ((int)State == 152) { // D3DRS_CLIPPLANEENABLE
+              m_clip_plane_enabled = (Value != 0);
+              return D3D_OK;
+@@ -3434,7 +3719,7 @@ static void ApplySamplerStates(DWORD Sampler) {
+                                         UINT startIndex,
+                                         UINT primCount) override {
+         if (g_shader_program == 0) init_shaders();
+-        use_draw_program();
++        use_draw_program(); trace_draw("DIP", (unsigned)primCount);
+ 
+         // FBO Y-flip and clip plane uniforms
+         glUniform1i(g_fbo_flip_y_uniform, m_fbo_rendering ? 1 : 0);
+diff --git a/d3d9.h b/d3d9.h
+index 9d949c9..6306559 100644
+--- a/d3d9.h
++++ b/d3d9.h
+@@ -974,3 +974,13 @@ extern "C" D3D9WProgVS* d3d9w_progvs_create(const char* glsl, const unsigned cha
+                                             const D3D9WElem* elems, int nelems);
+ // p = nullptr: back to fixed function. consts: the device's 96 constant registers (read at each draw).
+ extern "C" void d3d9w_progvs_use(D3D9WProgVS* p, const float (*consts)[4]);
++// D3D8 pixel shaders (ps.1.x -> GLSL ES 3.00 by MojoShader). While one is in use it replaces the
++// fixed-function texture stages: linked with the programmable vertex shader in use, or with the
++// fixed-function vertex stage, matching varyings by MojoShader's io_<usage>_<index> names.
++// regs: the constant register of each ps_uniforms_vec4 slot. nullptr if it does not compile.
++struct D3D9WProgPS;
++extern "C" D3D9WProgPS* d3d9w_progps_create(const char* glsl, const unsigned char* regs, int nregs);
++// p = nullptr: fixed-function texture stages. consts: the device's 8 pixel constant registers.
++extern "C" void d3d9w_progps_use(D3D9WProgPS* p, const float (*consts)[4]);
++// Print every draw's state while on (rugby08: RT_TRACE_DRAWS_FRAME=N traces frame N).
++extern "C" void d3d9w_trace_draws(int on);

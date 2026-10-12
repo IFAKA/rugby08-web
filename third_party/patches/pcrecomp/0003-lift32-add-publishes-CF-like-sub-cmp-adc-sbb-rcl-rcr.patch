@@ -1,0 +1,30 @@
+From 04bcd78a35c51353d29189d02b4dff9360a2b6c8 Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 02:03:54 +0200
+Subject: [PATCH 3/3] lift32: add publishes CF like sub/cmp (adc/sbb/rcl/rcr
+ read _cf)
+
+The MSVC 7.1 CRT's _ftol truncates a round-to-nearest fistp with add ecx,0x7fffffff; sbb eax,0
+(adc for negatives); with a stale carry every (int)float cast rounded instead.
+---
+ tools/lift/lift32.py | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/tools/lift/lift32.py b/tools/lift/lift32.py
+index 5fb8eac..a2df1f5 100644
+--- a/tools/lift/lift32.py
++++ b/tools/lift/lift32.py
+@@ -834,6 +834,13 @@ class Lifter:
+                 a = self._fmt_read(ops[0])
+                 b = self._fmt_read(ops[1])
+                 lines.append(self._flag_capture(a, b, op_bits(ops[0])))
++                # add writes CF, as sub and cmp do (below): adc/sbb/rcl/rcr read `_cf`.
++                # The MSVC 7.1 CRT's _ftol fixes its round-to-nearest fistp up to a
++                # truncation with `add ecx, 0x7fffffff; sbb eax, 0` (and adc for
++                # negatives); with a stale carry every (int)float cast in Rugby 08 rounded
++                # instead. The captured operands are width-aligned, so the 32-bit
++                # wrap of their sum is the carry at the operand's width.
++                lines.append("_cf = (uint32_t)(_flag_a + _flag_b < _flag_a);")
+                 lines.append(f"{self._fmt_write(ops[0], f'{a} + {b}')}; {comment}")
+                 self._flag_state = ('add', "_flag_a, _flag_b")
+ 

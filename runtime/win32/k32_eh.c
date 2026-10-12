@@ -9,7 +9,7 @@
  * The one step the host must do itself is the end of a catch: _JumpToContinuation restores the
  * catching frame's ebp/esp and jumps to the continuation the catch block returned. That jump is
  * RECOMP_ITAIL; while a dispatch is active it calls rt_eh_jump, which longjmps to the landing pad of
- * the lifted function that installed that frame (RECOMP_EH_WRAP, tools/lift.py eh_wrap), discarding
+ * the lifted function that installed that frame (RECOMP_EH_WRAP, tools/lift/lift.py eh_wrap), discarding
  * the host frames of the throw, and the body resumes at the continuation's label. */
 #include "win32.h"
 #include <stdlib.h>

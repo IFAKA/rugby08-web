@@ -1,4 +1,4 @@
-/* cpu_ext.c -- helpers for instructions tools/lift_ext.py adds on top of lift32. */
+/* cpu_ext.c -- helpers for instructions tools/lift/lift_ext.py adds on top of lift32. */
 #include "rt.h"
 #include <math.h>
 

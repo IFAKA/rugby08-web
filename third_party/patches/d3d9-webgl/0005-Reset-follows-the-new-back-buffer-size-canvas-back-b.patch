@@ -1,0 +1,34 @@
+From 28bb5ed082a45650b0b5e5aa2246f93944aadee8 Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 16:54:34 +0200
+Subject: [PATCH 5/8] Reset follows the new back buffer size (canvas, back
+ buffer surface, viewport, scissor)
+
+---
+ d3d9.cpp | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/d3d9.cpp b/d3d9.cpp
+index a230084..37152b1 100644
+--- a/d3d9.cpp
++++ b/d3d9.cpp
+@@ -4062,6 +4062,19 @@ static void ApplySamplerStates(DWORD Sampler) {
+     }
+ 
+     virtual HRESULT Reset(D3DPRESENT_PARAMETERS* pPresentationParameters) override {
++        // The app asks for a new back buffer size (a resolution change): follow it, as CreateDevice does.
++        if (!pPresentationParameters) return D3DERR_INVALIDCALL;
++        int w = (int)pPresentationParameters->BackBufferWidth, h = (int)pPresentationParameters->BackBufferHeight;
++        if (w <= 0 || h <= 0 || (w == g_logical_width && h == g_logical_height)) return D3D_OK;
++        g_logical_width = w;
++        g_logical_height = h;
++        emscripten_set_canvas_element_size(g_canvas_selector, w, h);
++        if (m_backbuffer_surface) { m_backbuffer_surface->m_width = (UINT)w; m_backbuffer_surface->m_height = (UINT)h; }
++        m_current_rt = m_backbuffer_surface;
++        g_viewport.X = 0; g_viewport.Y = 0; g_viewport.Width = (DWORD)w; g_viewport.Height = (DWORD)h;
++        m_scissor_rect = {0, 0, (LONG)w, (LONG)h};
++        glBindFramebuffer(GL_FRAMEBUFFER, 0);
++        glViewport(0, 0, w, h);
+         return D3D_OK;
+     }
+     virtual void SetGammaRamp(UINT iSwapChain, DWORD Flags, const D3DGAMMARAMP* pRamp) override {

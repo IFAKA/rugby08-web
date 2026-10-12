@@ -1,0 +1,105 @@
+From 439aeee5be9b1719f5926ae7a61c80f7b15cf923 Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 18:51:23 +0200
+Subject: [PATCH 6/8] Buffer unlock avoids GL-on-Metal stalls: orphan on
+ whole/DISCARD locks, unsynchronized map on NOOVERWRITE
+
+---
+ d3d9.cpp | 42 +++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 35 insertions(+), 7 deletions(-)
+
+diff --git a/d3d9.cpp b/d3d9.cpp
+index 37152b1..ddec2c6 100644
+--- a/d3d9.cpp
++++ b/d3d9.cpp
+@@ -1718,6 +1718,35 @@ public:
+     GLuint GetGLTexture() const { return m_texture; }
+ };
+ 
++// Buffer upload that avoids stalling on Apple's GL-on-Metal driver: glBufferSubData into a buffer the
++// GPU may still be reading flushes the command queue and waits (40% of a match frame). D3D's lock
++// flags say what is safe: DISCARD / whole-buffer locks orphan the storage (a fresh allocation, no
++// wait), NOOVERWRITE writes a range the GPU is not using (unsynchronized map).
++#ifndef D3DLOCK_NOOVERWRITE
++#define D3DLOCK_NOOVERWRITE 0x00001000L
++#endif
++#ifndef D3DLOCK_DISCARD
++#define D3DLOCK_DISCARD 0x00002000L
++#endif
++static void upload_buffer(GLenum target, GLuint buf, UINT length, UINT off, UINT size, const void* data, DWORD flags) {
++    glBindBuffer(target, buf);
++    if (size == length) {
++        glBufferData(target, length, data, GL_DYNAMIC_DRAW);
++    } else if (flags & D3DLOCK_DISCARD) {
++        glBufferData(target, length, nullptr, GL_DYNAMIC_DRAW);
++        glBufferSubData(target, off, size, data);
++#ifndef __EMSCRIPTEN__
++    } else if (flags & D3DLOCK_NOOVERWRITE) {
++        void* dst = glMapBufferRange(target, off, size, GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
++        if (dst) { memcpy(dst, data, size); glUnmapBuffer(target); }
++        else glBufferSubData(target, off, size, data);
++#endif
++    } else {
++        glBufferSubData(target, off, size, data);
++    }
++    glBindBuffer(target, 0);
++}
++
+ // D3D9IndexBuffer class
+ class D3D9IndexBuffer : public IDirect3DIndexBuffer9 {
+ private:
+@@ -1727,6 +1756,7 @@ private:
+     void* m_locked_data;
+     UINT m_locked_size;
+     UINT m_locked_offset;
++    DWORD m_locked_flags = 0;
+ 
+ public:
+     D3D9IndexBuffer(UINT length, D3DFORMAT format) : m_length(length), m_format(format), m_locked_data(nullptr), m_locked_size(0), m_locked_offset(0) {
+@@ -1764,6 +1794,7 @@ public:
+         m_locked_data = new uint8_t[size];
+         m_locked_size = size;
+         m_locked_offset = OffsetToLock;
++        m_locked_flags = Flags;
+         *ppbData = m_locked_data;
+         
+         return D3D_OK;
+@@ -1772,10 +1803,7 @@ public:
+     virtual HRESULT Unlock() override {
+         if (!m_locked_data) return -1;
+         
+-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_buffer);
+-        // Note: This implementation re-uploads only the locked part to the correct offset.
+-        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, m_locked_offset, m_locked_size, m_locked_data);
+-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
++        upload_buffer(GL_ELEMENT_ARRAY_BUFFER, m_buffer, m_length, m_locked_offset, m_locked_size, m_locked_data, m_locked_flags);
+         
+         delete[] static_cast<uint8_t*>(m_locked_data);
+         m_locked_data = nullptr;
+@@ -1794,6 +1822,7 @@ private:
+     void* m_locked_data;
+     UINT m_locked_size;
+     UINT m_locked_offset;
++    DWORD m_locked_flags = 0;
+     
+ public:
+     D3D9VertexBuffer(UINT length) : m_length(length), m_locked_data(nullptr), m_locked_size(0), m_locked_offset(0) {
+@@ -1829,6 +1858,7 @@ public:
+         m_locked_data = new uint8_t[size];
+         m_locked_size = size;
+         m_locked_offset = OffsetToLock;
++        m_locked_flags = Flags;
+         *ppbData = m_locked_data;
+         
+         return D3D_OK;
+@@ -1837,9 +1867,7 @@ public:
+     virtual HRESULT Unlock() override {
+         if (!m_locked_data) return -1;
+         
+-        glBindBuffer(GL_ARRAY_BUFFER, m_buffer);
+-        glBufferSubData(GL_ARRAY_BUFFER, m_locked_offset, m_locked_size, m_locked_data);
+-        glBindBuffer(GL_ARRAY_BUFFER, 0);
++        upload_buffer(GL_ARRAY_BUFFER, m_buffer, m_length, m_locked_offset, m_locked_size, m_locked_data, m_locked_flags);
+         
+         delete[] static_cast<uint8_t*>(m_locked_data);
+         m_locked_data = nullptr;

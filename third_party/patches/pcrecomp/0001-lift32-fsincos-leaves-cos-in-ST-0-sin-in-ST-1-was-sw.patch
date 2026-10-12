@@ -1,0 +1,35 @@
+From 1aeebf52af4ee86519632596d9df05904e52593e Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sat, 10 Oct 2026 18:14:41 +0200
+Subject: [PATCH 1/3] lift32: fsincos leaves cos in ST(0), sin in ST(1) (was
+ swapped); fprem1 is remainder (round-to-nearest), not fmod
+
+---
+ tools/lift/lift32.py | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/tools/lift/lift32.py b/tools/lift/lift32.py
+index 538ed8a..38321f6 100644
+--- a/tools/lift/lift32.py
++++ b/tools/lift/lift32.py
+@@ -1718,7 +1718,8 @@ class Lifter:
+             # must read clear: fnstsw builds the status word from _fpu_cmp,
+             # and 1 is the state whose word has C2 = 0. Code after fprem only
+             # tests C2; C0/C1/C3 hold quotient bits nothing here reads.
+-            lines.append(f"_st[0] = fmod(_st[0], _st[1]); _fpu_cmp = 1; {comment}")
++            # fprem truncates the implied quotient, fprem1 rounds it to nearest: fmod and remainder.
++            lines.append(f"_st[0] = {'fmod' if m == 'fprem' else 'remainder'}(_st[0], _st[1]); _fpu_cmp = 1; {comment}")
+ 
+         elif m == 'fscale':
+             lines.append(f"_st[0] *= pow(2.0, (double)(int)_st[1]); {comment}")
+@@ -1752,7 +1753,9 @@ class Lifter:
+             lines.append(f"_st[0] = cos(_st[0]); _fpu_cmp = 1; {comment}")
+ 
+         elif m == 'fsincos':
+-            lines.append(f"{{ double _a = _st[0]; _st[0] = cos(_a); fp_push(sin(_a)); }} _fpu_cmp = 1; {comment}")
++            # Intel: ST(0) <- sin, then push cos -- cos ends in ST(0), sin in ST(1). The reverse
++            # swapped every sin/cos pair (lift32_cpu.py had it right).
++            lines.append(f"{{ double _a = _st[0]; _st[0] = sin(_a); fp_push(cos(_a)); }} _fpu_cmp = 1; {comment}")
+ 
+         elif m == 'fpatan':
+             lines.append(f"{{ double _v = fp_pop(); _st[0] = atan2(_v, _st[0]); }} {comment}")

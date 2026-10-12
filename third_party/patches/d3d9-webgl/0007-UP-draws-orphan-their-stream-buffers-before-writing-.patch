@@ -1,0 +1,47 @@
+From 99b8670d2034ff96e39d7c3f0c614f6f3f84af72 Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 20:46:01 +0200
+Subject: [PATCH 7/8] UP draws orphan their stream buffers before writing (no
+ GPU wait)
+
+---
+ d3d9.cpp | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/d3d9.cpp b/d3d9.cpp
+index ddec2c6..61df3f2 100644
+--- a/d3d9.cpp
++++ b/d3d9.cpp
+@@ -2764,7 +2764,9 @@ static void ApplySamplerStates(DWORD Sampler) {
+             CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, new_size, nullptr, GL_DYNAMIC_DRAW));
+             g_up_vbo_size = new_size;
+         }
+-        // Just update the data (fast path - avoids buffer reallocation)
++        // Orphan first: the previous draw may still be reading this storage, and writing into it makes
++        // Apple's GL-on-Metal driver flush the queue and wait (40% of a match frame). Fresh storage never waits.
++        CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, g_up_vbo_size, nullptr, GL_DYNAMIC_DRAW));
+         CHECK_GL_ERROR(glBufferSubData(GL_ARRAY_BUFFER, 0, total_size, vertex_data));
+         
+         // Enable/Set Pointers (Use offsets!)
+@@ -3072,7 +3074,9 @@ static void ApplySamplerStates(DWORD Sampler) {
+             CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, new_size, nullptr, GL_DYNAMIC_DRAW));
+             g_up_vbo_size = new_size;
+         }
+-        // Just update the data (fast path - avoids buffer reallocation)
++        // Orphan first: the previous draw may still be reading this storage, and writing into it makes
++        // Apple's GL-on-Metal driver flush the queue and wait (40% of a match frame). Fresh storage never waits.
++        CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, g_up_vbo_size, nullptr, GL_DYNAMIC_DRAW));
+         CHECK_GL_ERROR(glBufferSubData(GL_ARRAY_BUFFER, 0, total_v_size, vertex_data));
+ 
+         // Upload Indices
+@@ -3097,7 +3101,9 @@ static void ApplySamplerStates(DWORD Sampler) {
+             CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, new_size, nullptr, GL_DYNAMIC_DRAW));
+             g_up_ibo_size = new_size;
+         }
+-        // Just update the data (fast path - avoids buffer reallocation)
++        // Orphan first: the previous draw may still be reading this storage, and writing into it makes
++        // Apple's GL-on-Metal driver flush the queue and wait (40% of a match frame). Fresh storage never waits.
++        CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, g_up_ibo_size, nullptr, GL_DYNAMIC_DRAW));
+         CHECK_GL_ERROR(glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, total_i_size, pIndexData));
+ 
+          // Enable/Set Pointers (Use offsets!)

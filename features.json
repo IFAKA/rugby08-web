@@ -6,7 +6,7 @@
       "id": "setup.tools",
       "deps": [],
       "desc": "Toolchain installed: JDK21, Ghidra headless, emscripten, SDL2, capstone, python venv with capstone+pefile",
-      "check": "tools/check_tools.sh",
+      "check": "tools/check/check_tools.sh",
       "passes": true
     },
     {
@@ -31,7 +31,7 @@
         "analyze.pe"
       ],
       "desc": "pcrecomp disasm32 → analysis/functions.json with >=15000 functions",
-      "check": "python3 tools/count_functions.py analysis/functions.json --min 15000",
+      "check": "python3 tools/analysis/count_functions.py analysis/functions.json --min 15000",
       "passes": true
     },
     {
@@ -68,7 +68,7 @@
         "analyze.score"
       ],
       "desc": "python -m tools (pcrecomp translator) lifts every function into gen/; 0 instructions lifted as comments/unsupported",
-      "check": "tools/lift_report.sh --max-unsupported 0",
+      "check": "tools/lift/lift_report.sh --max-unsupported 0",
       "passes": true
     },
     {
@@ -77,7 +77,7 @@
         "lift.all"
       ],
       "desc": "pcrecomp difftest (or our port of it to macOS: run lifted C vs unicorn/x86 emulation) passes on >=500 sampled leaf functions",
-      "check": "tools/difftest.sh --sample 500",
+      "check": "tools/lift/difftest.sh --sample 500",
       "passes": true
     },
     {
@@ -86,7 +86,7 @@
         "lift.all"
       ],
       "desc": "Lift fidelity: ref_bytes_lifted >= 99%, off_boundary_insns < 2000, ghidra_unlifted <= 20 (encrypted stubs in protector region)",
-      "check": "source .venv/bin/activate && python3 tools/fidelity_report.py 2>&1 | grep -qE 'ref_bytes_lifted=99|off_boundary_insns=([0-9]|[0-9]{2}|[0-9]{3}|1[0-9]{3})[^0-9]' && python3 tools/fidelity_report.py 2>&1 | grep -qE 'ghidra_unlifted=([0-9]|1[0-9]|20)([^0-9]|$)'",
+      "check": "source .venv/bin/activate && python3 tools/lift/fidelity_report.py 2>&1 | grep -qE 'ref_bytes_lifted=99|off_boundary_insns=([0-9]|[0-9]{2}|[0-9]{3}|1[0-9]{3})[^0-9]' && python3 tools/lift/fidelity_report.py 2>&1 | grep -qE 'ghidra_unlifted=([0-9]|1[0-9]|20)([^0-9]|$)'",
       "passes": true,
       "notes": "2026-10-10: check regex fixed to match its description (ghidra_unlifted <= 20); the old (0|1|2?[0-9]) accepted only 0-9 and 20-29."
     },
@@ -96,7 +96,7 @@
         "lift.fidelity"
       ],
       "desc": "Strict reachability after ret/jmp: all switch-table arms and EH landing pads are entries; fallthrough_targets_not_lifted < 10",
-      "check": "source .venv/bin/activate && python3 tools/fidelity_report.py 2>&1 | grep -qE 'fallthrough_targets_not_lifted=([0-9]|10)([^0-9]|$)'",
+      "check": "source .venv/bin/activate && python3 tools/lift/fidelity_report.py 2>&1 | grep -qE 'fallthrough_targets_not_lifted=([0-9]|10)([^0-9]|$)'",
       "passes": true,
       "notes": "Current: 305 not lifted. Root cause: pcrecomp treats every byte after jmp as a potential entry, lifting junk; build_catalog must compute labels from switch/EH tables only. See PROGRESS.md 2026-10-04."
     },
@@ -115,7 +115,7 @@
         "native.compile"
       ],
       "desc": "Native binary runs CRT init and reaches WinMain (trace line 'WinMain entered')",
-      "check": "tools/run_native.sh --frames 0 --expect 'WinMain entered'",
+      "check": "tools/check/run_native.sh --frames 0 --expect 'WinMain entered'",
       "passes": true
     },
     {
@@ -124,7 +124,7 @@
         "native.boot"
       ],
       "desc": "RegisterClass/CreateWindowEx → SDL window; message pump works; reaches Direct3DCreate8",
-      "check": "tools/run_native.sh --frames 0 --expect 'Direct3DCreate8'",
+      "check": "tools/check/run_native.sh --frames 0 --expect 'Direct3DCreate8'",
       "passes": true
     },
     {
@@ -133,9 +133,9 @@
         "native.boot"
       ],
       "desc": "Indirect-call dispatch: runtime records unresolved targets to logs/icall_miss.txt; regen loop; 0 misses through menu boot",
-      "check": "tools/run_native.sh --frames 600 && test ! -s logs/icall_miss.txt",
+      "check": "tools/check/run_native.sh --frames 600 && test ! -s logs/icall_miss.txt",
       "passes": true,
-      "notes": "PASS 2026-10-03: 0 misses over 600 frames. Needed: protector dispatcher seeds, encrypted-call stub forms, flags carried across calls/tail jumps, AEMS sound-bank code lifted AOT (tools/aems_lift.py)."
+      "notes": "PASS 2026-10-03: 0 misses over 600 frames. Needed: protector dispatcher seeds, encrypted-call stub forms, flags carried across calls/tail jumps, AEMS sound-bank code lifted AOT (tools/lift/aems_lift.py)."
     },
     {
       "id": "native.threads",
@@ -143,7 +143,7 @@
         "native.boot"
       ],
       "desc": "CreateThread/events/critical sections/TLS/timeSetEvent implemented on SDL threads; no deadlock for 600 frames",
-      "check": "tools/run_native.sh --frames 600 --expect 'frame 600'",
+      "check": "tools/check/run_native.sh --frames 600 --expect 'frame 600'",
       "passes": true,
       "notes": "PASS 2026-10-03: reaches frame 600 with the sound and loader threads running."
     },
@@ -153,7 +153,7 @@
         "native.boot"
       ],
       "desc": "CreateFile/ReadFile/FindFirstFile etc. map to Game Files/ with case-insensitive, backslash-aware paths; all .big/.gob opened without error",
-      "check": "tools/run_native.sh --frames 600 && ! grep -q 'FILE_NOT_FOUND' logs/native_run.log",
+      "check": "tools/check/run_native.sh --frames 600 && ! grep -q 'FILE_NOT_FOUND' logs/native_run.log",
       "passes": true,
       "notes": "PASS 2026-10-03: data.gob/audio .big mapped; 32-hex-digit names are override probes for files inside data.gob (verified present in its index), no longer reported as missing archives."
     },
@@ -163,7 +163,7 @@
         "native.window"
       ],
       "desc": "D3D8 via d3d8to9 → d3d9-webgl (desktop GL/ANGLE backend): device creates, first Present shows a non-black frame",
-      "check": "tools/run_native.sh --frames 120 --screenshot logs/f120.png && python3 tools/img_stats.py logs/f120.png --not-blank",
+      "check": "tools/check/run_native.sh --frames 120 --screenshot logs/f120.png && python3 tools/check/img_stats.py logs/f120.png --not-blank",
       "passes": true,
       "notes": "PASS 2026-10-03: frame 120 shows the EA logo; frame 900 the legal screen with font rendering."
     },
@@ -173,7 +173,7 @@
         "native.d3d.present"
       ],
       "desc": "Every D3D8 method the game calls implemented (none hit 'D3D8 unimplemented' log), texture stages/lights extended beyond d3d9-webgl limits as needed",
-      "check": "tools/run_native.sh --frames 3000 --replay tests/replays/menu_to_match.txt && ! grep -q 'unimplemented' logs/native_run.log",
+      "check": "tools/check/run_native.sh --frames 3000 --replay tests/replays/menu_to_match.txt && ! grep -q 'unimplemented' logs/native_run.log",
       "passes": true
     },
     {
@@ -182,7 +182,7 @@
         "native.d3d.present"
       ],
       "desc": "VP6 intro videos decode (ffmpeg libavcodec vp6) and play",
-      "check": "tools/run_native.sh --frames 200 --expect 'vp6 frame decoded'",
+      "check": "tools/check/run_native.sh --frames 200 --expect 'vp6 frame decoded'",
       "passes": true,
       "notes": "PASS 2026-10-03: the statically linked VP6 decoder (lifted, MMX tier) decodes eaenpc.vp6; hook on its decompress method 0x7EFAF5 (vtable 0x90A7D8 slot 2) fires per frame; frame 60 screenshot shows the EA SPORTS intro (1313 colours). No ffmpeg."
     },
@@ -192,7 +192,7 @@
         "native.boot"
       ],
       "desc": "DirectSound buffers → SDL audio; menu music audible (non-silent capture)",
-      "check": "tools/run_native.sh --frames 900 --audio-capture logs/menu.wav && python3 tools/audio_stats.py logs/menu.wav --not-silent",
+      "check": "tools/check/run_native.sh --frames 900 --audio-capture logs/menu.wav && python3 tools/check/audio_stats.py logs/menu.wav --not-silent",
       "passes": true,
       "notes": "PASS 2026-10-03: DirectSound software mixer on SDL audio; intro captured at about -20 dBFS."
     },
@@ -204,7 +204,7 @@
         "native.fs"
       ],
       "desc": "Main menu reached and rendered (reference screenshot committed as hash only)",
-      "check": "tools/run_native.sh --frames 1800 --screenshot logs/menu.png && python3 tools/img_stats.py logs/menu.png --not-blank --min-colors 200",
+      "check": "tools/check/run_native.sh --frames 1800 --screenshot logs/menu.png && python3 tools/check/img_stats.py logs/menu.png --not-blank --min-colors 200",
       "passes": true
     },
     {
@@ -213,7 +213,7 @@
         "setup.tools"
       ],
       "desc": "Reference run: the original Rugby08_unpacked.exe runs under Wine (wine-stable, WoW64) for 60 s with d3d8 loaded and no unhandled exception. Tells a bad unpack apart from lifter bugs. See docs/plans/2026-10-08-oracle-fallback-deprotect.md P1. Runs minimized with no mouse grab (d3d8 proxy, tools/oracle/). About half the launches die ~3 s in under Wine/Rosetta before any window; --tries reruns those.",
-      "check": "tools/run_wine.sh Rugby08_unpacked.exe --seconds 60 --tries 4",
+      "check": "tools/check/run_wine.sh Rugby08_unpacked.exe --seconds 60 --tries 4",
       "passes": true
     },
     {
@@ -222,7 +222,7 @@
         "native.menu"
       ],
       "desc": "Dispatch misses run in a Unicorn interpreter on the same guest memory (runtime/core/interp.c) instead of eax=0; exits back to lifted code on entry/RECOMP_RETADDR. difftest --interp: >=500 lifted functions (leaf and non-leaf) give identical state when interpreted. Plan P2.",
-      "check": "source .venv/bin/activate && python3 tools/difftest.py --interp --sample 500",
+      "check": "source .venv/bin/activate && python3 tools/lift/difftest.py --interp --sample 500",
       "passes": true
     },
     {
@@ -233,9 +233,9 @@
         "interp.fallback"
       ],
       "desc": "Native binary exits cleanly (status 0) after 600 frames: no crash, segfault, or abort; checks CRT init, boot, menu render",
-      "check": "tools/run_native.sh --frames 600 >/dev/null 2>&1",
+      "check": "tools/check/run_native.sh --frames 600 >/dev/null 2>&1",
       "passes": true,
-      "notes": "Ready for user playtest via scripts/play.sh. Crashes logged to logs/native_run.log; seed new issues via tools/icall_seed.py from logs/icall_miss.txt, then re-run tools/lift_fixpoint.sh."
+      "notes": "Ready for user playtest via scripts/play.sh. Crashes logged to logs/native_run.log; seed new issues via tools/lift/icall_seed.py from logs/icall_miss.txt, then re-run tools/lift/lift_fixpoint.sh."
     },
     {
       "id": "web.compile",
@@ -252,7 +252,7 @@
         "web.compile"
       ],
       "desc": "ALL Game Files packaged into chunked lazy-loaded bundles in build/web/data/ (no picker, no fallback); manifest lists every original file",
-      "check": "python3 tools/check_asset_manifest.py 'Game Files' build/web/data/manifest.json",
+      "check": "python3 tools/check/check_asset_manifest.py 'Game Files' build/web/data/manifest.json",
       "passes": true
     },
     {
@@ -260,8 +260,8 @@
       "deps": [
         "web.compile"
       ],
-      "desc": "tools/serve.py serves build/web on localhost with COOP/COEP headers",
-      "check": "tools/serve_check.sh",
+      "desc": "tools/web/serve.py serves build/web on localhost with COOP/COEP headers",
+      "check": "tools/check/serve_check.sh",
       "passes": true
     },
     {
@@ -270,8 +270,8 @@
         "oracle.wine",
         "lift.all"
       ],
-      "desc": "tools/patch_exe.py --full writes a deprotected PE (obfuscated calls, pointer stubs, decrypt-stub switch slots, 0x1055000 dispatcher resolved to direct branches) that runs under Wine like the original; the lift then uses it. Plan P3.",
-      "check": "source .venv/bin/activate && python3 tools/patch_exe.py --full && tools/run_wine.sh build/deobf/Rugby08_deobf.exe --seconds 60",
+      "desc": "tools/lift/patch_exe.py --full writes a deprotected PE (obfuscated calls, pointer stubs, decrypt-stub switch slots, 0x1055000 dispatcher resolved to direct branches) that runs under Wine like the original; the lift then uses it. Plan P3.",
+      "check": "source .venv/bin/activate && python3 tools/lift/patch_exe.py --full && tools/check/run_wine.sh build/deobf/Rugby08_deobf.exe --seconds 60",
       "passes": false
     },
     {
@@ -281,7 +281,7 @@
         "web.compile"
       ],
       "desc": "Interpreter fallback in the web build (Unicorn via emscripten) or, if that is not viable, the web lift includes all logs/interp_entries.txt entries and misses stop cleanly. Plan P4.",
-      "check": "source .venv/bin/activate && python3 tools/difftest.py --interp --web --sample 100",
+      "check": "source .venv/bin/activate && python3 tools/lift/difftest.py --interp --web --sample 100",
       "passes": false
     },
     {
@@ -292,9 +292,9 @@
         "native.smoke"
       ],
       "desc": "Browser loads localhost, WASM initializes, WinMain entered (no crash on load)",
-      "check": "tools/web_check.sh --expect 'WinMain entered' --timeout 180",
+      "check": "tools/check/web_check.sh --expect 'WinMain entered' --timeout 180",
       "passes": true,
-      "notes": "2026-10-10: the old check (`timeout 30 tools/web_check.sh ... || exit 0`) always exited 0 and the script did not exist; replaced by a real headless-Chromium check."
+      "notes": "2026-10-10: the old check (`timeout 30 tools/check/web_check.sh ... || exit 0`) always exited 0 and the script did not exist; replaced by a real headless-Chromium check."
     },
     {
       "id": "lift.crt_math",

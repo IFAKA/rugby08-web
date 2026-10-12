@@ -1,0 +1,76 @@
+From 739f63624521aa84868d7326931aab4e042453e8 Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 16:31:23 +0200
+Subject: [PATCH 2/8] Stencil: apply func/ref/mask and fail/zfail/pass ops
+ together
+
+Each D3D stencil render state is independent, but GL sets func, ref and mask in one call and the
+three ops in another. Setting one op reset the other two to KEEP, the reference only applied if set
+before the function, and STENCILMASK/STENCILWRITEMASK were ignored. Rugby 08 marks players with
+stencil 2 and draws ground shadows only where stencil < 1 (then sets 1), so shadows covered players
+and the four light shadows stacked. Track all seven states with D3D defaults, apply them together,
+and clear the stencil regardless of the write mask as D3D does.
+---
+ d3d9.cpp | 26 ++++++++++++++++++++------
+ 1 file changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/d3d9.cpp b/d3d9.cpp
+index 640de3b..d716da6 100644
+--- a/d3d9.cpp
++++ b/d3d9.cpp
+@@ -459,7 +459,6 @@ static float g_max_anisotropy = 1.0f; // 1.0 = disabled (no extension)
+ static D3DLIGHT9 g_lights[8];
+ static bool g_light_enabled[8] = {false};
+ static D3DMATERIAL9 g_material;
+-static DWORD g_current_stencil_ref = 0;
+ 
+ static void init_shaders();
+ static void EnsureUPBuffers();
+@@ -1742,6 +1741,12 @@ public:
+         m_render_states[D3DRS_ZWRITEENABLE]     = TRUE;             // D3D9 default: depth write enabled
+         m_render_states[D3DRS_COLORWRITEENABLE] = 0x0000000F;       // D3D9 default: all channels (R|G|B|A)
+         m_render_states[D3DRS_ZFUNC]            = D3DCMP_LESSEQUAL; // D3D9 default: LESSEQUAL (not GL's LESS)
++        m_render_states[D3DRS_STENCILFAIL]      = D3DSTENCILOP_KEEP;
++        m_render_states[D3DRS_STENCILZFAIL]     = D3DSTENCILOP_KEEP;
++        m_render_states[D3DRS_STENCILPASS]      = D3DSTENCILOP_KEEP;
++        m_render_states[D3DRS_STENCILFUNC]      = D3DCMP_ALWAYS;
++        m_render_states[D3DRS_STENCILMASK]      = 0xFFFFFFFF;
++        m_render_states[D3DRS_STENCILWRITEMASK] = 0xFFFFFFFF;
+ 
+         // Initial viewport call
+         SetViewport(&g_viewport);
+@@ -2186,8 +2191,10 @@ public:
+ 
+         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+         glDepthMask(GL_TRUE);
++        glStencilMask(0xFFFFFFFF);
+ 
+         CHECK_GL_ERROR(glClear(mask));
++        glStencilMask(m_render_states[D3DRS_STENCILWRITEMASK]);
+ 
+         // Restore masks from tracked state (no GPU readback)
+         glColorMask(color_write_enabled_r, color_write_enabled_g, color_write_enabled_b, color_write_enabled_a);
+@@ -3152,11 +3159,18 @@ static void ApplySamplerStates(DWORD Sampler) {
+                 if (Value) glEnable(GL_STENCIL_TEST);
+                 else glDisable(GL_STENCIL_TEST);
+                 break;
+-            case D3DRS_STENCILFUNC: glStencilFunc(d3d_cmp_to_gl(Value), g_current_stencil_ref, 0xFFFFFFFF); break;
+-            case D3DRS_STENCILREF: g_current_stencil_ref = Value; break;
+-            case D3DRS_STENCILFAIL: glStencilOp(d3d_stencil_op_to_gl(Value), GL_KEEP, GL_KEEP); break;
+-            case D3DRS_STENCILZFAIL: glStencilOp(GL_KEEP, d3d_stencil_op_to_gl(Value), GL_KEEP); break;
+-            case D3DRS_STENCILPASS: glStencilOp(GL_KEEP, GL_KEEP, d3d_stencil_op_to_gl(Value)); break;
++            // Each D3D stencil state is independent; GL sets func/ref/mask and the three ops together,
++            // so apply the full tracked set whenever any one changes.
++            case D3DRS_STENCILFUNC: case D3DRS_STENCILREF: case D3DRS_STENCILMASK:
++                glStencilFunc(d3d_cmp_to_gl(m_render_states[D3DRS_STENCILFUNC]),
++                              (GLint)m_render_states[D3DRS_STENCILREF], m_render_states[D3DRS_STENCILMASK]);
++                break;
++            case D3DRS_STENCILFAIL: case D3DRS_STENCILZFAIL: case D3DRS_STENCILPASS:
++                glStencilOp(d3d_stencil_op_to_gl(m_render_states[D3DRS_STENCILFAIL]),
++                            d3d_stencil_op_to_gl(m_render_states[D3DRS_STENCILZFAIL]),
++                            d3d_stencil_op_to_gl(m_render_states[D3DRS_STENCILPASS]));
++                break;
++            case D3DRS_STENCILWRITEMASK: glStencilMask(Value); break;
+             
+             case D3DRS_COLORWRITEENABLE:
+                 glColorMask((Value & D3DCOLORWRITEENABLE_RED) ? GL_TRUE : GL_FALSE,

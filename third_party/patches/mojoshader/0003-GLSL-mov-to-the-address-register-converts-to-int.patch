@@ -1,0 +1,36 @@
+From c8b3c0f3ff5c2b94b09b50efff87050323ed1320 Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 16:31:47 +0200
+Subject: [PATCH 3/3] GLSL: mov to the address register converts to int
+
+vs.1.1 loads a0 with mov (vs 2.0 uses mova). Emit int(floor(src)) / ivecN(floor(src)) so the GLSL
+compiles ("int and float in assignment") and indexes like D3D.
+---
+ profiles/mojoshader_profile_glsl.c | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+index 319e3cb..155dc2d 100644
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1234,7 +1234,19 @@ void emit_GLSL_MOV(Context *ctx)
+ {
+     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
+     char code[128];
+-    make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s", src0);
++    if (ctx->dest_arg.regtype == REG_TYPE_ADDRESS)
++    {
++        // vs_1_1 loads a0 with mov: the float is rounded down (mova in vs_2_0 rounds to nearest).
++        const int vecsize = vecsize_from_writemask(ctx->dest_arg.writemask);
++        if (vecsize == 1)
++            make_GLSL_destarg_assign(ctx, code, sizeof (code), "int(floor(%s))", src0);
++        else
++            make_GLSL_destarg_assign(ctx, code, sizeof (code), "ivec%d(floor(%s))", vecsize, src0);
++    } // if
++    else
++    {
++        make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s", src0);
++    } // else
+     output_line(ctx, "%s", code);
+ } // emit_GLSL_MOV
+ 

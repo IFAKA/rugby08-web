@@ -1,0 +1,33 @@
+From 9075f31e8a0b2fb7b54842f5f8484351e3c1697e Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 16:31:47 +0200
+Subject: [PATCH 2/3] D3D8 vs.1.x: m3x3 into an .xyzw destination writes xyz
+ only
+
+D3D8 shaders write m3x3 to a full .xyzw mask; the runtime writes x, y and z and leaves w alone.
+Narrow such masks to .xyz for shader models below 2.0 instead of emitting an invalid assignment.
+---
+ mojoshader.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/mojoshader.c b/mojoshader.c
+index afc2c9c..dd0a8b3 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1472,7 +1472,15 @@ static void state_M3X4(Context *ctx)
+ 
+ static void state_M3X3(Context *ctx)
+ {
+-    const DestArgInfo *info = &ctx->dest_arg;
++    DestArgInfo *info = &ctx->dest_arg;
++    // D3D8 vs.1.x shaders write m3x3 to a full .xyzw destination: the runtime writes x, y and z
++    //  and leaves w alone, so narrow any mask that covers xyz to exactly that.
++    if ((!writemask_xyz(info->writemask)) && (info->writemask & 0x7) == 0x7 &&
++        !shader_version_atleast(ctx, 2, 0))
++    {
++        info->writemask = 0x7;
++        info->writemask3 = 0;
++    } // if
+     if (!writemask_xyz(info->writemask))
+         fail(ctx, "M3X3 writemask must be .xyz");
+ 

@@ -1,4 +1,4 @@
-/* d3d8proxy.c -- d3d8.dll for the Wine reference run only (tools/run_wine.sh). Built by
+/* d3d8proxy.c -- d3d8.dll for the Wine reference run only (tools/check/run_wine.sh). Built by
  * tools/oracle/build_proxy.sh with Apple clang + the lld in emscripten; no CRT, no Windows SDK.
  *
  * The game asks for a 640x480 16-bit fullscreen device. macOS lists no such display mode, so
@@ -6,7 +6,7 @@
  * device. This proxy loads Wine's d3d8.dll and patches IDirect3D8::CreateDevice and
  * IDirect3DDevice8::Reset in their vtables to request a windowed device with the desktop's
  * back-buffer format instead. The game's code is not modified.
- * With RUGBY08_ORACLE_BACKGROUND set (tools/run_wine.sh without --show/--keep) the game window is
+ * With RUGBY08_ORACLE_BACKGROUND set (tools/check/run_wine.sh without --show/--keep) the game window is
  * minimized without activation, so a reference run does not take over the user's screen.
  *
  * Input replay (RUGBY08_REPLAY = Windows path of a tests/replays/<name>.txt file, the format of

@@ -77,6 +77,9 @@ enum { PLAT_AUDIO_RATE = 44100 };
 typedef void (*plat_audio_mix_fn)(float *out, int frames);
 int  plat_audio_start(plat_audio_mix_fn mix);                /* 0 = device opened, 1 = paced without one */
 
+/* The guest arena: guest VA v is at arena + v for every v < *size (runtime/core/mem.c). */
+void *plat_guest_arena(uint32_t *size);
+
 #ifdef __cplusplus
 }
 #endif

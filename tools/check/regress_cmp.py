@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Compare two tools/check/regress.sh captures. Last line is the summary; exit 0 = within tolerance.
   regress_cmp.py BASE DIR
-Images: mean absolute difference (0-255) and the share of pixels differing by more than 48 in any
-channel. Run-to-run noise of the same build (timing: which video frame a Present shows) sets the
-limits below. Audio: RMS within 3 dB. Exit codes and log signatures must match exactly."""
+Captures are deterministic (RT_DET=1), so images must be pixel-identical (--tolerant: mean absolute
+difference <= 6 and <= 8% of pixels off by more than 48, for runs that are not). Audio: RMS within
+3 dB. Exit codes, log signatures and guest state hashes must match exactly."""
+
 import math
 import pathlib
 import sys
@@ -11,8 +12,9 @@ import wave
 
 from PIL import Image, ImageChops
 
-MAX_MEAN = 6.0  # mean abs diff per channel
-MAX_FAR = 0.08  # share of pixels with a channel off by > 48
+TOLERANT = "--tolerant" in sys.argv
+MAX_MEAN = 6.0 if TOLERANT else 0.0  # mean abs diff per channel
+MAX_FAR = 0.08 if TOLERANT else 0.0  # share of pixels with a channel off by > 48 (exact: any difference)
 
 
 def img_diff(a, b):
@@ -23,7 +25,7 @@ def img_diff(a, b):
     hist = d.histogram()
     n = ia.size[0] * ia.size[1]
     mean = sum(sum(i * c for i, c in enumerate(hist[k * 256 : (k + 1) * 256])) for k in range(3)) / (3 * n)
-    far = sum(1 for p in d.getdata() if max(p) > 48) / n
+    far = sum(1 for p in d.get_flattened_data() if max(p) > (48 if TOLERANT else 0)) / n
     return mean, far
 
 
@@ -39,7 +41,8 @@ def rms_db(path):
 
 
 def main():
-    base, cur = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    base, cur = pathlib.Path(args[0]), pathlib.Path(args[1])
     bad = []
     for img in sorted(base.rglob("*.png")):
         rel = img.relative_to(base)
@@ -64,7 +67,7 @@ def main():
         print(f"{'ok  ' if abs(a - b) <= 3 else 'DIFF'} {wav.name}: {a:.1f} dB vs {b:.1f} dB")
         if abs(a - b) > 3:
             bad.append(f"{wav.name} ({a:.1f} vs {b:.1f} dB)")
-    for f in ("status.txt", *sorted(p.name for p in base.glob("*.sig"))):
+    for f in ("status.txt", *sorted(p.name for p in [*base.glob("*.sig"), *base.glob("*.det")])):
         x, y = (base / f).read_text(), (cur / f).read_text() if (cur / f).exists() else ""
         if x != y:
             print(f"DIFF {f}:\n--- base\n{x}--- now\n{y}")
@@ -73,7 +76,9 @@ def main():
     if bad:
         print(f"regress: FAIL ({len(bad)} of {n} differ: {', '.join(bad[:6])})")
         return 1
-    print(f"regress: ok ({n} images/audio within tolerance, exit codes and log signatures identical)")
+    print(
+        f"regress: ok ({n} images/audio {'within tolerance' if TOLERANT else 'identical'}, exit codes, log signatures and state hashes identical)"
+    )
     return 0
 
 

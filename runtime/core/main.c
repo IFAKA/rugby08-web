@@ -20,31 +20,8 @@ void rt_log_open(const char *path);
 void rt_mem_init(void);
 uint32_t rt_load_image(const char *path, uint32_t *entry_out);
 void rt_bind_imports(void);
-void rt_platform_init(int argc, char **argv);   /* platform/<target>/ */
+void rt_platform_init(int argc, char **argv);   /* platform/<target>/: fault handler, host setup */
 
-#ifndef __EMSCRIPTEN__
-#include <signal.h>
-/* A host fault inside lifted code is a guest access violation: name the guest address, the lifted
- * function and the guest stack, dump this thread's entry ring, and stop. */
-static void on_fault(int sig, siginfo_t *si, void *ctx) {
-    (void)ctx;
-    uintptr_t a = (uintptr_t)si->si_addr, b = (uintptr_t)g_mem_base;
-    rt_log("FAULT: signal %d at host %p (guest 0x%08llX) in sub_%08X, esp=0x%08X eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X", sig, si->si_addr,
-           (unsigned long long)(a - b), g_cur_func, g_esp, g_eax, g_ebx, g_ecx, g_edx, g_esi, g_edi, g_ebp);
-    recomp_dump_trace("fault");
-    _exit(139);
-}
-static void install_fault_handler(void) {
-    struct sigaction sa;
-    memset(&sa, 0, sizeof sa);
-    sa.sa_sigaction = on_fault;
-    sa.sa_flags = SA_SIGINFO;
-    sigaction(SIGSEGV, &sa, NULL);
-    sigaction(SIGBUS, &sa, NULL);
-}
-#else
-static void install_fault_handler(void) {}
-#endif
 
 static void usage(void) {
     fprintf(stderr, "rugby08 [--exe PATH] [--game-dir DIR] [--user-dir DIR] [--log FILE] [--frames N] [--screenshot PNG] [--audio-capture WAV] [--replay FILE] [-v]\n");
@@ -69,7 +46,6 @@ int main(int argc, char **argv) {
         else usage();
     }
     rt_log_open(log_path);
-    install_fault_handler();
     rt_platform_init(argc, argv);
     rt_mem_init();
     uint32_t entry;

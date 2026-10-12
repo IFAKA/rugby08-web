@@ -1,10 +1,10 @@
-/* dsoundproxy.c -- dsound.dll for the Wine reference run only (tools/run_wine.sh), built with the
+/* dsoundproxy.c -- dsound.dll for the Wine reference run only (tools/check/run_wine.sh), built with the
  * other proxies by tools/oracle/build_proxy.sh; no CRT, no Windows SDK.
  *
  * Mutes the original game while keeping a real DirectSound under it: with Wine's audio driver
  * disabled the game had no sound device and stalled on its loading screen. Every buffer is created
  * with DSBCAPS_CTRLVOLUME, set to DSBVOLUME_MIN, and later SetVolume calls are held there. With
- * RUGBY08_ORACLE_SOUND set it forwards untouched (tools/run_wine.sh --sound / --keep). */
+ * RUGBY08_ORACLE_SOUND set it forwards untouched (tools/check/run_wine.sh --sound / --keep). */
 typedef unsigned long DWORD;
 typedef void *HMODULE;
 typedef long HRESULT;

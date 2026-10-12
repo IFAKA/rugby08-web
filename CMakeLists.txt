@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(rugby08 C CXX)
 # Native (clang, macOS) and web (emcmake) builds of the statically recompiled game.
-# Generated code: gen/recomp (tools/lift.py) and gen/runtime (tools/gen_imports.py), never committed.
+# Generated code: gen/recomp (tools/lift/lift.py) and gen/runtime (tools/gen/gen_imports.py), never committed.
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -11,11 +11,11 @@ set(ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 # ---- lifted game code ----------------------------------------------------------------
 # -fwrapv -fno-strict-aliasing are required for correctness (runtime/DESIGN.md), as is the
 # RECOMP_LOCAL_REGS model the difftest verifies.
-# gen/aems/aems.c: code inside the AEMS sound banks (tools/aems_lift.py), run from the heap.
+# gen/aems/aems.c: code inside the AEMS sound banks (tools/lift/aems_lift.py), run from the heap.
 file(GLOB GEN_SRCS CONFIGURE_DEPENDS ${ROOT}/gen/recomp/recomp_*.c ${ROOT}/gen/recomp/recomp_dispatch.c ${ROOT}/gen/aems/aems.c)
 option(RECOMP_SPLIT "use build/web-gen (split giant functions) in a native build too, to check the split" OFF)
 if(EMSCRIPTEN OR RECOMP_SPLIT)
-  # build/web-gen/*.c: the giant lifted functions cut into parts (tools/split_big.py, run by ./init.sh build-web);
+  # build/web-gen/*.c: the giant lifted functions cut into parts (tools/lift/split_big.py, run by ./init.sh build-web);
   # V8 runs out of compiler memory (renderer crash) on the 850 KB wasm functions otherwise
   set(_split)
   foreach(s ${GEN_SRCS})
@@ -28,11 +28,14 @@ if(EMSCRIPTEN OR RECOMP_SPLIT)
   endforeach()
   set(GEN_SRCS ${_split})
 endif()
-add_library(recomp_gen STATIC ${GEN_SRCS})
+# game/overrides/: game functions written in C, built like the lifted code (tools/lift/lift.py renames
+# the lifted body of each to sub_X_lifted)
+file(GLOB_RECURSE GAME_SRCS CONFIGURE_DEPENDS ${ROOT}/game/overrides/*.c)
+add_library(recomp_gen STATIC ${GEN_SRCS} ${GAME_SRCS})
 if(EMSCRIPTEN OR RECOMP_SPLIT)
   target_include_directories(recomp_gen PRIVATE ${ROOT}/gen/recomp)
 endif()
-target_include_directories(recomp_gen PRIVATE ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include)
+target_include_directories(recomp_gen PRIVATE ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include ${ROOT}/game/include)
 target_compile_definitions(recomp_gen PRIVATE RECOMP_LOCAL_REGS)
 option(RUGBY_TRACE "lifted bodies record entry in a per-thread ring (dumped on fatal)" ON)
 if(RUGBY_TRACE)
@@ -61,18 +64,18 @@ file(GLOB_RECURSE RT_ALL_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/*.c ${ROOT}/runt
 # runtime/platform source changes.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_custom_command(OUTPUT ${ROOT}/gen/runtime/imports.c
-  COMMAND ${Python3_EXECUTABLE} ${ROOT}/tools/gen_imports.py
-  DEPENDS ${ROOT}/tools/gen_imports.py ${ROOT}/analysis/pe_analysis.json ${RT_ALL_SRCS}
+  COMMAND ${Python3_EXECUTABLE} ${ROOT}/tools/gen/gen_imports.py
+  DEPENDS ${ROOT}/tools/gen/gen_imports.py ${ROOT}/analysis/pe_analysis.json ${RT_ALL_SRCS}
   WORKING_DIRECTORY ${ROOT} COMMENT "gen_imports")
 # Guest D3D8 vtables, generated from d3d8to9's interface declarations (vtable order); slots bind
 # the HLE_D3D handlers runtime/d3d8 defines, so it reruns when those sources change.
 file(GLOB RT_D3D8_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/d3d8/*.cpp)
 add_custom_command(OUTPUT ${ROOT}/gen/runtime/d3d8_vtables.c
-  COMMAND ${Python3_EXECUTABLE} ${ROOT}/tools/gen_d3d8_bridges.py
-  DEPENDS ${ROOT}/tools/gen_d3d8_bridges.py ${ROOT}/third_party/d3d8to9/source/d3d8.hpp ${RT_D3D8_SRCS}
+  COMMAND ${Python3_EXECUTABLE} ${ROOT}/tools/gen/gen_d3d8_bridges.py
+  DEPENDS ${ROOT}/tools/gen/gen_d3d8_bridges.py ${ROOT}/third_party/d3d8to9/source/d3d8.hpp ${RT_D3D8_SRCS}
   WORKING_DIRECTORY ${ROOT} COMMENT "gen_d3d8_bridges")
 file(GLOB RT_CORE_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/core/*.c ${ROOT}/runtime/win32/*.c
-     ${ROOT}/runtime/d3d8/*.c ${ROOT}/runtime/d3d8/*.cpp)
+     ${ROOT}/runtime/d3d8/*.c ${ROOT}/runtime/d3d8/*.cpp ${ROOT}/runtime/debug/*.c ${ROOT}/runtime/debug/*.cpp)
 # ---- renderer: D3D9 on WebGL2 / desktop GL (render/webgl, grown from LostMyCode/d3d9-webgl, MIT) ----
 # The fixed-function shaders live in render/webgl/glsl/ and are embedded as raw string literals.
 file(GLOB RENDER_SRCS CONFIGURE_DEPENDS ${ROOT}/render/webgl/*.cpp)
@@ -135,15 +138,17 @@ if(EMSCRIPTEN)
   target_compile_options(rugby08 PRIVATE -pthread -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
   target_compile_options(rt_core PRIVATE -pthread -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
   target_compile_options(mojoshader PRIVATE -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
-  # wasm tail calls: RECOMP_ITAIL is musttail (tools/vendor_recomp_types.py), so a jmp never grows the stack
+  # wasm tail calls: RECOMP_ITAIL is musttail (tools/lift/vendor_recomp_types.py), so a jmp never grows the stack
   target_compile_options(recomp_gen PRIVATE -pthread -mtail-call -sSUPPORT_LONGJMP=wasm -fwasm-exceptions)
   # -O0 at link skips the wasm-opt -O3 pass (>1h and >24 GB on the 91 MB module); revisit for release builds.
   target_link_options(rugby08 PRIVATE -O0 -pthread -sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=16 -sEXIT_RUNTIME=1
     -sJSPI   # the Windows loop yields to the browser at every Present (d3d8_device.cpp) without Asyncify
     -sSUPPORT_LONGJMP=wasm -fwasm-exceptions
-    --pre-js=${ROOT}/platform/web/gamefs.js --shell-file=${ROOT}/platform/web/shell.html
+    --pre-js=${ROOT}/platform/web/js/gamefs.js --pre-js=${ROOT}/platform/web/js/audio.js
+    --pre-js=${ROOT}/platform/web/js/errors.js --shell-file=${ROOT}/platform/web/shell.html
     --preload-file=${ROOT}/Rugby08_unpacked.exe@/Rugby08_unpacked.exe)
-  set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/gamefs.js ${ROOT}/platform/web/shell.html)
+  set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/js/gamefs.js ${ROOT}/platform/web/js/audio.js
+    ${ROOT}/platform/web/js/errors.js ${ROOT}/platform/web/shell.html)
   add_custom_command(TARGET rugby08 POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:rugby08>/rugby08.html $<TARGET_FILE_DIR:rugby08>/index.html)
 endif()

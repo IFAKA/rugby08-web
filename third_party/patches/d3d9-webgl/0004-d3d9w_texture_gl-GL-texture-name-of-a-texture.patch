@@ -1,0 +1,40 @@
+From fc8d812be173f8eb45ccd65a8bb71caeac59630c Mon Sep 17 00:00:00 2001
+From: Facundo Arenas <facundoarenas29@gmail.com>
+Date: Sun, 11 Oct 2026 16:31:34 +0200
+Subject: [PATCH 4/8] d3d9w_texture_gl: GL texture name of a texture
+
+Lets the D3D8 bridge read a render-target texture back on the CPU (CopyRects / LockRect).
+---
+ d3d9.cpp | 4 ++++
+ d3d9.h   | 2 ++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/d3d9.cpp b/d3d9.cpp
+index f19ccfe..a230084 100644
+--- a/d3d9.cpp
++++ b/d3d9.cpp
+@@ -1130,6 +1130,8 @@ extern "C" void d3d9w_progps_use(D3D9WProgPS* p, const float (*consts)[4]) {
+     g_progps_consts = consts;
+ }
+ 
++// GL texture name behind a texture (render-target readback in the D3D8 bridge).
++extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t);
+ extern "C" void d3d9w_trace_draws(int on) {
+     if (g_trace_draws && !on) trace_fb_diff(true);       // the traced frame's last draw
+     if (!g_trace_draws && on) g_trace_fb.clear();
+@@ -4327,3 +4329,5 @@ extern "C" {
+         g_cached_texture = 0xFFFFFFFF;
+     }
+ }
++
++extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t) { return t ? static_cast<D3D9Texture *>(t)->GetGLTexture() : 0; }
+diff --git a/d3d9.h b/d3d9.h
+index 6306559..96661cc 100644
+--- a/d3d9.h
++++ b/d3d9.h
+@@ -984,3 +984,5 @@ extern "C" D3D9WProgPS* d3d9w_progps_create(const char* glsl, const unsigned cha
+ extern "C" void d3d9w_progps_use(D3D9WProgPS* p, const float (*consts)[4]);
+ // Print every draw's state while on (rugby08: RT_TRACE_DRAWS_FRAME=N traces frame N).
+ extern "C" void d3d9w_trace_draws(int on);
++// GL texture name of a texture (0 if none): lets the D3D8 bridge read a render-target texture back.
++extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t);

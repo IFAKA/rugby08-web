@@ -258,7 +258,6 @@ static FILE *g_miss_f;
  * surroundings are dumped to logs/dyncode/<va>.bin (u32 start, then 64 KiB of guest memory) so
  * tools/aems_capture.py can match the relocated module against the bank files. Native only. */
 static void dyncode_capture(uint32_t va) {
-#ifndef __EMSCRIPTEN__
     if (va < 0x10000u || (va >= RT_IMAGE_BASE && va < RT_IMAGE_END) || va >= RT_BRIDGE_HOST) return;
     uint32_t start = (va > 0x18000u ? va - 0x8000u : 0x10000u) & ~0xFFFu, n = 0x10000u;
     if (start + n > rt_guest_size) return;
@@ -270,9 +269,6 @@ static void dyncode_capture(uint32_t va) {
     fwrite(&start, 4, 1, f);
     fwrite(G2H(start), 1, n, f);
     fclose(f);
-#else
-    (void)va;
-#endif
 }
 
 void recomp_miss(int tail, uint32_t va, uint32_t from) {

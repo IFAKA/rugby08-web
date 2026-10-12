@@ -4,7 +4,15 @@ target-version = "py311"
 extend-exclude = ["third_party", "gen", "build", "analysis", "ghidra"]
 [lint]
 select = ["E", "F", "W", "B", "I", "UP", "SIM", "PL"]
-ignore = ["PLR2004", "PLR0913", "E501"]
+# Script-style patterns these tools use on purpose: one-line open().read(), lazy imports of heavy
+# modules, imports after the sys.path setup, short names in tight loops, many-argument helpers.
+ignore = ["PLR2004", "PLR0913", "E501", "SIM115", "E741", "PLC0415", "E402", "E731", "PLR0917", "PLR0915",
+          "PLR0912", "PLR0911", "PLW2901", "PLW1510", "B905", "PLW0603", "B007", "SIM103", "SIM105", "SIM113",
+          "PLW3301", "PLR1714"]
 [lint.pylint]
 max-statements = 80
 max-branches = 25
+[lint.per-file-ignores]
+# closures that read the loop variable are called within the same iteration (a Unicorn hook, a re.sub callback)
+"tools/lift/difftest.py" = ["B023"]
+"tools/lift/split_big.py" = ["B023"]

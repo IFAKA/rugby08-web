@@ -1,4 +1,4 @@
-/* aems.h -- EA AEMS sound-bank code lifted ahead of time (tools/aems_lift.py -> gen/aems/aems.c).
+/* aems.h -- EA AEMS sound-bank code lifted ahead of time (tools/lift/aems_lift.py -> gen/aems/aems.c).
  * The game copies each bank's resident image to the heap; its code was lifted at a canonical
  * address (aems_bank_t.canon), and aems_lookup maps heap or canonical addresses to it. */
 #ifndef AEMS_H
