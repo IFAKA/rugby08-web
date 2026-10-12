@@ -17,10 +17,17 @@ static int g_mdx, g_mdy, g_mdw;
 static uint8_t g_replay_buttons;      /* mouse buttons held by the input replay (ORed into DirectInput) */
 static int g_inited;                  /* SDL video initialised (set in video_init) */
 
+static int automated_run(void) { return rt_frame_limit > 0 || (rt_replay_path[0] && !rt_replay_live); }
+/* Deterministic mode (every netplay session) also keeps a virtual cursor: the guest must never see
+   this machine's real pointer, buttons or lock keys. */
+static int virtual_cursor(void) { return automated_run() || det_on(); }
+/* The real mouse buttons, or none when only the replay/netplay may drive input. */
+static uint32_t live_mouse(void) { return g_inited && !virtual_cursor() ? SDL_GetMouseState(NULL, NULL) : 0; }
+
 uint8_t plat_dik_down(uint32_t dik) { return dik < 256 ? g_dik_down[dik] : 0; }
 void plat_mouse_delta(int *dx, int *dy, int *dw) { *dx = g_mdx; *dy = g_mdy; *dw = g_mdw; g_mdx = g_mdy = g_mdw = 0; }
 uint8_t plat_mouse_buttons(void) {
-    uint32_t b = g_inited ? SDL_GetMouseState(NULL, NULL) : 0;
+    uint32_t b = live_mouse();
     return (uint8_t)((b & SDL_BUTTON_LMASK ? 1 : 0) | (b & SDL_BUTTON_RMASK ? 2 : 0) | (b & SDL_BUTTON_MMASK ? 4 : 0) |
                      g_replay_buttons);
 }
@@ -77,7 +84,7 @@ uint32_t plat_vk_to_scancode(uint32_t vk) {
 }
 
 uint8_t plat_vk_toggled(uint32_t vk) {
-    SDL_Keymod m = SDL_GetModState();
+    SDL_Keymod m = virtual_cursor() ? KMOD_NONE : SDL_GetModState();
     return vk == 0x14 ? (m & KMOD_CAPS) != 0 : vk == 0x90 ? (m & KMOD_NUM) != 0 : 0;
 }
 
@@ -97,10 +104,6 @@ uint8_t plat_vk_down(uint32_t vk) {
    cursor in screen coordinates instead; replay clicks set it. */
 static int g_vcur_x, g_vcur_y;
 static int g_rel, g_cx, g_cy;   /* captured-pointer mode and in-window position */
-static int automated_run(void) { return rt_frame_limit > 0 || (rt_replay_path[0] && !rt_replay_live); }
-/* Deterministic mode (every netplay session) also keeps a virtual cursor: the guest must never see
-   this machine's real pointer. */
-static int virtual_cursor(void) { return automated_run() || det_on(); }
 
 /* ---- window --------------------------------------------------------------------------------- */
 static SDL_Window *g_win;
@@ -347,7 +350,7 @@ static void push(uint32_t msg, uint32_t wp, uint32_t lp) {
 }
 
 static uint32_t mk_buttons(void) {
-    uint32_t b = SDL_GetMouseState(NULL, NULL), mk = 0;
+    uint32_t b = live_mouse(), mk = 0;
     if (b & SDL_BUTTON_LMASK) mk |= 0x01;
     if (b & SDL_BUTTON_RMASK) mk |= 0x02;
     if (b & SDL_BUTTON_MMASK) mk |= 0x10;

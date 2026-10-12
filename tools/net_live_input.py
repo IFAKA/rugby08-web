@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Netplay with live input in real browser pages: the relay server serves build/web, two Chrome pages
-(Playwright, headless) join one room; page 1 gets real key presses (S = Cross, arrows = stick).
+(Playwright, headless) join one room; page 1 gets real mouse clicks (which the game
+must never see) and key presses (S = Cross, arrows = stick).
 Pass: page 1 reports the local input, and both pages keep printing equal state hashes afterwards.
 One summary line; console logs in logs/net_live{1,2}.log."""
 import os, re, subprocess, sys, time
@@ -30,13 +31,18 @@ try:
             return False
         if not wait(lambda: all(any("session started" in l for l in lg) for lg in logs), 120):
             print("net_live_input: FAIL (sessions did not start)"); sys.exit(1)
-        pages[0].locator("canvas").click()
+        box = pages[0].locator("canvas").bounding_box()   # the mouse on one page only: held clicks and moves
+        cx, cy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+        for j in range(3):                               # (a real click once skipped the legal screen on one side)
+            pages[0].mouse.move(cx + 40 * j, cy); pages[0].mouse.down(); pages[0].wait_for_timeout(700); pages[0].mouse.up()
+            pages[0].mouse.down(button="right"); pages[0].wait_for_timeout(300); pages[0].mouse.up(button="right")
+        pages[0].keyboard.press("CapsLock")
         for key in ("s", "ArrowLeft"):
             pages[0].keyboard.down(key); pages[0].wait_for_timeout(400); pages[0].keyboard.up(key)
         got = wait(lambda: any(re.search(r"local input frame \d+ buttons 0001", l) for l in logs[0]), 60)
         def hashes(lg): return [l for l in lg if l.startswith("netplay: frame ")]
         n0 = len(hashes(logs[0]))
-        synced = wait(lambda: len(hashes(logs[0])) >= n0 + 2 and len(hashes(logs[1])) >= n0 + 2, 240)
+        synced = wait(lambda: len(hashes(logs[0])) >= n0 + 3 and len(hashes(logs[1])) >= n0 + 3, 300)
         h0, h1 = hashes(logs[0]), hashes(logs[1])
         k = min(len(h0), len(h1))
         same = synced and h0[:k] == h1[:k] and not any("DESYNC" in l for lg in logs for l in lg)
