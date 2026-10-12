@@ -1,5 +1,8 @@
 # Online play: host-authoritative netcode (plan, 2026-10-12)
 
+> Steps 1-5 built. The product and UX moved on: see **docs/plans/2026-10-13-online-party.md** (browser only,
+> ONLINE in the game's menus, every mode, WebRTC). Steps 6-8 below are superseded by it.
+
 Branch `online`, worktree `/Users/faka/code/projects/web/rugby08-online`. Track progress in
 `features.json` (ids `on.*`, in order) and 3–5 lines per step in PROGRESS.md. Never push or deploy
 without the user's explicit go.
