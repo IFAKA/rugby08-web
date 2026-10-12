@@ -20,13 +20,19 @@ Objective: run the full Rugby 08 (PE32 x86, MSVC 7.1, D3D8/DInput/DSound) in a b
 ## Hard constraints
 - Never commit EA content or derived binaries: `Game Files/`, `*.exe`, `gen/`, `build/`, `analysis/`, `ghidra/` are gitignored. Keep it that way.
 - Never publish or upload anything (no deploys, no pushes to remotes, no pastebins). Local only.
-- Reuse before writing: pcrecomp (lifter/runtime), xboxrecomp and burnout3 (ICALL dispatch, D3D8 semantics), d3d8to9, d3d9-webgl, SDL2 and ffmpeg (VP6). All are in `third_party/`. Read their docs before reimplementing anything.
+- Reuse before writing: pcrecomp (lifter/runtime), xboxrecomp and burnout3 (ICALL dispatch, D3D8 semantics), d3d8to9, MojoShader, SDL2 and ffmpeg (VP6). All are in `third_party/` (the renderer, grown from d3d9-webgl, is ours: `render/webgl/`). Read their docs before reimplementing anything.
 - Verification referee: behavior checks (trace logs, frame hashes, screenshots), never "it looks right".
 
-## Layout
-- `third_party/` submodules (pcrecomp, xboxrecomp, d3d8to9, d3d9-webgl)
-- `tools/` our scripts · `runtime/` our Win32/DirectX HLE + glue · `platform/native`, `platform/web`
-- `analysis/` pcrecomp/Ghidra outputs (ignored) · `gen/` lifted C (ignored) · `build/` (ignored) · `logs/` (ignored)
+## Layout and structure (docs/ARCHITECTURE.md; every source dir has a README.md)
+- `runtime/` Win32/DirectX for the game (`core/ win32/ d3d8/ debug/ include/`) · `render/webgl/` the renderer
+  (D3D9 subset on GL) · `platform/` host differences (`sdl/` shared, `native/`, `web/`) · `tools/` by job
+  (`lift/ gen/ check/ web/ analysis/ oracle/`) · `tests/replays/` scripted input.
+- `third_party/` submodules (pcrecomp, xboxrecomp, d3d8to9, mojoshader) · `analysis/ gen/ build/ logs/` ignored.
+- Rules, enforced by `./init.sh structure` and `./init.sh lint`: hand-written files <= 300 lines, one job per
+  file; `runtime/` is target-neutral (`__EMSCRIPTEN__` only in `platform/` and `render/`); debugging tools only in
+  `runtime/debug/`; new dirs get a README.md; run `./init.sh lint --fix` before committing.
+- Refactors (anything that must not change behaviour): `tools/check/regress.sh capture DIR --full` with the old
+  and the new binary, then `compare`: deterministic runs must match pixel for pixel and hash for hash.
 
 ## Standing instruction (from the Opus 5.5 prompting guide, for unattended runs)
 A standing instruction from the user, the person you are working for. It is about how your turns end. A message with no tool call in it ends your turn, and the work stops there until you are asked to continue. The user has seen you end turns in four ways while work they asked for was still owed, and does not want any of them. One: a long summary of what was done that closes by announcing the next step and has no tool call, so the next thing never starts. Two: an offer to carry on with something unless the user would prefer otherwise, which stops to wait for an answer the user was not going to give. Three: a list of decisions for the user when, by your own account, none of them blocks the rest of the work. Four: deciding that this is a good place to report, because the turn has been long or a milestone is done. Status notes are welcome, and so are your recommendations on open decisions, but put them in the same message as your next tool call and carry on with whatever does not depend on the user's answer. If you notice yourself inviting the user to redirect you or offering to wait, delete it and do the next thing. The stops the user does want are the ones where nothing can move without them, or where the thing blocking you is deliberately protected from you. This does not override the need for confirmation on risky or destructive actions.

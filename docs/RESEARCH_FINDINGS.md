@@ -27,7 +27,7 @@ When protector stubs fill a table at runtime (e.g., 0x1055000 dispatcher), emula
 2. Capture final table state
 3. Add targets to catalog as entries
 
-**Your Case:** Six runtime-dispatcher sites (0xAC54E0, 0xAC66C0, 0xAC50B0) fill lookup tables. Extend `tools/stubemu.py` to resolve them.
+**Your Case:** Six runtime-dispatcher sites (0xAC54E0, 0xAC66C0, 0xAC50B0) fill lookup tables. Extend `tools/lift/stubemu.py` to resolve them.
 
 **Why:** The 0x13A2D97 crash (NEXT item 1) is unreachable because the dispatcher table isn't known statically.
 
@@ -102,9 +102,9 @@ Not critical for "playable," but available if needed for display issues.
    - Rebuild, playtest Stadium Select
 
 2. **Resolve dispatcher table** (2–4 hours)
-   - Extend `tools/stubemu.py` to emulate 0x1055000 dispatcher init
+   - Extend `tools/lift/stubemu.py` to emulate 0x1055000 dispatcher init
    - Add resolved targets to `build_catalog.py` entries
-   - Run `tools/lift_fixpoint.sh`
+   - Run `tools/lift/lift_fixpoint.sh`
    - Rebuild, playtest
 
 3. **Playtest:** Run `scripts/play.sh`, reach kickoff, note any crashes
