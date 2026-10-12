@@ -1,0 +1,27 @@
+# Lint for hand-written C/C++ (tools/check/lint.sh). gen/, third_party/ and vendored files are never checked.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-reserved-identifier,
+  -bugprone-macro-parentheses,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-unchecked-string-to-number-conversion,
+  -bugprone-switch-missing-default-case,
+  -bugprone-casting-through-void,
+  performance-*,
+  -performance-no-int-to-ptr,
+  -performance-enum-size,
+  readability-function-size,
+  readability-function-cognitive-complexity,
+  misc-redundant-expression,
+  misc-unused-parameters
+CheckOptions:
+  readability-function-size.LineThreshold: 100
+  readability-function-size.StatementThreshold: 150
+  readability-function-cognitive-complexity.Threshold: 40
+  readability-function-cognitive-complexity.IgnoreMacros: true
+HeaderFilterRegex: '(runtime|platform|render|game)/'
+ExcludeHeaderFilterRegex: 'third_party/'

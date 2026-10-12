@@ -1,5 +1,5 @@
 # EA-owned content: never commit
-Game Files/
+/Game Files
 *.exe
 *.EXE
 *.big
@@ -7,14 +7,15 @@ Game Files/
 *.viv
 *.vp6
 # generated / heavy
-gen/
-build/
-ghidra/
-logs/
-analysis/
+/gen
+/build
+/ghidra
+/logs
+/analysis
 *.log
 .DS_Store
 __pycache__/
-.venv/
+/.venv
 third_party/wine-specs/
-userdata/
+/userdata
+node_modules/

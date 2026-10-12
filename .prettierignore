@@ -1,0 +1,9 @@
+gen/
+build/
+analysis/
+ghidra/
+logs/
+third_party/
+node_modules/
+*.md
+features.json

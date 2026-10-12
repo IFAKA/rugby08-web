@@ -1,0 +1,10 @@
+# Python tools (tools/). One summary line per tool is a project rule; ruff enforces the rest.
+line-length = 120
+target-version = "py311"
+extend-exclude = ["third_party", "gen", "build", "analysis", "ghidra"]
+[lint]
+select = ["E", "F", "W", "B", "I", "UP", "SIM", "PL"]
+ignore = ["PLR2004", "PLR0913", "E501"]
+[lint.pylint]
+max-statements = 80
+max-branches = 25
