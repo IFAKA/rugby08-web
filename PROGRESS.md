@@ -318,3 +318,4 @@ Next: `./init.sh next` shows what to fix.
 ## 2026-10-11 (night 4) — grey band / stadium overlap: D3D clip-space z not remapped (built, native.menu PASS, not playtested)
 - Found by reading d3d9-webgl: gl_Position used the D3D projection as is. D3D clips z to [0,w], GL to [-w,w], so geometry nearer than the near plane (low POV camera, big stadium/pitch polygons) was not clipped and drew in front of everything. Fix: gl_Position.z = z*2 - w in the fixed-function VS and in the MojoShader-translated VS (MOJOSHADER_DEPTH_CLIPPING was never defined). Submodule d3d9-webgl edit, uncommitted.
 - Next: user checks POV camera for the grey band; if it remains, trace draws (RT_TRACE_DRAWS_FRAME) on a frame that shows it.
+- web: fps counter at top-left of the canvas (shell.html #fps, updated every 0.5 s from Module.rtFrames, which Present bumps). Follows the canvas into fullscreen. Headless check: intro video reads a steady 30 fps.

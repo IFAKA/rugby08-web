@@ -25,7 +25,10 @@
     </div>
 
     <div class="emscripten_border">
-      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+      <div id="view" style="position:relative;width:fit-content;margin:0 auto">
+        <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+        <div id="fps" style="position:absolute;top:0;left:0;padding:2px 6px;font:bold 14px monospace;color:#0f0;background:rgba(0,0,0,.5);pointer-events:none;z-index:1"></div>
+      </div>
     </div>
     <textarea id="output" rows="8"></textarea>
 
@@ -96,6 +99,17 @@
         }
       };
       setStatus('Downloading...');
+      // fps: game Presents per second (Module.rtFrames is bumped by IDirect3DDevice8::Present)
+      var fpsElement = document.getElementById('fps'), fpsLast = { t: performance.now(), n: 0 };
+      setInterval(() => {
+        var t = performance.now(), n = Module.rtFrames | 0;
+        if (n) fpsElement.textContent = Math.round((n - fpsLast.n) * 1000 / (t - fpsLast.t)) + ' fps';
+        fpsLast = { t: t, n: n };
+      }, 500);
+      // fullscreen puts the canvas in its own container: move the counter along with it
+      document.addEventListener('fullscreenchange', () => {
+        (document.fullscreenElement || document.getElementById('view')).appendChild(fpsElement);
+      });
       window.onerror = window.onunhandledrejection = () => {
         // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
         setStatus('Exception thrown, see JavaScript console');

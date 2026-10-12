@@ -193,6 +193,7 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     }
     plat_gl_swap();
 #ifdef __EMSCRIPTEN__
+    EM_ASM(Module.rtFrames = (Module.rtFrames | 0) + 1);   // read by the shell's fps counter
     emscripten_sleep(0);   // JSPI: hand the frame to the browser (present, input, timers), then resume
 #endif
     return D3D_OK_;
