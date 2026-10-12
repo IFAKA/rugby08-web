@@ -543,7 +543,16 @@ static void desk_record(const SDL_Event *e) {
 }
 int plat_desk_take(plat_desk_ev_t *out, int max) {
     if (g_inited) { SDL_Event e; while (SDL_PollEvent(&e)) desk_record(&e); }
-    int n = g_desk_n < max ? g_desk_n : max;
+    /* A press and its release never share a frame: the game polls keys and buttons once a frame
+       (DirectInput) and would never see a quick click or tap (or several that a hitch bunched up). */
+    int n = 0;
+    for (; n < g_desk_n && n < max; n++) {
+        const plat_desk_ev_t *d = &g_desk[n];
+        if ((d->type != PLAT_DESK_KEY && d->type != PLAT_DESK_BUTTON) || d->a) continue;
+        int pressed = 0;
+        for (int j = 0; j < n && !pressed; j++) pressed = g_desk[j].type == d->type && g_desk[j].x == d->x && g_desk[j].a;
+        if (pressed) break;
+    }
     memcpy(out, g_desk, (size_t)n * sizeof *out);
     memmove(g_desk, g_desk + n, (size_t)(g_desk_n - n) * sizeof *g_desk);
     g_desk_n -= n;
