@@ -9,6 +9,39 @@
 #ifdef RT_INTERP
 #include "shadow_int.h"
 
+/* Memory the interpreter wrote, outside the dead stack below the entry esp: the dwords that differ
+ * from the lifted run (traced, the first 24), and in *close the floats that differ only by rounding. */
+static int mem_diffs(const shadow_t *sh, int *close) {
+    int ndiff = 0, last = -1;
+    for (size_t i = 0; i < sh->nfin; i++) {
+        uint32_t a = sh->fin[i].a;
+        if (a < sh->esp0 && a >= sh->esp0 - 0x40000) continue;
+        if (a >= sh->esp0 && a < sh->esp0 + 4) continue;           /* the swapped return slot */
+        if (*(uint8_t *)G2H(a) == sh->fin[i].v) continue;
+        uint32_t d = a & ~3u;
+        if ((int)d == last) continue;
+        last = (int)d;
+        uint8_t iv[4];
+        memcpy(iv, G2H(d), 4);                    /* interpreter's dword: its bytes over ours */
+        for (size_t j = i; j < sh->nfin && sh->fin[j].a < d + 4; j++) iv[sh->fin[j].a - d] = sh->fin[j].v;
+        for (size_t j = i; j > 0 && sh->fin[j - 1].a >= d; j--) iv[sh->fin[j - 1].a - d] = sh->fin[j - 1].v;
+        float lf, inf;
+        memcpy(&lf, G2H(d), 4);
+        memcpy(&inf, iv, 4);
+        if (isfinite(lf) && isfinite(inf) && fabsf(lf) > 1e-30f && fabsf(lf - inf) <= 1e-5f * fabsf(inf)) {
+            (*close)++;
+            continue;
+        }
+        ndiff++;
+        uint32_t iw;
+        memcpy(&iw, iv, 4);
+        if (ndiff <= 24)
+            rt_trace("shadow sub_%08X %s #%u   [%08X] lifted %08X (%g) interp %08X (%g) written at %08X", sh->va,
+                     sh->name, sh->n, d, rd(d), lf, iw, inf, sh->fin[i].pc);
+    }
+    return ndiff;
+}
+
 void shadow_ret(void) {
     shadow_t sh = t_sh;
     t_sh_busy = 0;
@@ -25,34 +58,7 @@ void shadow_ret(void) {
         if (!(a == b || fabs(a - b) <= 1e-9 * fabs(b) || (isnan(a) && isnan(b))))
             p += sprintf(p, " st0 %.9g/%.9g", a, b);
     }
-    /* memory the interpreter wrote, outside the dead stack below the entry esp */
-    int ndiff = 0, close = 0, last = -1;
-    for (size_t i = 0; i < sh.nfin; i++) {
-        uint32_t a = sh.fin[i].a;
-        if (a < sh.esp0 && a >= sh.esp0 - 0x40000) continue;
-        if (a >= sh.esp0 && a < sh.esp0 + 4) continue;           /* the swapped return slot */
-        if (*(uint8_t *)G2H(a) == sh.fin[i].v) continue;
-        uint32_t d = a & ~3u;
-        if ((int)d == last) continue;
-        last = (int)d;
-        uint8_t iv[4];
-        memcpy(iv, G2H(d), 4);                    /* interpreter's dword: its bytes over ours */
-        for (size_t j = i; j < sh.nfin && sh.fin[j].a < d + 4; j++) iv[sh.fin[j].a - d] = sh.fin[j].v;
-        for (size_t j = i; j-- > 0 && sh.fin[j].a >= d;) iv[sh.fin[j].a - d] = sh.fin[j].v;
-        float lf, inf;
-        memcpy(&lf, G2H(d), 4);
-        memcpy(&inf, iv, 4);
-        if (isfinite(lf) && isfinite(inf) && fabsf(lf) > 1e-30f && fabsf(lf - inf) <= 1e-5f * fabsf(inf)) {
-            close++;
-            continue;
-        }
-        ndiff++;
-        uint32_t iw;
-        memcpy(&iw, iv, 4);
-        if (ndiff <= 24)
-            rt_trace("shadow sub_%08X %s #%u   [%08X] lifted %08X (%g) interp %08X (%g) written at %08X", sh.va,
-                     sh.name, sh.n, d, rd(d), lf, iw, inf, sh.fin[i].pc);
-    }
+    int close = 0, ndiff = mem_diffs(&sh, &close);
     static unsigned checked, bad;
     checked++;
     if (regs[0] || ndiff) bad++;

@@ -64,7 +64,7 @@ HLE(FindFirstFileA) {
     add_dir(fs, host, pat);
     char over[2048];
     path_to_host(dir, over, sizeof over, 1);
-    if (strcmp(over, host)) add_dir(fs, over, pat);
+    if (strcmp(over, host) != 0) add_dir(fs, over, pat);
     if (!fs->n) {
         free(fs);
         set_err(ERROR_FILE_NOT_FOUND_);

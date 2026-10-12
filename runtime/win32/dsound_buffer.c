@@ -173,10 +173,13 @@ static uint32_t sb_Play(const uint32_t *a) {   /* (this, reserved, priority, fla
 static uint32_t sb_SetCurrentPosition(const uint32_t *a) {
     dsbuf_t *b = buf(a);
     pthread_mutex_lock(&g_ds_mu);
-    if (b->block && a[1] < b->size) b->pos = a[1] / b->block;
-    if (det_on() && b->block && a[1] < b->size) {
-        b->vpos0 = a[1] / b->block;
-        b->vt0 = det_now_ns();
+    if (b->block && a[1] < b->size) {
+        uint32_t frame = a[1] / b->block;   /* the cursor moves to a whole frame */
+        b->pos = frame;
+        if (det_on()) {
+            b->vpos0 = frame;
+            b->vt0 = det_now_ns();
+        }
     }
     pthread_mutex_unlock(&g_ds_mu);
     return DS_OK;

@@ -6,11 +6,9 @@
 # Game log: logs/play-<time>.log per run (logs/play.log links to the newest).
 cd "$(dirname "$0")/.." || exit 1
 MUTE_ENV=
-MENU_ARGS=
 for a in "$@"; do
   case "$a" in
     --mute) MUTE_ENV=SDL_AUDIODRIVER=dummy ;;
-    --menu) MENU_ARGS="--replay-live $PWD/tests/replays/skip_to_menu.txt" ;; # skip intro + title, land on the main menu
     *) set -- "$@" "$a" ;;
   esac
   shift
@@ -67,4 +65,4 @@ exec open -n ${MUTE_ENV:+--env "$MUTE_ENV"} "$APP" --args \
   --exe "$ROOT/Rugby08_unpacked.exe" \
   --game-dir "$ROOT/Game Files" \
   --user-dir "$ROOT/userdata" \
-  --log "$ROOT/$LOG" --log-input $MENU_ARGS "$@"
+  --log "$ROOT/$LOG" --log-input "$@"

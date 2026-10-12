@@ -12,14 +12,16 @@ MODE=${1:-}
 V=.venv/bin
 N=node_modules/.bin
 
+# tracked and new (untracked, not ignored) files: a gate must see a file before its first commit
+lsf() { git ls-files --cached --others --exclude-standard "$@"; }
 c_files() {
-  git ls-files 'runtime/*.c' 'runtime/*.cpp' 'runtime/*.h' 'runtime/*.hpp' 'platform/*.c' 'platform/*.h' \
+  lsf 'runtime/*.c' 'runtime/*.cpp' 'runtime/*.h' 'runtime/*.hpp' 'platform/*.c' 'platform/*.h' \
     'render/*.cpp' 'render/*.h' 'game/*.c' 'game/*.h' |
     grep -v -e '/third_party/' -e 'recomp/recomp_types.h' -e '/glshim/'
 }
-py_files() { git ls-files 'tools/*.py'; }
-sh_files() { git ls-files '*.sh' | grep -v '^third_party/'; }
-js_files() { git ls-files 'platform/web/*.js'; }
+py_files() { lsf 'tools/*.py'; }
+sh_files() { lsf '*.sh' | grep -v '^third_party/'; }
+js_files() { lsf 'platform/web/*.js'; }
 
 if [ "$MODE" = --fix ]; then
   c_files | xargs "$V/clang-format" -i

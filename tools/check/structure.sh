@@ -7,6 +7,8 @@
 #   vendor   third_party/ submodules sit on an upstream commit (our changes live in third_party/patches/)
 #   tools/check/structure.sh [--report]   (--report: always exit 0)
 cd "$(dirname "$0")/../.." || exit 1
+# tracked and new (untracked, not ignored) files: a gate must see a file before its first commit
+lsf() { git ls-files --cached --others --exclude-standard "$@"; }
 mkdir -p logs
 LOG=logs/structure.log
 : >"$LOG"
@@ -22,16 +24,16 @@ while read -r f; do
     echo "$n $f" >>"$LOG"
     size=$((size + 1))
   fi
-done < <(git ls-files 'runtime/*' 'platform/*' 'render/*' 'game/*' 'tools/*' 'scripts/*' |
+done < <(lsf 'runtime/*' 'platform/*' 'render/*' 'game/*' 'tools/*' 'scripts/*' |
   grep -E '\.(c|cpp|h|hpp|js|py|sh|html|glsl|vert|frag)$' | grep -vE "$EXEMPT")
 
 echo "==== web (__EMSCRIPTEN__ in runtime/)" >>"$LOG"
-web=$(git grep -c '__EMSCRIPTEN__' -- 'runtime/*.c' 'runtime/*.cpp' 'runtime/*.h' 'runtime/*.hpp' 'game/*.c' 'game/*.h' |
+web=$(git grep --untracked -c '__EMSCRIPTEN__' -- 'runtime/*.c' 'runtime/*.cpp' 'runtime/*.h' 'runtime/*.hpp' 'game/*.c' 'game/*.h' |
   grep -vE '^(platform/|render/|runtime/third_party/|runtime/core/heap\.c:)' | tee -a "$LOG" | grep -c .)
 
 echo "==== readme (source directories without README.md)" >>"$LOG"
 readme=0
-for d in $(git ls-files 'runtime/*' 'platform/*' 'render/*' 'game/*' 'tools/*' | xargs -n1 dirname | sort -u |
+for d in $(lsf 'runtime/*' 'platform/*' 'render/*' 'game/*' 'tools/*' | xargs -n1 dirname | sort -u |
   grep -vE '^(runtime/third_party|platform/native/glshim)'); do
   if [ ! -f "$d/README.md" ]; then
     echo "$d" >>"$LOG"
