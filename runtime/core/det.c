@@ -153,8 +153,22 @@ int det_wait(det_ready_fn ready, void *arg, uint64_t deadline) {
     return ok;
 }
 
+/* Sleep(0) gives up the time slice and no time. A thread that calls it DET_SPIN times without a
+ * Present in between is waiting for time to pass, as a clock-polling thread is (det_clock_read):
+ * the movie player loops `while (!frame_due()) { tasks; SleepEx(0); }` until EA's sound clock
+ * reaches the next frame. Its loop body is too long for the clock-read rule, so time crept only
+ * by the stall rule (0.1 ms per 4096 function entries): the intro ran at 7 fps in the browser,
+ * against 25 natively. From the DET_SPIN-th on, each Sleep(0) passes DET_SPIN_NS. Per-thread
+ * counts on the guest's own code path: deterministic. Ordinary frames never get there. */
+static volatile uint32_t g_frame_no;   /* the last det_frame */
+static RECOMP_TLS uint32_t t_s0_frame, t_s0_n;
 void det_sleep_ms(uint32_t ms) {
-    if (!ms) { det_yield(); return; }
+    if (!ms) {
+        if (t_s0_frame != g_frame_no) { t_s0_frame = g_frame_no; t_s0_n = 0; }
+        if (++t_s0_n >= DET_SPIN) __atomic_add_fetch(&g_vt, DET_SPIN_NS, __ATOMIC_RELAXED);
+        det_yield();
+        return;
+    }
     det_wait(NULL, NULL, det_now_ns() + (uint64_t)ms * 1000000ull);
 }
 
@@ -273,6 +287,7 @@ void det_frame(uint32_t frame) {
     static unsigned over, n;   /* frames whose work ran past their 1/60 s slot (dt > 1/60 there) */
     if (slot > g_vt) __atomic_store_n(&g_vt, slot, __ATOMIC_RELAXED); else over++;
     g_slices = 0;
+    g_frame_no = frame;
     if (++n == 600) {
         rt_log("det: %u of 600 frames ran past their slot; per frame %u scheduling points, %u thread hand-overs",
                over, g_scheds / 600, g_handoffs / 600);

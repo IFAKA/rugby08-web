@@ -191,7 +191,39 @@ void recomp_fbstp(uint32_t va, double v);
 static inline uint16_t recomp_fist16(double r) { return (r >= -32768.0 && r < 32768.0) ? (uint16_t)(int16_t)r : 0x8000u; }
 static inline uint32_t recomp_fist32(double r) { return (r >= -2147483648.0 && r < 2147483648.0) ? (uint32_t)(int32_t)r : 0x80000000u; }
 static inline uint64_t recomp_fist64(double r) { return (r >= -9223372036854775808.0 && r < 9223372036854775808.0) ? (uint64_t)(int64_t)r : 0x8000000000000000ull; }
+/* MSVC 7.1 _ftol2, x87 body (tools/lift_ext.py FTOL2, matched by its bytes): fistp st0 by the control
+   word, then step the result one toward zero when the rounding went away from it (the sign of
+   (float)(x - r)). Pops st0; edx:eax = the truncated value, ecx as that code leaves it. Its scratch
+   stores below esp are not made: nothing reads them. Called per audio sample by EA's mixer. */
+static inline void recomp_ftol2(double x, uint16_t cw, uint32_t *eax, uint32_t *ecx, uint32_t *edx) {
+    uint64_t r = recomp_fist64(fp_round_cw(x, cw));
+    uint32_t lo = (uint32_t)r, hi = (uint32_t)(r >> 32), sgn;
+    if (lo == 0) {                                   /* je 0x..77: the sign comes from the high dword */
+        if ((hi & 0x7FFFFFFFu) == 0) { *eax = 0; *edx = hi; return; }
+        sgn = hi;
+    } else {
+        float xf = (float)x; memcpy(&sgn, &xf, 4);
+    }
+    float df = (float)(x - (double)(int64_t)r); uint32_t c; memcpy(&c, &df, 4);
+    uint64_t v = r;
+    if ((int32_t)sgn < 0) { c ^= 0x80000000u; v += (c > 0x80000000u); }   /* add ecx, 0x7fffffff; adc */
+    else                  { v -= (c > 0x80000000u); }                      /* add ecx, 0x7fffffff; sbb */
+    *ecx = c + 0x7FFFFFFFu; *eax = (uint32_t)v; *edx = (uint32_t)(v >> 32);
+}
 """
+# Function entry, the common case inline: with no debug hook armed (runtime/core/log.c
+# entry_hooks_init) an entry only counts itself and every 4096th lets other guest threads run.
+# The out-of-line call per entry cost 10% of the intro movie's frame in the browser.
+enter_old = "#define RECOMP_ENTER(va) do { g_cur_func = (va); recomp_trace_enter(va); } while (0)"
+enter_new = """extern int rt_entry_hooks;
+extern RECOMP_TLS uint32_t t_enter_idx;
+void rt_guest_yield(void);
+#define RECOMP_ENTER(va) do { g_cur_func = (va); \\
+    if (__builtin_expect(rt_entry_hooks == 0, 1)) { if ((++t_enter_idx & 4095) == 0) rt_guest_yield(); } \\
+    else recomp_trace_enter(va); } while (0)"""
+if t.count(enter_old) != 1:
+    sys.exit("vendor_recomp_types: RECOMP_ENTER (RECOMP_TRACE) not found exactly once")
+t = t.replace(enter_old, enter_new)
 i = t.rindex("#endif")
 t = t[:i] + ext + t[i:]
 

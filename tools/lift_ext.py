@@ -86,7 +86,31 @@ def _is_ud(insn):
     return False
 
 
+# MSVC 7.1 _ftol2, x87 body (5 copies in Rugby08_unpacked.exe): a call to it is lifted as
+# recomp_ftol2 (vendor_recomp_types.py), not as a call. EA's mixer runs it per audio sample.
+FTOL2 = bytes.fromhex(
+    "558bec83ec2083e4f0d9c0d9542418df7c2410df6c24108b5424188b44241085c0743cdee985d2791ed91c248b0c24"
+    "81f10000008081c1ffffff7f83d0008b54241483d200eb2cd91c248b0c2481c1ffffff7f83d8008b54241483da00eb"
+    "148b542414f7c2ffffff7f75b8d95c2418d95c2418c9c3")
+JCC8 = ("jo", "jno", "jb", "jae", "je", "jne", "jbe", "ja", "js", "jns", "jp", "jnp", "jl", "jge", "jle", "jg")
+
+
 class Lifter(lift32.Lifter):
+    code = None        # image bytes from code_lo (tools/lift.py), for looking at a call's target
+    code_lo = 0
+
+    def _jcc_ret_leaf(self, t):
+        """The jcc of a callee whose whole body is `jcc rel8; ret`, else None."""
+        o = t - self.code_lo
+        if self.code is None or o < 0 or o + 3 > len(self.code):
+            return None
+        b = self.code
+        return JCC8[b[o] - 0x70] if 0x70 <= b[o] <= 0x7F and b[o + 2] == 0xC3 else None
+
+    def _is_ftol2(self, t):
+        o = t - self.code_lo
+        return self.code is not None and o >= 0 and self.code[o:o + len(FTOL2)] == FTOL2
+
     def _fault(self, insn, what, comment):
         return [f'recomp_fault(0x{insn.address:08X}u, "{what} {insn.mnemonic}"); '
                 f'{{ RECOMP_REGS_OUT(); return; }} {comment}']
@@ -123,6 +147,23 @@ class Lifter(lift32.Lifter):
         if m == "call" and ops and ops[0].type == lift32.X86_OP_IMM and \
                 (ops[0].imm & 0xFFFFFFFF) == insn.address + insn.size:
             return [f"PUSH32(esp, 0x{insn.address + insn.size:08X}u); {comment}"]
+
+        # A call to a `jcc rel8; ret` leaf tests the caller's flags: MSVC's /RTC `cmp esi, esp;
+        # call _RTC_CheckEsp` follows nearly every call in EA's debug-built sound library (15% of
+        # the intro movie's frame in the browser, all call overhead). Lifted inline: when the
+        # condition fails the callee would only have pushed and popped the return address and
+        # handed the flags back, so that is all that happens; when it holds, the real call runs.
+        if m == "call" and ops and ops[0].type == lift32.X86_OP_IMM:
+            t = ops[0].imm & 0xFFFFFFFF
+            if self._is_ftol2(t) and t not in self.iat_map:
+                return [f"recomp_ftol2(fp_pop(), _fpu_cw, &eax, &ecx, &edx); /* inline _ftol2 */ {comment}"]
+            jcc = self._jcc_ret_leaf(t)
+            if jcc and t not in self.iat_map and t not in self.func_names and \
+                    (self.lifted is None or t in self.lifted):
+                cond = self._make_condition(jcc)
+                self._flag_state = None
+                return [f"if ({cond}) {{ RECOMP_CALL(sub_{t:08X}); RECOMP_FLAGS_IN(); }} "
+                        f"else MEM32(esp - 4) = RECOMP_RETADDR; /* inline {jcc}; ret */ {comment}"]
 
         # --- aliases onto lift32's own implementations ---------------------
         alias = {"fucompp": "fcompp", "fcompi": "fcomip", "fucompi": "fucomip",

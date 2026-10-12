@@ -243,6 +243,20 @@ void plat_gl_set_size(int w, int h) {
    players could not change direction. */
 static double g_wait_ticks;   /* time spent sleeping in frame_pace (not game work) */
 
+/* Deterministic mode: the guest's time is virtual (runtime/core/det.c), so a Present stands for the
+   virtual time it advanced: 1/60 s for an ordinary frame, a whole movie frame (40 ms) when the
+   movie player presents only once the next one is due (paced at 1/60 the intro ran 2.4x fast),
+   0 while frames catch up with time a loading jump already passed. Capped: a long stall has
+   already taken its wall time. -1 outside deterministic mode. */
+static double det_period_ms(void) {
+    static uint64_t last;
+    if (!det_on()) return -1;
+    uint64_t vt = det_now_ns();
+    double d = last && vt >= last ? (double)(vt - last) / 1e6 : 1000.0 / 60.0;
+    last = vt;
+    return d > 100.0 ? 100.0 : d;
+}
+
 static void frame_pace(void) {
     static double period = -1, next;
     if (period < 0) {
@@ -252,9 +266,9 @@ static void frame_pace(void) {
         next = 0;
     }
     if (period <= 0) return;
-    double now = (double)SDL_GetPerformanceCounter();
+    double now = (double)SDL_GetPerformanceCounter(), dp = det_period_ms();
     if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
-    next += period;
+    next += dp < 0 ? period : dp * (double)SDL_GetPerformanceFrequency() / 1000.0;
     double wait = next - now;
     if (wait > 0) {
         uint32_t ms = (uint32_t)(wait * 1000.0 / (double)SDL_GetPerformanceFrequency());
@@ -322,13 +336,13 @@ EM_ASYNC_JS(void, js_frame_wait, (double ms), {
 });
 void plat_frame_yield(void) { js_frame_wait(0); }
 
-/* 60 frames per second of wall time. Deterministic mode (netplay) counts game time in frames, so
-   it needs exactly that; normal play measures real time and gets the same cap natively. */
+/* 60 frames per second of wall time; in deterministic mode (netplay) the virtual time each Present
+   advanced (det_period_ms). Normal play measures real time and gets the same cap natively. */
 static void web_pace(void) {
     static double next;
-    double now = emscripten_get_now(), period = 1000.0 / 60.0;
+    double now = emscripten_get_now(), period = 1000.0 / 60.0, dp = det_period_ms();
     if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
-    next += period;
+    next += dp < 0 ? period : dp;
     js_frame_wait(next - now);
 }
 #endif

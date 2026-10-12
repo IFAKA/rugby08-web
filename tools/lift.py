@@ -46,6 +46,7 @@ def _init():
     _G["end"] = body_ends(cat, ranges.CODE_HI)
     lifter = lift_ext.Lifter(iat_map=_G["iat"])
     lifter.lifted = set(cat)     # calls to anything else go through RECOMP_ICALL (logged miss)
+    lifter.code, lifter.code_lo = _G["code"], ranges.CODE_LO   # lift_ext: inline `jcc; ret` leaves
     _G["lifter"] = lifter
 
 def body_ends(entries, code_end):

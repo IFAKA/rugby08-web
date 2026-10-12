@@ -54,7 +54,7 @@ void rt_fatal(const char *fmt, ...) {
 #define ENTER_RING 256
 volatile uint32_t rt_present_frame;
 static RECOMP_TLS uint32_t t_enter[ENTER_RING][3];
-static RECOMP_TLS uint32_t t_enter_idx;
+RECOMP_TLS uint32_t t_enter_idx;   /* counted inline by RECOMP_ENTER (recomp_types.h) */
 /* RT_COVERAGE="from-to:file[,from-to:file...]" (presented frames): every lifted function entered
  * during a window is written to its file, one VA per line (rt_coverage_frame from d3d8 Present). */
 static uint8_t *g_cov;              /* one bit per byte of [RT_IMAGE_BASE, RT_IMAGE_END) */
@@ -292,6 +292,43 @@ static void selftest_crt(void) {
         while (g_fp_top > top) { for (int k = 0; k < 7; k++) g_st[k] = g_st[k + 1]; g_st[7] = 0.0; g_fp_top--; }
         n++;
         if (g != h && bad++ < 8) rt_trace("crt selftest: _ftol(%g) = %d, C cast %d", f[i], g, h);
+    }
+    /* The lifter's inline _ftol2 (recomp_ftol2, tools/lift_ext.py FTOL2) against the lifted body
+       itself: eax, ecx, edx and the stack depth, in every rounding mode, over halves, 2^31/2^32/2^63
+       edges, infinities, NaN and a fixed pseudo-random spread. */
+    {
+        double w[96]; unsigned nw = 0;
+        static const double e[] = { 0.0, -0.0, 0.5, -0.5, 0.49999999999, 1.5, -1.5, 2.5, -2.5, 1e-300, -1e-300,
+            2147483647.5, -2147483648.5, 4294967295.5, 4294967296.0, -4294967296.5, 4294967296.25,
+            9007199254740993.0, 9.2233720368547748e18, -9.2233720368547758e18, 9.3e18, -9.3e18,
+            INFINITY, -INFINITY, NAN };
+        for (unsigned i = 0; i < sizeof e / sizeof *e; i++) w[nw++] = e[i];
+        uint32_t s = 12345u;
+        while (nw < sizeof w / sizeof *w) {
+            s = s * 1103515245u + 12345u;
+            double m = (double)(int32_t)s / 65536.0;
+            w[nw] = (nw & 1) ? m : m * 4096.0 * 1048576.0;
+            nw++;
+        }
+        uint16_t cw0 = g_fpu_cw;
+        for (unsigned rc = 0; rc < 4; rc++)
+            for (unsigned i = 0; i < nw; i++) {
+                uint16_t cw = (uint16_t)((cw0 & ~0x0C00u) | (rc << 10));
+                uint32_t a = 0x11111111u, c = 0x22222222u, d = 0x33333333u;
+                recomp_ftol2(w[i], cw, &a, &c, &d);
+                int top = g_fp_top;
+                for (int k = 7; k > 0; k--) g_st[k] = g_st[k - 1];
+                g_st[0] = w[i]; g_fp_top++;
+                g_fpu_cw = cw; g_ecx = 0x22222222u; g_edx = 0x33333333u;
+                uint32_t ga = guest_callv(0x872F18u, 0, NULL), gc = g_ecx, gd = g_edx;
+                int popped = g_fp_top == top;
+                while (g_fp_top > top) { for (int k = 0; k < 7; k++) g_st[k] = g_st[k + 1]; g_st[7] = 0.0; g_fp_top--; }
+                n++;
+                if ((ga != a || gc != c || gd != d || !popped) && bad++ < 8)
+                    rt_trace("crt selftest: rc %u _ftol2(%.17g): lifted %08X:%08X ecx %08X%s, inline %08X:%08X ecx %08X",
+                             rc, w[i], gd, ga, gc, popped ? "" : " (stack)", d, a, c);
+            }
+        g_fpu_cw = cw0;
     }
     /* _adjust_fdiv (0xAA40FC): the CRT's Pentium FDIV-bug test result. 1 sends every fmod/fprem
        through the software workaround _adj_fprem; any real or emulated modern x87 gives 0. */
