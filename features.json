@@ -425,6 +425,78 @@
       "desc": "The CRT math self-test passes in the browser build too, where no interpreter stands behind the lift: every arm of the CRT's x87 dispatcher that the grid reaches (zero, negative, overflow, underflow, infinities, NaN, denormal) is lifted and keeps the calling convention (an unlifted exp arm unbalanced the stack and crashed the game at the first scrum).",
       "check": "timeout 600 /opt/homebrew/bin/python3 tools/web_selftest.py   # system Python: Playwright",
       "passes": true
+    },
+    {
+      "id": "on.match_map",
+      "deps": [
+        "native.smoke"
+      ],
+      "desc": "Match state found in guest memory and read by runtime/core/match_state.c (docs/MATCH_STATE.md): 30 players, ball, score, clock, phase, controlled player per pad, match setup.",
+      "check": "tools/match_state_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.match_setup",
+      "deps": [
+        "on.match_map"
+      ],
+      "desc": "The host's match setup applied on a friend whose own game took another menu route: both reach kickoff with identical setup bytes, same teams and stadium.",
+      "check": "tools/match_setup_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.match_puppet",
+      "deps": [
+        "on.match_setup"
+      ],
+      "desc": "Friend mode: local match simulation suppressed, host state applied every frame; a recorded host match plays back in another game within 1 cm for 3000 frames.",
+      "check": "tools/match_puppet_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.match_net",
+      "deps": [
+        "on.match_puppet"
+      ],
+      "desc": "Host-authoritative over the server: friends' pads drive their players on the host, host state reaches friends within 6 frames.",
+      "check": "tools/match_net_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.match_flow",
+      "deps": [
+        "on.match_net"
+      ],
+      "desc": "Party flow: host starts, friends' own games enter Team Select and the match; pauser drives the pause menu; full time returns everyone to their own menus; twice in one party.",
+      "check": "tools/match_flow_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.ingame_ui",
+      "deps": [
+        "on.match_flow"
+      ],
+      "desc": "Online screens drawn inside the game (Host code, Join by typing the code, party badge, leave), keyboard/mouse/pad; no HTML panel; native and browser.",
+      "check": "tools/ingame_ui_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.cross_platform",
+      "deps": [
+        "on.ingame_ui"
+      ],
+      "desc": "Mac native and browser players share one match (both directions).",
+      "check": "tools/cross_platform_check.sh",
+      "passes": false
+    },
+    {
+      "id": "on.deploy_ready",
+      "deps": [
+        "on.cross_platform"
+      ],
+      "desc": "Server runs with TLS on the user's own server; players' guide in docs/ONLINE.md (deploying needs the user's go).",
+      "check": "tools/deploy_check.sh",
+      "passes": false
     }
   ]
 }
