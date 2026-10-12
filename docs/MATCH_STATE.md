@@ -121,6 +121,22 @@ stopped (instant replays, highlights). Found 2026-10-12 (snapshot during the f27
   hold transforms (position in cm at +0x74).
 - Presentation in playback (pause menu > Replay): replay camera and a control bar, no score/clock.
 
+## The friend side of the puppet (on.match_puppet, in progress)
+- Playback mode is a separate game mode (BackendState+0x2220 0x16 -> 0x14, manager flag byte +0x38
+  gains 0x0C, commander +0x18 camera focus): replay camera and control bar, no score/clock. So friends
+  stay in the normal match and their live players take the host's frame instead.
+- A frame's 128-byte player block is that player's animation channel (HbsSequenceChannel, player+0xDC):
+  {.., .., -1, id 0x14, sequence 0x2B6, rate 1.875, time 86.08, weight 0.222, -2 end}. The time equals
+  the live CannedSequenceInstance+0x28 (via player+0xDC -> +0x28 -> [0]) and a copy at channel+0xC.
+- The match's per-frame step is CRugby vtable slot 1 = FUN_0062ED30 -> FUN_0062ED50(dt 0.02),
+  thiscall: unless paused it advances the clock (setup+0x18F0, half length), match time (+0x58/+0x60),
+  then ball FUN_00622B70, teams FUN_00655AE0/655A40, FUN_0062F270, rules FUN_0062E3A0, FUN_00603D70/E90,
+  FUN_0064BF40, FUN_00682A20, the phase state machine (vtable+0x28), FUN_0062EBA0; then the camera/
+  replay block FUN_0073C080..; then actors FUN_004046F0, FUN_00405570, FUN_00401480, FUN_0062EB50;
+  always FUN_00404C90, FUN_006231F0, FUN_0062E900. A friend overrides this function (game/overrides)
+  to run presentation and animation but take positions, channels and the ball from the host's frame.
+- Root of the replay system: BackendState* at 0x009B65EC, +0x233C PlayBackCommander, +4 manager.
+
 ## Player motion is animation-driven
 No velocity is stored in CRugbyPlayer or any object it points at (per-frame position deltas correlate
 with no field, r < 0.7, 22k samples): FIFAANIM root motion moves the players. So the state to replicate
