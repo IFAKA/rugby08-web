@@ -1,0 +1,189 @@
+// internal.h -- what the renderer's sources share: GL state, attribute/uniform locations, programs
+// and small helpers. Nothing outside render/webgl includes this; the public API is d3d9.h.
+#pragma once
+#include "d3d9.h"
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#include <GLES3/gl3.h>
+#include <cstdio>
+#include <cstdlib>
+#include <map>
+#include <vector>
+#include <string>
+#include <cstring>
+#include <algorithm>
+#include <unordered_set>
+#include <cmath>
+
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
+#ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+#endif
+
+#ifdef DEBUG_TEXTURE_TEST
+#define CHECK_GL_ERROR(op) { op; CheckGLError(#op); }
+#else
+#define CHECK_GL_ERROR(op) op
+#endif
+void CheckGLError(const char* label);
+
+// ---- state.cpp -------------------------------------------------------------------------------
+extern const char* g_canvas_selector;
+extern DWORD g_current_fvf;
+extern GLuint g_texture_stages[8];
+extern GLuint g_last_bound_texture_id;
+extern GLuint g_last_bound_lightmap_id;
+extern std::unordered_set<GLuint> g_mipmapped_textures;   // GL textures with a complete mipmap chain
+extern float g_max_anisotropy;                            // 1.0 = no anisotropic filtering
+extern D3DLIGHT9 g_lights[8];
+extern bool g_light_enabled[8];
+extern D3DMATERIAL9 g_material;
+extern GLuint g_up_vbo, g_up_ibo;                         // draw-from-pointer (UP) buffers
+extern size_t g_up_vbo_size, g_up_ibo_size;
+extern GLuint& g_cached_texture;                          // = g_last_bound_texture_id
+extern GLuint g_cached_program;
+extern DWORD g_cached_fvf;
+extern bool g_cached_vertex_attribs[4];
+extern GLint g_cached_viewport[4];
+extern GLboolean g_cached_scissor_test;
+extern GLint g_cached_scissor_box[4];
+extern DWORD g_texture_stage_states[8][33];
+extern D3DVIEWPORT9 g_viewport;
+extern int g_logical_width, g_logical_height;             // the app's back buffer size
+extern D3DMATRIX g_texture_matrices[8];
+extern DWORD g_sampler_states[8][14];
+extern D3DMATRIX g_transform_world, g_transform_view, g_transform_projection;
+extern bool g_render_state_specular;                      // D3DRS_SPECULARENABLE
+extern GLuint g_stream_vb[16];                            // SetStreamSource, every stream
+extern GLsizei g_stream_stride[16];
+extern GLuint g_fbo;                                      // the FBO render targets attach to
+
+// ---- locations.cpp: one global per attribute/uniform name, swapped in per GL program --------------
+extern GLuint g_shader_program;
+extern GLint g_position_location, g_blendweight_location, g_blend_uniform, g_mvp1_uniform;
+extern GLint g_diffuse_from_vertex_uniform, g_ambient_from_vertex_uniform, g_light0_type_uniform,
+    g_light0_direction_uniform, g_light1_type_uniform, g_light1_direction_uniform, g_light2_type_uniform,
+    g_light2_direction_uniform;
+extern GLint g_color_location, g_texcoord_location, g_texcoord1_location;
+extern GLint g_texture_uniform, g_texture_lm_uniform, g_use_texture_uniform, g_use_lightmap_uniform;
+extern GLint g_mvp_uniform, g_tex_matrix_uniform, g_use_tex_matrix_uniform;
+extern GLint g_clip_plane_uniform, g_clip_plane_enabled_uniform, g_fbo_flip_y_uniform;
+extern GLint g_stage0_colorop_uniform, g_stage0_colorarg1_uniform, g_stage0_colorarg2_uniform,
+    g_stage0_alphaop_uniform, g_stage0_alphaarg1_uniform, g_stage0_alphaarg2_uniform, g_stage1_op_uniform;
+extern GLint g_ts_uniform;
+extern GLint g_material_emissive_uniform, g_material_specular_uniform, g_matsrc_uniform, g_specular_enabled_uniform,
+    g_camera_pos_uniform, g_nlights_uniform, g_lpos_uniform, g_ldir_uniform, g_ldiff_uniform, g_lamb_uniform,
+    g_lspec_uniform, g_latt_uniform, g_lspot_uniform, g_specular_add_uniform;
+extern GLint g_alpha_test_enabled_uniform, g_alpha_ref_uniform, g_texture_factor_uniform, g_lod_bias_uniform;
+extern GLint g_fog_enabled_uniform, g_fog_start_uniform, g_fog_end_uniform, g_fog_color_uniform, g_view_model_uniform;
+extern GLint g_normal_location, g_world_uniform, g_lighting_enabled_uniform, g_material_diffuse_uniform,
+    g_material_ambient_uniform, g_global_ambient_uniform;
+extern GLint g_light0_enabled_uniform, g_light0_position_uniform, g_light0_diffuse_uniform, g_light0_ambient_uniform,
+    g_light0_attenuation_uniform, g_light0_range_uniform;
+extern GLint g_light1_enabled_uniform, g_light1_position_uniform, g_light1_diffuse_uniform, g_light1_ambient_uniform,
+    g_light1_attenuation_uniform, g_light1_range_uniform;
+extern GLint g_light2_enabled_uniform, g_light2_position_uniform, g_light2_diffuse_uniform, g_light2_ambient_uniform,
+    g_light2_attenuation_uniform, g_light2_range_uniform;
+extern std::vector<GLint> g_ff_locs;                      // the fixed-function program's locations
+void loc_query(GLuint p, std::vector<GLint>& v);
+void loc_apply(const std::vector<GLint>& v);
+
+// ---- programs ----------------------------------------------------------------------------------
+struct D3D9WProgVS {
+    std::string vsrc;                   // processed GLSL, relinked with each pixel shader used with it
+    GLuint prog = 0;
+    std::vector<GLint> locs;
+    GLint consts = -1;
+    std::vector<unsigned char> regs;      // constant register of each vs_uniforms_vec4 slot
+    std::vector<D3D9WElem> elems;
+};
+struct D3D9WLinked {                    // one vertex stage (programmable or fixed) + one pixel shader
+    GLuint prog = 0;
+    std::vector<GLint> locs;
+    GLint vconsts = -1, pconsts = -1, samp[4] = { -1, -1, -1, -1 };
+};
+struct D3D9WProgPS {
+    std::string fsrc;
+    std::vector<unsigned char> regs;    // constant register of each ps_uniforms_vec4 slot
+    std::map<D3D9WProgVS*, D3D9WLinked*> links;   // nullptr key: the fixed-function vertex stage
+};
+extern const char* vertex_shader_source;                  // glsl/ffp.vert
+extern const char* fragment_shader_source;                // glsl/ffp.frag
+extern D3D9WProgVS* g_progvs_active;
+extern const float (*g_progvs_consts)[4];
+extern D3D9WProgPS* g_progps_active;
+extern const float (*g_progps_consts)[4];
+GLuint compile_shader(GLenum type, const char* source);
+void init_shaders();
+void str_replace_all(std::string& s, const std::string& a, const std::string& b);
+void use_draw_program();                                  // program_ff.cpp
+void ff_blend_attrib(size_t base, GLsizei stride);       // program_vs.cpp
+void progvs_attribs(size_t base, GLsizei stride, bool fbo, int base_vertex);
+D3D9WLinked* progps_link(D3D9WProgVS* vsp, D3D9WProgPS* psp);   // program_ps.cpp
+void progps_sampler(int st);
+void SetFFPLightingUniforms(const D3DMATRIX* world, const DWORD* render_states, bool vertex_color);   // lighting.cpp
+void ApplySamplerStates(DWORD Sampler);                   // sampler.cpp
+void EnsureUPBuffers();                                   // buffers.cpp
+
+// ---- trace.cpp ---------------------------------------------------------------------------------
+struct TraceTex { unsigned w, h, fmt; };
+extern int g_trace_draws;
+extern std::map<GLuint, TraceTex> g_trace_texinfo;       // GL texture -> size and D3D format (trace only)
+void trace_fb_diff(bool report);
+
+// ---- FVF helpers -------------------------------------------------------------------------------
+/* D3D FVF texture-coordinate size bits use 0/1/2/3 for FLOAT2/FLOAT3/FLOAT4/FLOAT1 respectively. D3D8
+ * declarations preserve these widths; treating every coordinate as FLOAT2 shifts subsequent attributes. */
+static inline int fvf_tex_components(DWORD fvf, int stage) {
+    int code = (int)((fvf >> (16 + 2 * stage)) & 3u);
+    return code == 3 ? 1 : code == 1 ? 3 : code == 2 ? 4 : 2;
+}
+/* D3DFVF_POSITION_MASK (0xE): XYZ 2, XYZRHW 4, XYZB1..XYZB5 6..E. The skinned kinds share bit 4
+ * with XYZRHW: testing `fvf & D3DFVF_XYZRHW` drew every skinned mesh (the players) as screen-space
+ * vertices at their model coordinates. */
+static inline bool fvf_rhw(DWORD f) { return (f & 0xE) == 0x4; }
+static inline bool fvf_xyz(DWORD f) { DWORD k = f & 0xE; return k == 0x2 || k >= 0x6; }
+static inline int fvf_blend_weights(DWORD f) { DWORD k = f & 0xE; return k >= 0x6 ? (int)(k - 4) / 2 : 0; }
+
+// ---- matrix helpers ----------------------------------------------------------------------------
+// Helper: Determinant of upper-left 3x3 sub-matrix (for orientation/winding detection)
+// D3D9 automatically detects mirrored transforms (negative determinant) and flips culling.
+// WebGL doesn't, so we compute this per draw call to set glFrontFace correctly.
+static inline float det3x3(const D3DMATRIX& m) {
+    return m.m[0][0] * (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1])
+         - m.m[0][1] * (m.m[1][0] * m.m[2][2] - m.m[1][2] * m.m[2][0])
+         + m.m[0][2] * (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]);
+}
+
+// Helper: Matrix multiplication
+static inline void matrix_multiply(D3DMATRIX* result, const D3DMATRIX* a, const D3DMATRIX* b) {
+    D3DMATRIX temp;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            temp.m[i][j] = 0;
+            for (int k = 0; k < 4; k++) {
+                temp.m[i][j] += a->m[i][k] * b->m[k][j];
+            }
+        }
+    }
+    *result = temp;
+}
+
+static inline void matrix_identity(D3DMATRIX* m) {
+    memset(m, 0, sizeof(D3DMATRIX));
+    m->m[0][0] = 1.0f;
+    m->m[1][1] = 1.0f;
+    m->m[2][2] = 1.0f;
+    m->m[3][3] = 1.0f;
+}
+
+// Helper: Set matrix uniform with CPU-side transpose
+// Helper: Set matrix uniform. 
+// [IMPORTANT] D3D memory (Row-Major, v*M) is binary-equivalent to GL (Column-Major, M*v).
+// Do NOT transpose manually here if using standard D3D matrix math.
+static inline void gl_set_matrix_uniform(GLint location, const D3DMATRIX* matrix) {
+    if (location == -1 || !matrix) return;
+    glUniformMatrix4fv(location, 1, GL_FALSE, (const float*)matrix);
+}

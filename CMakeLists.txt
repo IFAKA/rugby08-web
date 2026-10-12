@@ -73,17 +73,27 @@ add_custom_command(OUTPUT ${ROOT}/gen/runtime/d3d8_vtables.c
   WORKING_DIRECTORY ${ROOT} COMMENT "gen_d3d8_bridges")
 file(GLOB RT_CORE_SRCS CONFIGURE_DEPENDS ${ROOT}/runtime/core/*.c ${ROOT}/runtime/win32/*.c
      ${ROOT}/runtime/d3d8/*.c ${ROOT}/runtime/d3d8/*.cpp)
+# ---- renderer: D3D9 on WebGL2 / desktop GL (render/webgl, grown from LostMyCode/d3d9-webgl, MIT) ----
+# The fixed-function shaders live in render/webgl/glsl/ and are embedded as raw string literals.
+file(GLOB RENDER_SRCS CONFIGURE_DEPENDS ${ROOT}/render/webgl/*.cpp)
+set(RENDER_GLSL_INC ${CMAKE_BINARY_DIR}/render_glsl)
+foreach(s ffp.vert ffp.frag)
+  file(READ ${ROOT}/render/webgl/glsl/${s} _glsl)
+  string(REPLACE "." "_" _n ${s})
+  file(WRITE ${RENDER_GLSL_INC}/${_n}.inc "R\"glsl(\n${_glsl})glsl\"\n")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ROOT}/render/webgl/glsl/${s})
+endforeach()
 add_library(rt_core STATIC ${RT_CORE_SRCS} ${ROOT}/gen/runtime/imports.c ${ROOT}/gen/runtime/d3d8_vtables.c
-            ${ROOT}/third_party/d3d9-webgl/d3d9.cpp)
+            ${RENDER_SRCS})
 target_include_directories(rt_core PUBLIC ${ROOT}/runtime/include/recomp ${ROOT}/runtime/include ${ROOT}/runtime/win32)
-target_include_directories(rt_core PRIVATE ${ROOT}/runtime/d3d8 ${ROOT}/third_party/d3d9-webgl ${MOJO})
+target_include_directories(rt_core PRIVATE ${ROOT}/runtime/d3d8 ${ROOT}/render/webgl ${RENDER_GLSL_INC} ${MOJO})
 target_compile_definitions(rt_core PRIVATE MOJOSHADER_NO_VERSION_INCLUDE)
 if(NOT EMSCRIPTEN)
-  # d3d9-webgl on desktop GL 4.1 core: stand-ins for its emscripten/GLES3 headers (runtime/DESIGN.md)
+  # the renderer on desktop GL 4.1 core: stand-ins for its emscripten/GLES3 headers (runtime/DESIGN.md)
   target_include_directories(rt_core PRIVATE ${ROOT}/platform/native/glshim)
 endif()
 target_compile_options(rt_core PRIVATE -Wall -Wno-unused-function -fwrapv -fno-strict-aliasing)
-set_source_files_properties(${ROOT}/third_party/d3d9-webgl/d3d9.cpp PROPERTIES COMPILE_OPTIONS "-w")
+set_source_files_properties(${RENDER_SRCS} PROPERTIES COMPILE_OPTIONS "-w")
 # Dispatch misses run in an interpreter (runtime/core/interp.c, Unicorn on the guest arena) instead of
 # returning 0. Native only for now; the web build is item web.interp
 # (docs/plans/2026-10-08-oracle-fallback-deprotect.md P4).
