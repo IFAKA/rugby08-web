@@ -491,7 +491,7 @@
       "deps": [
         "on.match_flow"
       ],
-      "desc": "The web game runs in headless Chrome as in a real browser: two pages at once, through the menus into a match, 10 minutes without a freeze (it froze during the intro movies, frame ~2400-3240; see docs/plans/2026-10-13-online-party.md).",
+      "desc": "The automated browser tests are reliable: the game works in a real browser, only the hidden test browser froze (software rendering, several games, muted). First the test browser on the real GPU; if it still freezes, find and fix the root cause (slow machines, phones). Pass: two pages at once, through the menus into a match, 10 minutes without a freeze.",
       "check": "/opt/homebrew/bin/python3 tools/net/web_soak.py",
       "passes": false
     },

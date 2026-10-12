@@ -78,7 +78,8 @@ direct (one hop, no TCP head-of-line), then host input delay (equal feel), then 
   read-only research (the user asked to parallelize what does not conflict).
 
 ## Known issues at the start
-- **Test-browser freeze**: in headless Chrome (Playwright) the web game stops presenting frames during
+- **Test-browser freeze** (the game works in a real browser): in headless Chrome with SwiftShader
+  (Playwright) the web game stops presenting frames during
   the intro movies / early menus (frame ~2400-3240); then DirectSound's cursor stalls and the game dies in
   its device-restore loop. The user's own Brave reaches the menus fine. It predates this work (bisect:
   fails at 15e8b14 too). net.web_dropin and the browser half of ingame_ui_check fail because of it.
@@ -94,8 +95,13 @@ direct (one hop, no TCP head-of-line), then host input delay (equal feel), then 
   hold the last frame); real 80-minute full time and half time untested (only quits).
 
 ## Steps (features.json `pt.*`, in order; each with an automated browser check)
-1. **pt.freeze**: the web game runs in headless Chrome as in a real browser (two pages at once, through
-   menus into a match, 10 minutes, no freeze). Unblocks every browser check.
+1. **pt.freeze**: make the automated browser tests reliable. The game works in a real browser (the user's
+   Brave reaches the menus and plays); only the hidden test browser froze (software rendering, several
+   games at once, muted). First run the test browser on the Mac's real GPU (Chrome's new headless mode
+   with GPU/ANGLE Metal instead of SwiftShader): if the freeze disappears, it was the test setup. If it
+   still freezes, it is a real game problem on slow machines (phones): find the root cause and fix it.
+   Pass: two pages at once, through the menus into a match, 10 minutes, no freeze. Unblocks every
+   browser check.
 2. **pt.research** → docs/PARTY_RESEARCH.md: (a) every game mode: several controllers or not, the screens
    players act on, how its matches start/end, between-match screens; (b) adding a real item to the main
    menu and building screens in the game's front-end system/style (FE screens vtable 0x0090F838, action
