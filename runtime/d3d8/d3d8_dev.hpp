@@ -30,8 +30,18 @@ struct DevState {
 
 static inline DevState *S(const uint32_t *a) { return d3d8_obj(a[0])->dev; }
 static inline IDirect3DDevice9 *D(const uint32_t *a) { return dev9(d3d8_obj(a[0])); }
-static inline void addref(uint32_t g) { if (g) { Obj *o = d3d8_obj(g); if (o) o->refs++; } }
-static inline void release(uint32_t g) { if (g) { uint32_t x = g; d3d8_IUnknown_Release(&x); } }
+static inline void addref(uint32_t g) {
+    if (g) {
+        Obj *o = d3d8_obj(g);
+        if (o) o->refs++;
+    }
+}
+static inline void release(uint32_t g) {
+    if (g) {
+        uint32_t x = g;
+        d3d8_IUnknown_Release(&x);
+    }
+}
 
 extern int rt_trace_vsc;   // runtime/debug/frames.cpp: RT_TRACE_DRAWS_FRAME is on for this frame
 void d3d8_debug_present(uint32_t frame, int w, int h);

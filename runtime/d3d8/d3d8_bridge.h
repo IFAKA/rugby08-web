@@ -13,15 +13,23 @@
 extern "C" {
 #endif
 
-typedef struct { const char *name; uint16_t pop; rt_hle_fn own, inh, stub; } d3d8_slot_t;
+typedef struct {
+    const char *name;
+    uint16_t pop;
+    rt_hle_fn own, inh, stub;
+} d3d8_slot_t;
 
 /* Logs "D3D8 UNIMPL <name>" once; returns E_NOTIMPL for HRESULT methods, else 0. */
 uint32_t d3d8_unimpl(const char *name, int hresult);
 
-#define D3D8_IFACES(X) X(IDirect3D8) X(IDirect3DDevice8) X(IDirect3DSwapChain8) X(IDirect3DResource8) \
-    X(IDirect3DBaseTexture8) X(IDirect3DTexture8) X(IDirect3DCubeTexture8) X(IDirect3DVolumeTexture8) \
-    X(IDirect3DSurface8) X(IDirect3DVolume8) X(IDirect3DVertexBuffer8) X(IDirect3DIndexBuffer8)
-#define D3D8_DECL_VT(I) extern const d3d8_slot_t d3d8_vt_##I[]; extern const int d3d8_vt_##I##_n;
+#define D3D8_IFACES(X)                                                                                                 \
+    X(IDirect3D8)                                                                                                      \
+    X(IDirect3DDevice8) X(IDirect3DSwapChain8) X(IDirect3DResource8) X(IDirect3DBaseTexture8) X(IDirect3DTexture8)     \
+        X(IDirect3DCubeTexture8) X(IDirect3DVolumeTexture8) X(IDirect3DSurface8) X(IDirect3DVolume8)                   \
+            X(IDirect3DVertexBuffer8) X(IDirect3DIndexBuffer8)
+#define D3D8_DECL_VT(I)                                                                                                \
+    extern const d3d8_slot_t d3d8_vt_##I[];                                                                            \
+    extern const int d3d8_vt_##I##_n;
 D3D8_IFACES(D3D8_DECL_VT)
 #undef D3D8_DECL_VT
 

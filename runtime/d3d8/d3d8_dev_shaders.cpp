@@ -47,21 +47,29 @@ HLE_D3D(IDirect3DDevice8, CreateVertexShader) {   // (this, pDeclaration, pFunct
     v->fvf_ok = v->fvf_ok && decl_ok;
     v->programmable = a[2] != 0;
     if (v->programmable) vs8_translate(a[2], v, id);
-    else if (!v->fvf_ok) rt_log("CreateVertexShader #%d: declaration has no FVF equivalent (streams 0x%X)", id, v->streams);
+    else if (!v->fvf_ok)
+        rt_log("CreateVertexShader #%d: declaration has no FVF equivalent (streams 0x%X)", id, v->streams);
     g_vs.push_back(v);
     wr32(a[3], 0x80000000u | (uint32_t)id);
     return D3D_OK_;
 }
 
-HLE_D3D(IDirect3DDevice8, DeleteVertexShader) { (void)a; return D3D_OK_; }
+HLE_D3D(IDirect3DDevice8, DeleteVertexShader) {
+    (void)a;
+    return D3D_OK_;
+}
 
 HLE_D3D(IDirect3DDevice8, SetVertexShaderConstant) {   // (this, Register, pConstantData, ConstantCount)
     DevState *s = S(a);
     for (uint32_t i = 0; i < a[3] && a[1] + i < 96; i++)
-        for (int k = 0; k < 4; k++) { uint32_t u = rd32(a[2] + 16 * i + 4 * (uint32_t)k); memcpy(&s->vsc[a[1] + i][k], &u, 4); }
+        for (int k = 0; k < 4; k++) {
+            uint32_t u = rd32(a[2] + 16 * i + 4 * (uint32_t)k);
+            memcpy(&s->vsc[a[1] + i][k], &u, 4);
+        }
     if (rt_trace_vsc)
         for (uint32_t i = 0; i < a[3] && a[1] + i < 96; i++)
-            printf("vsc c%u = %g %g %g %g\n", a[1] + i, s->vsc[a[1] + i][0], s->vsc[a[1] + i][1], s->vsc[a[1] + i][2], s->vsc[a[1] + i][3]);
+            printf("vsc c%u = %g %g %g %g\n", a[1] + i, s->vsc[a[1] + i][0], s->vsc[a[1] + i][1], s->vsc[a[1] + i][2],
+                   s->vsc[a[1] + i][3]);
     return D3D_OK_;
 }
 
@@ -72,7 +80,8 @@ HLE_D3D(IDirect3DDevice8, SetVertexShader) {  // FVF codes, or a handle from Cre
         uint32_t i = a[1] & 0x7FFFFFFFu;
         if (i >= g_vs.size()) return D3DERR_INVALIDCALL_;
         Vs8 *v = g_vs[i];
-        for (const Vs8Const &c : v->consts) if (c.reg < 96) memcpy(s->vsc[c.reg], c.v, sizeof c.v);
+        for (const Vs8Const &c : v->consts)
+            if (c.reg < 96) memcpy(s->vsc[c.reg], c.v, sizeof c.v);
         if (v->programmable) {
             /* The draw paths still read the FVF for texture and colour decisions: the declaration's
                equivalent when it has one. The shader itself runs as a GL program (d3d8_vshader.cpp
@@ -90,14 +99,22 @@ HLE_D3D(IDirect3DDevice8, SetVertexShader) {  // FVF codes, or a handle from Cre
     }
     d3d9w_progvs_use(nullptr, nullptr);
     {   /* each distinct FVF once: position kinds the backend may not handle (XYZB1-5 blend weights) */
-        static uint32_t seen[64]; static int nseen;
-        int k = 0; while (k < nseen && seen[k] != a[1]) k++;
-        if (k == nseen && nseen < 64) { seen[nseen++] = a[1]; rt_log("SetVertexShader: FVF 0x%08X (position kind 0x%X)", a[1], a[1] & 0xE); }
+        static uint32_t seen[64];
+        static int nseen;
+        int k = 0;
+        while (k < nseen && seen[k] != a[1]) k++;
+        if (k == nseen && nseen < 64) {
+            seen[nseen++] = a[1];
+            rt_log("SetVertexShader: FVF 0x%08X (position kind 0x%X)", a[1], a[1] & 0xE);
+        }
     }
     D(a)->SetFVF(a[1]);
     return D3D_OK_;
 }
-HLE_D3D(IDirect3DDevice8, GetVertexShader) { wr32(a[1], S(a)->vshader); return D3D_OK_; }
+HLE_D3D(IDirect3DDevice8, GetVertexShader) {
+    wr32(a[1], S(a)->vshader);
+    return D3D_OK_;
+}
 // Pixel shaders (reported in the caps with RT_PS_CAPS=1 while they are being verified): ps.1.x
 // through MojoShader, run by d3d9-webgl in place of the fixed-function texture stages.
 static std::vector<Ps8 *> g_ps;   // handle - 1
@@ -109,28 +126,44 @@ HLE_D3D(IDirect3DDevice8, CreatePixelShader) {   // (this, pFunction, pHandle)
     wr32(a[2], (uint32_t)id);
     return D3D_OK_;
 }
-HLE_D3D(IDirect3DDevice8, DeletePixelShader) { (void)a; return D3D_OK_; }
+HLE_D3D(IDirect3DDevice8, DeletePixelShader) {
+    (void)a;
+    return D3D_OK_;
+}
 HLE_D3D(IDirect3DDevice8, SetPixelShaderConstant) {   // (this, Register, pConstantData, ConstantCount)
     DevState *s = S(a);
     for (uint32_t i = 0; i < a[3] && a[1] + i < 8; i++)
-        for (int k = 0; k < 4; k++) { uint32_t u = rd32(a[2] + 16 * i + 4 * (uint32_t)k); memcpy(&s->psc[a[1] + i][k], &u, 4); }
+        for (int k = 0; k < 4; k++) {
+            uint32_t u = rd32(a[2] + 16 * i + 4 * (uint32_t)k);
+            memcpy(&s->psc[a[1] + i][k], &u, 4);
+        }
     return D3D_OK_;
 }
 HLE_D3D(IDirect3DDevice8, GetPixelShaderConstant) {
     DevState *s = S(a);
     for (uint32_t i = 0; i < a[3] && a[1] + i < 8; i++)
-        for (int k = 0; k < 4; k++) { uint32_t u; memcpy(&u, &s->psc[a[1] + i][k], 4); wr32(a[2] + 16 * i + 4 * (uint32_t)k, u); }
+        for (int k = 0; k < 4; k++) {
+            uint32_t u;
+            memcpy(&u, &s->psc[a[1] + i][k], 4);
+            wr32(a[2] + 16 * i + 4 * (uint32_t)k, u);
+        }
     return D3D_OK_;
 }
 HLE_D3D(IDirect3DDevice8, SetPixelShader) {   // (this, handle): 0 = fixed-function stages
     DevState *s = S(a);
     s->pshader = a[1];
-    if (!a[1] || a[1] > g_ps.size()) { d3d9w_progps_use(nullptr, nullptr); return D3D_OK_; }
+    if (!a[1] || a[1] > g_ps.size()) {
+        d3d9w_progps_use(nullptr, nullptr);
+        return D3D_OK_;
+    }
     D3D9WProgPS *gl = ps8_gl(g_ps[a[1] - 1], (int)a[1]);
     if (!gl) d3d8_unimpl("SetPixelShader(GL program failed)", 0);
     d3d9w_progps_use(gl, s->psc);
     return D3D_OK_;
 }
-HLE_D3D(IDirect3DDevice8, GetPixelShader) { wr32(a[1], S(a)->pshader); return D3D_OK_; }
+HLE_D3D(IDirect3DDevice8, GetPixelShader) {
+    wr32(a[1], S(a)->pshader);
+    return D3D_OK_;
+}
 
 }  // extern "C"

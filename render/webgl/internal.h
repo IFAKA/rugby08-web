@@ -23,14 +23,18 @@
 #endif
 
 #ifdef DEBUG_TEXTURE_TEST
-#define CHECK_GL_ERROR(op) { op; CheckGLError(#op); }
+#define CHECK_GL_ERROR(op)                                                                                             \
+    {                                                                                                                  \
+        op;                                                                                                            \
+        CheckGLError(#op);                                                                                             \
+    }
 #else
 #define CHECK_GL_ERROR(op) op
 #endif
-void CheckGLError(const char* label);
+void CheckGLError(const char *label);
 
 // ---- state.cpp -------------------------------------------------------------------------------
-extern const char* g_canvas_selector;
+extern const char *g_canvas_selector;
 extern DWORD g_current_fvf;
 extern GLuint g_texture_stages[8];
 extern GLuint g_last_bound_texture_id;
@@ -42,7 +46,7 @@ extern bool g_light_enabled[8];
 extern D3DMATERIAL9 g_material;
 extern GLuint g_up_vbo, g_up_ibo;                         // draw-from-pointer (UP) buffers
 extern size_t g_up_vbo_size, g_up_ibo_size;
-extern GLuint& g_cached_texture;                          // = g_last_bound_texture_id
+extern GLuint &g_cached_texture;                          // = g_last_bound_texture_id
 extern GLint g_cached_viewport[4];
 extern GLboolean g_cached_scissor_test;
 extern GLint g_cached_scissor_box[4];
@@ -60,21 +64,22 @@ extern GLuint g_fbo;                                      // the FBO render targ
 // a_<name> -> g_<name>_location, u_<name> -> g_<name>_uniform. Every name the shaders declare (the
 // fixed-function ones in glsl/, the alpha test and fog that program_ps.cpp adds to pixel shaders).
 #define D3D9W_ATTRIBS(X) X(position) X(blendweight) X(normal) X(color) X(texcoord) X(texcoord1)
-#define D3D9W_UNIFORMS(X)                                                                                         \
-    X(blend) X(mvp1) X(texture) X(texture_lm) X(use_texture) X(use_lightmap) X(mvp) X(world) X(clip_plane)       \
-    X(clip_plane_enabled) X(fbo_flip_y) X(alpha_test_enabled) X(alpha_ref) X(texture_factor) X(lod_bias)         \
-    X(fog_enabled) X(fog_start) X(fog_end) X(fog_color) X(view_model) X(lighting_enabled) X(material_diffuse)    \
-    X(material_ambient) X(global_ambient) X(ts) X(material_emissive) X(material_specular) X(matsrc)               \
-    X(specular_enabled) X(camera_pos) X(nlights) X(lpos) X(ldir) X(ldiff) X(lamb) X(lspec) X(latt) X(lspot)      \
-    X(specular_add)
+#define D3D9W_UNIFORMS(X)                                                                                              \
+    X(blend)                                                                                                           \
+    X(mvp1) X(texture) X(texture_lm) X(use_texture) X(use_lightmap) X(mvp) X(world) X(clip_plane)                      \
+        X(clip_plane_enabled) X(fbo_flip_y) X(alpha_test_enabled) X(alpha_ref) X(texture_factor) X(lod_bias)           \
+            X(fog_enabled) X(fog_start) X(fog_end) X(fog_color) X(view_model) X(lighting_enabled) X(material_diffuse)  \
+                X(material_ambient) X(global_ambient) X(ts) X(material_emissive) X(material_specular) X(matsrc)        \
+                    X(specular_enabled) X(camera_pos) X(nlights) X(lpos) X(ldir) X(ldiff) X(lamb) X(lspec) X(latt)     \
+                        X(lspot) X(specular_add)
 #define D3D9W_DECL_A(n) extern GLint g_##n##_location;
 #define D3D9W_DECL_U(n) extern GLint g_##n##_uniform;
 D3D9W_ATTRIBS(D3D9W_DECL_A)
 D3D9W_UNIFORMS(D3D9W_DECL_U)
 extern GLuint g_shader_program;                           // the fixed-function program
 extern std::vector<GLint> g_ff_locs;                      // its locations
-void loc_query(GLuint p, std::vector<GLint>& v);
-void loc_apply(const std::vector<GLint>& v);
+void loc_query(GLuint p, std::vector<GLint> &v);
+void loc_apply(const std::vector<GLint> &v);
 
 // ---- programs ----------------------------------------------------------------------------------
 struct D3D9WProgVS {
@@ -93,28 +98,30 @@ struct D3D9WLinked {                    // one vertex stage (programmable or fix
 struct D3D9WProgPS {
     std::string fsrc;
     std::vector<unsigned char> regs;    // constant register of each ps_uniforms_vec4 slot
-    std::map<D3D9WProgVS*, D3D9WLinked*> links;   // nullptr key: the fixed-function vertex stage
+    std::map<D3D9WProgVS *, D3D9WLinked *> links;   // nullptr key: the fixed-function vertex stage
 };
-extern const char* vertex_shader_source;                  // glsl/ffp.vert
-extern const char* fragment_shader_source;                // glsl/ffp.frag
-extern D3D9WProgVS* g_progvs_active;
+extern const char *vertex_shader_source;                  // glsl/ffp.vert
+extern const char *fragment_shader_source;                // glsl/ffp.frag
+extern D3D9WProgVS *g_progvs_active;
 extern const float (*g_progvs_consts)[4];
-extern D3D9WProgPS* g_progps_active;
+extern D3D9WProgPS *g_progps_active;
 extern const float (*g_progps_consts)[4];
-GLuint compile_shader(GLenum type, const char* source);
+GLuint compile_shader(GLenum type, const char *source);
 void init_shaders();
-void str_replace_all(std::string& s, const std::string& a, const std::string& b);
+void str_replace_all(std::string &s, const std::string &a, const std::string &b);
 void use_draw_program();                                  // program_ff.cpp
 void ff_blend_attrib(size_t base, GLsizei stride);       // program_vs.cpp
 void progvs_attribs(size_t base, GLsizei stride, bool fbo, int base_vertex);
-D3D9WLinked* progps_link(D3D9WProgVS* vsp, D3D9WProgPS* psp);   // program_ps.cpp
-void SetFFPLightingUniforms(const D3DMATRIX* world, const DWORD* render_states, bool vertex_color);   // lighting.cpp
+D3D9WLinked *progps_link(D3D9WProgVS *vsp, D3D9WProgPS *psp);   // program_ps.cpp
+void SetFFPLightingUniforms(const D3DMATRIX *world, const DWORD *render_states, bool vertex_color);   // lighting.cpp
 void apply_sampler_states(DWORD st, bool aniso);           // sampler.cpp
 void reset_sampler_states();                              // program_ff.cpp
 void EnsureUPBuffers();                                   // buffers.cpp
 
 // ---- trace.cpp ---------------------------------------------------------------------------------
-struct TraceTex { unsigned w, h, fmt; };
+struct TraceTex {
+    unsigned w, h, fmt;
+};
 extern int g_trace_draws;
 extern std::map<GLuint, TraceTex> g_trace_texinfo;       // GL texture -> size and D3D format (trace only)
 void trace_fb_diff(bool report);
@@ -130,34 +137,38 @@ static inline int fvf_tex_components(DWORD fvf, int stage) {
  * with XYZRHW: testing `fvf & D3DFVF_XYZRHW` drew every skinned mesh (the players) as screen-space
  * vertices at their model coordinates. */
 static inline bool fvf_rhw(DWORD f) { return (f & 0xE) == 0x4; }
-static inline bool fvf_xyz(DWORD f) { DWORD k = f & 0xE; return k == 0x2 || k >= 0x6; }
-static inline int fvf_blend_weights(DWORD f) { DWORD k = f & 0xE; return k >= 0x6 ? (int)(k - 4) / 2 : 0; }
+static inline bool fvf_xyz(DWORD f) {
+    DWORD k = f & 0xE;
+    return k == 0x2 || k >= 0x6;
+}
+static inline int fvf_blend_weights(DWORD f) {
+    DWORD k = f & 0xE;
+    return k >= 0x6 ? (int)(k - 4) / 2 : 0;
+}
 
 // ---- matrix helpers ----------------------------------------------------------------------------
 // Helper: Determinant of upper-left 3x3 sub-matrix (for orientation/winding detection)
 // D3D9 automatically detects mirrored transforms (negative determinant) and flips culling.
 // WebGL doesn't, so we compute this per draw call to set glFrontFace correctly.
-static inline float det3x3(const D3DMATRIX& m) {
-    return m.m[0][0] * (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1])
-         - m.m[0][1] * (m.m[1][0] * m.m[2][2] - m.m[1][2] * m.m[2][0])
-         + m.m[0][2] * (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]);
+static inline float det3x3(const D3DMATRIX &m) {
+    return m.m[0][0] * (m.m[1][1] * m.m[2][2] - m.m[1][2] * m.m[2][1]) -
+           m.m[0][1] * (m.m[1][0] * m.m[2][2] - m.m[1][2] * m.m[2][0]) +
+           m.m[0][2] * (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]);
 }
 
 // Helper: Matrix multiplication
-static inline void matrix_multiply(D3DMATRIX* result, const D3DMATRIX* a, const D3DMATRIX* b) {
+static inline void matrix_multiply(D3DMATRIX *result, const D3DMATRIX *a, const D3DMATRIX *b) {
     D3DMATRIX temp;
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             temp.m[i][j] = 0;
-            for (int k = 0; k < 4; k++) {
-                temp.m[i][j] += a->m[i][k] * b->m[k][j];
-            }
+            for (int k = 0; k < 4; k++) { temp.m[i][j] += a->m[i][k] * b->m[k][j]; }
         }
     }
     *result = temp;
 }
 
-static inline void matrix_identity(D3DMATRIX* m) {
+static inline void matrix_identity(D3DMATRIX *m) {
     memset(m, 0, sizeof(D3DMATRIX));
     m->m[0][0] = 1.0f;
     m->m[1][1] = 1.0f;
@@ -166,10 +177,10 @@ static inline void matrix_identity(D3DMATRIX* m) {
 }
 
 // Helper: Set matrix uniform with CPU-side transpose
-// Helper: Set matrix uniform. 
+// Helper: Set matrix uniform.
 // [IMPORTANT] D3D memory (Row-Major, v*M) is binary-equivalent to GL (Column-Major, M*v).
 // Do NOT transpose manually here if using standard D3D matrix math.
-static inline void gl_set_matrix_uniform(GLint location, const D3DMATRIX* matrix) {
+static inline void gl_set_matrix_uniform(GLint location, const D3DMATRIX *matrix) {
     if (location == -1 || !matrix) return;
-    glUniformMatrix4fv(location, 1, GL_FALSE, (const float*)matrix);
+    glUniformMatrix4fv(location, 1, GL_FALSE, (const float *)matrix);
 }

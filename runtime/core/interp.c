@@ -22,13 +22,13 @@
 #include <string.h>
 #include <math.h>
 
-
 #ifndef RT_INTERP
-int rt_interp(uint32_t va) { (void)va; return 0; }
+int rt_interp(uint32_t va) {
+    (void)va;
+    return 0;
+}
 #else
 #include "interp_int.h"
-
-
 
 static RECOMP_TLS uc_engine *t_uc;
 RECOMP_TLS int t_stop;
@@ -36,7 +36,6 @@ RECOMP_TLS uint32_t t_fault_va, t_fault_kind;
 RECOMP_TLS uint32_t t_ring[RING];
 RECOMP_TLS unsigned t_ring_i;
 static int g_trace = -1;
-
 
 /* A value at [esp] is a return address when the bytes before it end a call instruction. */
 static int after_call(uint32_t ra) {
@@ -56,7 +55,8 @@ recomp_func_t native_at(uint32_t va) {
 }
 
 static void hook_block(uc_engine *uc, uint64_t addr, uint32_t size, void *ud) {
-    (void)size; (void)ud;
+    (void)size;
+    (void)ud;
     t_ring[t_ring_i++ & (RING - 1)] = (uint32_t)addr;
     if (g_trace) {
         uint32_t e;
@@ -72,16 +72,24 @@ static void hook_block(uc_engine *uc, uint64_t addr, uint32_t size, void *ud) {
 }
 
 bool hook_unmapped(uc_engine *uc, uc_mem_type type, uint64_t addr, int size, int64_t v, void *ud) {
-    (void)size; (void)v; (void)ud;
+    (void)size;
+    (void)v;
+    (void)ud;
     if (type == UC_MEM_FETCH_UNMAPPED && addr >= RT_BRIDGE_HOST) t_stop = STOP_BRIDGE;
-    else { t_stop = STOP_FAULT; t_fault_va = (uint32_t)addr; t_fault_kind = type; }
+    else {
+        t_stop = STOP_FAULT;
+        t_fault_va = (uint32_t)addr;
+        t_fault_kind = type;
+    }
     uc_emu_stop(uc);
     return false;
 }
 
 void hook_intr(uc_engine *uc, uint32_t intno, void *ud) {
     (void)ud;
-    t_stop = STOP_FAULT; t_fault_va = 0; t_fault_kind = 0x1000 + intno;
+    t_stop = STOP_FAULT;
+    t_fault_va = 0;
+    t_fault_kind = 0x1000 + intno;
     uc_emu_stop(uc);
 }
 
@@ -101,15 +109,23 @@ int hook_cpuid(uc_engine *uc, void *ud) {
 }
 
 static f80_t to_f80(double d) {
-    uint64_t b; memcpy(&b, &d, 8);
+    uint64_t b;
+    memcpy(&b, &d, 8);
     f80_t r = { 0, (uint16_t)((b >> 48) & 0x8000) };
     uint32_t e = (b >> 52) & 0x7FF;
     uint64_t m = b & 0xFFFFFFFFFFFFFull;
     if (e == 0 && m == 0) return r;
-    if (e == 0x7FF) { r.e |= 0x7FFF; r.m = 0x8000000000000000ull | (m << 11); return r; }
+    if (e == 0x7FF) {
+        r.e |= 0x7FFF;
+        r.m = 0x8000000000000000ull | (m << 11);
+        return r;
+    }
     if (e == 0) {                                  /* denormal: normalise into the wider exponent */
         int s = 0;
-        while (!(m & 0x10000000000000ull)) { m <<= 1; s++; }
+        while (!(m & 0x10000000000000ull)) {
+            m <<= 1;
+            s++;
+        }
         r.e |= (uint16_t)(1 - 1023 + 16383 - s);
         r.m = m << 11;
         return r;
@@ -133,10 +149,14 @@ static double from_f80(f80_t f) {
 }
 
 void state_in(uc_engine *uc) {
-    uc_reg_write(uc, UC_X86_REG_EAX, &g_eax); uc_reg_write(uc, UC_X86_REG_ECX, &g_ecx);
-    uc_reg_write(uc, UC_X86_REG_EDX, &g_edx); uc_reg_write(uc, UC_X86_REG_EBX, &g_ebx);
-    uc_reg_write(uc, UC_X86_REG_ESP, &g_esp); uc_reg_write(uc, UC_X86_REG_EBP, &g_ebp);
-    uc_reg_write(uc, UC_X86_REG_ESI, &g_esi); uc_reg_write(uc, UC_X86_REG_EDI, &g_edi);
+    uc_reg_write(uc, UC_X86_REG_EAX, &g_eax);
+    uc_reg_write(uc, UC_X86_REG_ECX, &g_ecx);
+    uc_reg_write(uc, UC_X86_REG_EDX, &g_edx);
+    uc_reg_write(uc, UC_X86_REG_EBX, &g_ebx);
+    uc_reg_write(uc, UC_X86_REG_ESP, &g_esp);
+    uc_reg_write(uc, UC_X86_REG_EBP, &g_ebp);
+    uc_reg_write(uc, UC_X86_REG_ESI, &g_esi);
+    uc_reg_write(uc, UC_X86_REG_EDI, &g_edi);
     uint32_t ef = recomp_eflags(g_flag_k, g_flag_a, g_flag_b, g_flag_cf, 1);
     uc_reg_write(uc, UC_X86_REG_EFLAGS, &ef);
     int depth = g_fp_top < 0 ? 0 : g_fp_top > 8 ? 8 : g_fp_top;
@@ -155,13 +175,20 @@ void state_in(uc_engine *uc) {
 }
 
 void state_out(uc_engine *uc) {
-    uc_reg_read(uc, UC_X86_REG_EAX, &g_eax); uc_reg_read(uc, UC_X86_REG_ECX, &g_ecx);
-    uc_reg_read(uc, UC_X86_REG_EDX, &g_edx); uc_reg_read(uc, UC_X86_REG_EBX, &g_ebx);
-    uc_reg_read(uc, UC_X86_REG_ESP, &g_esp); uc_reg_read(uc, UC_X86_REG_EBP, &g_ebp);
-    uc_reg_read(uc, UC_X86_REG_ESI, &g_esi); uc_reg_read(uc, UC_X86_REG_EDI, &g_edi);
+    uc_reg_read(uc, UC_X86_REG_EAX, &g_eax);
+    uc_reg_read(uc, UC_X86_REG_ECX, &g_ecx);
+    uc_reg_read(uc, UC_X86_REG_EDX, &g_edx);
+    uc_reg_read(uc, UC_X86_REG_EBX, &g_ebx);
+    uc_reg_read(uc, UC_X86_REG_ESP, &g_esp);
+    uc_reg_read(uc, UC_X86_REG_EBP, &g_ebp);
+    uc_reg_read(uc, UC_X86_REG_ESI, &g_esi);
+    uc_reg_read(uc, UC_X86_REG_EDI, &g_edi);
     uint32_t ef = 0, sw = 0, cw = 0;
     uc_reg_read(uc, UC_X86_REG_EFLAGS, &ef);
-    g_flag_k = FK_EFLAGS; g_flag_a = ef; g_flag_b = 0; g_flag_cf = ef & 1;
+    g_flag_k = FK_EFLAGS;
+    g_flag_a = ef;
+    g_flag_b = 0;
+    g_flag_cf = ef & 1;
     uc_reg_read(uc, UC_X86_REG_FPSW, &sw);
     uc_reg_read(uc, UC_X86_REG_FPCW, &cw);
     g_fpu_cw = (uint16_t)cw;
@@ -182,19 +209,24 @@ uc_engine *interp_engine_new(const char *who, uc_cb_hookcode_t block_hook, uc_cb
     uc_engine *uc;
     uc_err e = uc_open(UC_ARCH_X86, UC_MODE_32, &uc);
     if (e) rt_fatal("%s: uc_open: %s", who, uc_strerror(e));
-    if ((e = uc_mem_map_ptr(uc, 0, rt_guest_size, UC_PROT_ALL, G2H(0)))) rt_fatal("%s: map guest arena: %s", who, uc_strerror(e));
+    if ((e = uc_mem_map_ptr(uc, 0, rt_guest_size, UC_PROT_ALL, G2H(0))))
+        rt_fatal("%s: map guest arena: %s", who, uc_strerror(e));
     uint32_t gdt = gcalloc(32), base = g_fs_base;
-    uint64_t t[4] = { 0,
-        0xFFFF | ((uint64_t)0x9A << 40) | ((uint64_t)0xF << 48) | ((uint64_t)0xC << 52),
-        0xFFFF | ((uint64_t)0x92 << 40) | ((uint64_t)0xF << 48) | ((uint64_t)0xC << 52),
-        0xFFF | ((uint64_t)(base & 0xFFFFFF) << 16) | ((uint64_t)0x92 << 40) | ((uint64_t)0x4 << 52)
-              | ((uint64_t)(base >> 24) << 56) };
+    uint64_t t[4] = { 0, 0xFFFF | ((uint64_t)0x9A << 40) | ((uint64_t)0xF << 48) | ((uint64_t)0xC << 52),
+                      0xFFFF | ((uint64_t)0x92 << 40) | ((uint64_t)0xF << 48) | ((uint64_t)0xC << 52),
+                      0xFFF | ((uint64_t)(base & 0xFFFFFF) << 16) | ((uint64_t)0x92 << 40) | ((uint64_t)0x4 << 52) |
+                          ((uint64_t)(base >> 24) << 56) };
     memcpy(G2H(gdt), t, sizeof t);
     uc_x86_mmr gdtr = { 0, gdt, sizeof t - 1, 0 };
     uc_reg_write(uc, UC_X86_REG_GDTR, &gdtr);
-    static const struct { int reg; uint32_t sel; } segs[] = {
-        { UC_X86_REG_CS, 0x08 }, { UC_X86_REG_SS, 0x10 }, { UC_X86_REG_DS, 0x10 },
-        { UC_X86_REG_ES, 0x10 }, { UC_X86_REG_FS, 0x18 } };
+    static const struct {
+        int reg;
+        uint32_t sel;
+    } segs[] = { { UC_X86_REG_CS, 0x08 },
+                 { UC_X86_REG_SS, 0x10 },
+                 { UC_X86_REG_DS, 0x10 },
+                 { UC_X86_REG_ES, 0x10 },
+                 { UC_X86_REG_FS, 0x18 } };
     for (int i = 0; i < 5; i++)
         if ((e = uc_reg_write(uc, segs[i].reg, &segs[i].sel))) rt_fatal("%s: segment %d: %s", who, i, uc_strerror(e));
     uc_hook h;
@@ -218,9 +250,9 @@ static void fault(uint32_t entry, uint32_t pc, uc_err e) {
         uint32_t a = t_ring[(t_ring_i + i) & (RING - 1)];
         if (a) p += sprintf(p, " %08X", a);
     }
-    rt_fatal("interp: fault in code entered at 0x%08X: pc 0x%08X, %s 0x%08X (%s); last blocks:%s",
-             entry, pc, t_fault_kind >= 0x1000 ? "interrupt" : "access", t_fault_kind >= 0x1000
-             ? t_fault_kind - 0x1000 : t_fault_va, uc_strerror(e), ring);
+    rt_fatal("interp: fault in code entered at 0x%08X: pc 0x%08X, %s 0x%08X (%s); last blocks:%s", entry, pc,
+             t_fault_kind >= 0x1000 ? "interrupt" : "access",
+             t_fault_kind >= 0x1000 ? t_fault_kind - 0x1000 : t_fault_va, uc_strerror(e), ring);
 }
 
 int rt_interp(uint32_t va) {
@@ -231,7 +263,8 @@ int rt_interp(uint32_t va) {
     state_in(uc);
     uint32_t pc = va;
     for (;;) {
-        t_stop = STOP_NONE; t_fault_va = t_fault_kind = 0;   /* an error without a hook (#UD) reports 0 */
+        t_stop = STOP_NONE;
+        t_fault_va = t_fault_kind = 0;   /* an error without a hook (#UD) reports 0 */
         uc_err e = uc_emu_start(uc, pc, RECOMP_RETADDR, 0, 0);
         uc_reg_read(uc, UC_X86_REG_EIP, &pc);
         if (t_stop == STOP_NONE && pc == RECOMP_RETADDR) break;

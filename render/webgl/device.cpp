@@ -2,9 +2,11 @@
 #include "internal.h"
 #include "device.h"
 
-D3D9Device::D3D9Device() : m_current_index_buffer(0), m_current_ib_format(D3DFMT_INDEX16), m_current_vertex_buffer(0), m_current_stride(0), m_texture_factor(0xFFFFFFFF) {
+D3D9Device::D3D9Device()
+    : m_current_index_buffer(0), m_current_ib_format(D3DFMT_INDEX16), m_current_vertex_buffer(0), m_current_stride(0),
+      m_texture_factor(0xFFFFFFFF) {
     init_shaders();
-    
+
     g_viewport.X = 0;
     g_viewport.Y = 0;
     g_viewport.Width = g_logical_width;
@@ -41,18 +43,18 @@ D3D9Device::D3D9Device() : m_current_index_buffer(0), m_current_ib_format(D3DFMT
 
     // Initialize render states with D3D9 defaults
     memset(m_render_states, 0, sizeof(m_render_states));
-    m_render_states[D3DRS_LIGHTING]         = TRUE;             // D3D9 default: lighting enabled
+    m_render_states[D3DRS_LIGHTING] = TRUE;             // D3D9 default: lighting enabled
     m_render_states[141] = TRUE;      // D3DRS_COLORVERTEX
     m_render_states[145] = 1;         // D3DRS_DIFFUSEMATERIALSOURCE = D3DMCS_COLOR1
     m_render_states[146] = 2;         // D3DRS_SPECULARMATERIALSOURCE = D3DMCS_COLOR2
-    m_render_states[D3DRS_ZWRITEENABLE]     = TRUE;             // D3D9 default: depth write enabled
+    m_render_states[D3DRS_ZWRITEENABLE] = TRUE;             // D3D9 default: depth write enabled
     m_render_states[D3DRS_COLORWRITEENABLE] = 0x0000000F;       // D3D9 default: all channels (R|G|B|A)
-    m_render_states[D3DRS_ZFUNC]            = D3DCMP_LESSEQUAL; // D3D9 default: LESSEQUAL (not GL's LESS)
-    m_render_states[D3DRS_STENCILFAIL]      = D3DSTENCILOP_KEEP;
-    m_render_states[D3DRS_STENCILZFAIL]     = D3DSTENCILOP_KEEP;
-    m_render_states[D3DRS_STENCILPASS]      = D3DSTENCILOP_KEEP;
-    m_render_states[D3DRS_STENCILFUNC]      = D3DCMP_ALWAYS;
-    m_render_states[D3DRS_STENCILMASK]      = 0xFFFFFFFF;
+    m_render_states[D3DRS_ZFUNC] = D3DCMP_LESSEQUAL; // D3D9 default: LESSEQUAL (not GL's LESS)
+    m_render_states[D3DRS_STENCILFAIL] = D3DSTENCILOP_KEEP;
+    m_render_states[D3DRS_STENCILZFAIL] = D3DSTENCILOP_KEEP;
+    m_render_states[D3DRS_STENCILPASS] = D3DSTENCILOP_KEEP;
+    m_render_states[D3DRS_STENCILFUNC] = D3DCMP_ALWAYS;
+    m_render_states[D3DRS_STENCILMASK] = 0xFFFFFFFF;
     m_render_states[D3DRS_STENCILWRITEMASK] = 0xFFFFFFFF;
 
     // Initial viewport call
@@ -62,7 +64,7 @@ D3D9Device::D3D9Device() : m_current_index_buffer(0), m_current_ib_format(D3DFMT
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL); // D3D9 default ZFUNC is LESSEQUAL, not LESS
     glDepthMask(GL_TRUE);
-    
+
     // [WASM FIX] D3D9 uses CW winding for front faces (left-handed)
     // OpenGL uses CCW by default (right-handed), so we flip it
     glFrontFace(GL_CW);
@@ -110,21 +112,16 @@ ULONG D3D9Device::Release() {
     return 0;
 }
 
-HRESULT D3D9Device::BeginScene() {
+HRESULT D3D9Device::BeginScene() { return D3D_OK; }
+
+HRESULT D3D9Device::EndScene() { return D3D_OK; }
+
+HRESULT D3D9Device::Present(const void *pSourceRect, const void *pDestRect, HWND hDestWindowOverride,
+                            const void *pDirtyRegion) {
     return D3D_OK;
 }
 
-HRESULT D3D9Device::EndScene() {
-    return D3D_OK;
-}
-
-HRESULT D3D9Device::Present(const void* pSourceRect, const void* pDestRect,
-                           HWND hDestWindowOverride, const void* pDirtyRegion) {
-    return D3D_OK;
-}
-
-HRESULT D3D9Device::Clear(DWORD Count, const void* pRects, DWORD Flags,
-                         D3DCOLOR Color, FLOAT Z, DWORD Stencil) {
+HRESULT D3D9Device::Clear(DWORD Count, const void *pRects, DWORD Flags, D3DCOLOR Color, FLOAT Z, DWORD Stencil) {
     float r = ((Color >> 16) & 0xFF) / 255.0f;
     float g = ((Color >> 8) & 0xFF) / 255.0f;
     float b = (Color & 0xFF) / 255.0f;
@@ -140,10 +137,14 @@ HRESULT D3D9Device::Clear(DWORD Count, const void* pRects, DWORD Flags,
     if (Flags & D3DCLEAR_STENCIL) mask |= GL_STENCIL_BUFFER_BIT;
 
     // Save current mask states from tracked render states (no GPU readback)
-    GLboolean color_write_enabled_r = (m_render_states[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_RED) ? GL_TRUE : GL_FALSE;
-    GLboolean color_write_enabled_g = (m_render_states[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_GREEN) ? GL_TRUE : GL_FALSE;
-    GLboolean color_write_enabled_b = (m_render_states[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_BLUE) ? GL_TRUE : GL_FALSE;
-    GLboolean color_write_enabled_a = (m_render_states[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_ALPHA) ? GL_TRUE : GL_FALSE;
+    GLboolean color_write_enabled_r =
+        (m_render_states[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_RED) ? GL_TRUE : GL_FALSE;
+    GLboolean color_write_enabled_g =
+        (m_render_states[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_GREEN) ? GL_TRUE : GL_FALSE;
+    GLboolean color_write_enabled_b =
+        (m_render_states[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_BLUE) ? GL_TRUE : GL_FALSE;
+    GLboolean color_write_enabled_a =
+        (m_render_states[D3DRS_COLORWRITEENABLE] & D3DCOLORWRITEENABLE_ALPHA) ? GL_TRUE : GL_FALSE;
     GLboolean depth_write_enabled = m_render_states[D3DRS_ZWRITEENABLE] ? GL_TRUE : GL_FALSE;
 
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -160,7 +161,7 @@ HRESULT D3D9Device::Clear(DWORD Count, const void* pRects, DWORD Flags,
     return D3D_OK;
 }
 
-HRESULT D3D9Device::Reset(D3DPRESENT_PARAMETERS* pPresentationParameters) {
+HRESULT D3D9Device::Reset(D3DPRESENT_PARAMETERS *pPresentationParameters) {
     // The app asks for a new back buffer size (a resolution change): follow it, as CreateDevice does.
     if (!pPresentationParameters) return D3DERR_INVALIDCALL;
     int w = (int)pPresentationParameters->BackBufferWidth, h = (int)pPresentationParameters->BackBufferHeight;
@@ -168,19 +169,23 @@ HRESULT D3D9Device::Reset(D3DPRESENT_PARAMETERS* pPresentationParameters) {
     g_logical_width = w;
     g_logical_height = h;
     emscripten_set_canvas_element_size(g_canvas_selector, w, h);
-    if (m_backbuffer_surface) { m_backbuffer_surface->m_width = (UINT)w; m_backbuffer_surface->m_height = (UINT)h; }
+    if (m_backbuffer_surface) {
+        m_backbuffer_surface->m_width = (UINT)w;
+        m_backbuffer_surface->m_height = (UINT)h;
+    }
     m_current_rt = m_backbuffer_surface;
-    g_viewport.X = 0; g_viewport.Y = 0; g_viewport.Width = (DWORD)w; g_viewport.Height = (DWORD)h;
+    g_viewport.X = 0;
+    g_viewport.Y = 0;
+    g_viewport.Width = (DWORD)w;
+    g_viewport.Height = (DWORD)h;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, w, h);
     return D3D_OK;
 }
 
-HRESULT D3D9Device::TestCooperativeLevel() {
-    return D3D_OK;
-}
+HRESULT D3D9Device::TestCooperativeLevel() { return D3D_OK; }
 
-HRESULT D3D9Device::GetDisplayMode(UINT iSwapChain, D3DDISPLAYMODE* pMode) {
+HRESULT D3D9Device::GetDisplayMode(UINT iSwapChain, D3DDISPLAYMODE *pMode) {
     if (!pMode) return D3DERR_INVALIDCALL;
     pMode->Width = g_logical_width;
     pMode->Height = g_logical_height;
@@ -189,11 +194,11 @@ HRESULT D3D9Device::GetDisplayMode(UINT iSwapChain, D3DDISPLAYMODE* pMode) {
     return D3D_OK;
 }
 
-HRESULT D3D9Device::GetDeviceCaps(D3DCAPS9* pCaps) {
+HRESULT D3D9Device::GetDeviceCaps(D3DCAPS9 *pCaps) {
     if (!pCaps) return -1;
-    
+
     memset(pCaps, 0, sizeof(D3DCAPS9));
-    
+
 #ifdef __EMSCRIPTEN__
     // CRITICAL: Lie about shader support to force FFP mode
     pCaps->VertexShaderVersion = 0;  // No vertex shader support
@@ -203,7 +208,7 @@ HRESULT D3D9Device::GetDeviceCaps(D3DCAPS9* pCaps) {
     pCaps->VertexShaderVersion = D3DVS_VERSION(2, 0);
     pCaps->PixelShaderVersion = D3DPS_VERSION(2, 0);
 #endif
-    
+
     // Additional capabilities
     pCaps->DevCaps = D3DDEVCAPS_HWTRANSFORMANDLIGHT; // Claim HW T&L support
     pCaps->MaxPrimitiveCount = 0xFFFFFFFF;
@@ -212,7 +217,7 @@ HRESULT D3D9Device::GetDeviceCaps(D3DCAPS9* pCaps) {
     pCaps->MaxUserClipPlanes = 1; // Emulated via fragment shader discard
     pCaps->RasterCaps = 0; // No W-fog
     pCaps->MaxVertexShaderConst = 0; // No shader constants since VS version is 0
-    
+
     return D3D_OK;
 }
 
@@ -220,35 +225,32 @@ UINT D3D9Device::GetAvailableTextureMem() {
     return 128 * 1024 * 1024; // 128MB
 }
 
-HRESULT D3D9Device::ValidateDevice(DWORD* pNumPasses) {
+HRESULT D3D9Device::ValidateDevice(DWORD *pNumPasses) {
     if (pNumPasses) *pNumPasses = 1;
     return D3D_OK;
 }
 
-HRESULT D3D9Device::CreateQuery(D3DQUERYTYPE Type, IDirect3DQuery9** ppQuery) {
+HRESULT D3D9Device::CreateQuery(D3DQUERYTYPE Type, IDirect3DQuery9 **ppQuery) {
     if (ppQuery) *ppQuery = nullptr;
     return D3D_OK;
 }
 
-HRESULT D3D9Device::CreateStateBlock(D3DSTATEBLOCKTYPE Type, IDirect3DStateBlock9** ppSB) {
+HRESULT D3D9Device::CreateStateBlock(D3DSTATEBLOCKTYPE Type, IDirect3DStateBlock9 **ppSB) {
     if (ppSB) *ppSB = new D3D9StateBlock();
     return D3D_OK;
 }
 
-void D3D9Device::SetGammaRamp(UINT iSwapChain, DWORD Flags, const D3DGAMMARAMP* pRamp) {
+void D3D9Device::SetGammaRamp(UINT iSwapChain, DWORD Flags, const D3DGAMMARAMP *pRamp) {}
+
+void D3D9Device::GetGammaRamp(UINT iSwapChain, D3DGAMMARAMP *pRamp) {
+    if (pRamp) memset(pRamp, 0, sizeof(D3DGAMMARAMP));
 }
 
-void D3D9Device::GetGammaRamp(UINT iSwapChain, D3DGAMMARAMP* pRamp) {
-    if(pRamp) memset(pRamp, 0, sizeof(D3DGAMMARAMP));
-}
-
-HRESULT D3D9Device::GetRenderTargetData(IDirect3DSurface9* pRenderTarget, IDirect3DSurface9* pDestSurface) {
+HRESULT D3D9Device::GetRenderTargetData(IDirect3DSurface9 *pRenderTarget, IDirect3DSurface9 *pDestSurface) {
     return D3D_OK;
 }
 
-HRESULT D3D9Device::GetFrontBufferData(UINT iSwapChain, IDirect3DSurface9* pDestSurface) {
-    return D3D_OK;
-}
+HRESULT D3D9Device::GetFrontBufferData(UINT iSwapChain, IDirect3DSurface9 *pDestSurface) { return D3D_OK; }
 // Initialize static member variables for shader warning suppression
 bool D3D9Device::s_pixel_shader_warning_shown = false;
 bool D3D9Device::s_vertex_shader_warning_shown = false;

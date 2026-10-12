@@ -5,8 +5,10 @@
 // clamps to the edge texel) and no mirror-once (it mirrors, then repeats the mirror).
 static GLint gl_wrap(DWORD m) {
     switch (m) {
-    case 2: case 5: return GL_MIRRORED_REPEAT;
-    case 3: case 4: return GL_CLAMP_TO_EDGE;
+    case 2:
+    case 5: return GL_MIRRORED_REPEAT;
+    case 3:
+    case 4: return GL_CLAMP_TO_EDGE;
     default: return GL_REPEAT;
     }
 }
@@ -17,15 +19,16 @@ static GLint gl_wrap(DWORD m) {
 // samples sharper mips along surfaces at oblique angles: the pitch, stands).
 void apply_sampler_states(DWORD st, bool aniso) {
     if (st >= 8) return;
-    const DWORD* s = g_sampler_states[st];
+    const DWORD *s = g_sampler_states[st];
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl_wrap(s[D3DSAMP_ADDRESSU]));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl_wrap(s[D3DSAMP_ADDRESSV]));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, s[D3DSAMP_MAGFILTER] == D3DTEXF_POINT ? GL_NEAREST : GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                    s[D3DSAMP_MAGFILTER] == D3DTEXF_POINT ? GL_NEAREST : GL_LINEAR);
 
     GLuint tex = g_texture_stages[st];
     bool mips = tex != 0 && g_mipmapped_textures.count(tex) && s[D3DSAMP_MIPFILTER] != D3DTEXF_NONE;
     bool point = s[D3DSAMP_MINFILTER] == D3DTEXF_POINT, mip_linear = s[D3DSAMP_MIPFILTER] == D3DTEXF_LINEAR;
-    GLint min_filter = !mips ? (point ? GL_NEAREST : GL_LINEAR)
+    GLint min_filter = !mips   ? (point ? GL_NEAREST : GL_LINEAR)
                        : point ? (mip_linear ? GL_NEAREST_MIPMAP_LINEAR : GL_NEAREST_MIPMAP_NEAREST)
                                : (mip_linear ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR_MIPMAP_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);

@@ -24,47 +24,84 @@ void rt_hook_enter(uint32_t va, const char *name) {
         return;
     }
     if (!strncmp(name, "ctl:", 4)) {   /* controller object (ecx): device type, selectable, active; on change */
-        static uint32_t seen[16][4]; static int n;
+        static uint32_t seen[16][4];
+        static int n;
         uint32_t t = rd32(g_ecx + 0x2570), sel = rd32(g_ecx + 0x2580), act = rd32(g_ecx + 0x25a8);
-        int i = 0; while (i < n && seen[i][0] != g_ecx) i++;
-        if (i == n && n < 16) { seen[n][0] = g_ecx; seen[n][1] = ~0u; n++; }
+        int i = 0;
+        while (i < n && seen[i][0] != g_ecx) i++;
+        if (i == n && n < 16) {
+            seen[n][0] = g_ecx;
+            seen[n][1] = ~0u;
+            n++;
+        }
         if (i < 16 && (seen[i][1] != t || seen[i][2] != sel || seen[i][3] != act)) {
-            seen[i][1] = t; seen[i][2] = sel; seen[i][3] = act;
+            seen[i][1] = t;
+            seen[i][2] = sel;
+            seen[i][3] = act;
             rt_trace("%s ecx=%08X type=%u selectable=%u active=%u", name + 4, g_ecx, t, sel, act);
         }
         return;
     }
-    if (!strncmp(name, "shadow:", 7)) { rt_shadow_enter(va, name + 7); return; }
-    if (!strncmp(name, "stick:", 6)) {  /* controller (ecx) at its per-frame read: left stick x/y, 8-way dir; on change */
-        static uint32_t seen[16][5]; static int n;
-        { static uint32_t calls, ms0;   /* game frame time (app clock 0xA7ED28 +0x78) against host time */
-          uint32_t clk = rd32(0xA7ED28);
-          if (clk && ++calls % 120 == 0) {
-              uint32_t raw = rd32(clk + 0x78), ms = rt_ms(); float dt; memcpy(&dt, &raw, 4);
-              rt_trace("%s clock dt=%g host %u ms per 120 reads", name + 6, dt, ms - ms0); ms0 = ms;
-          } }
+    if (!strncmp(name, "shadow:", 7)) {
+        rt_shadow_enter(va, name + 7);
+        return;
+    }
+    if (!strncmp(name,
+                 "stick:", 6)) {  /* controller (ecx) at its per-frame read: left stick x/y, 8-way dir; on change */
+        static uint32_t seen[16][5];
+        static int n;
+        {
+            static uint32_t calls, ms0;   /* game frame time (app clock 0xA7ED28 +0x78) against host time */
+            uint32_t clk = rd32(0xA7ED28);
+            if (clk && ++calls % 120 == 0) {
+                uint32_t raw = rd32(clk + 0x78), ms = rt_ms();
+                float dt;
+                memcpy(&dt, &raw, 4);
+                rt_trace("%s clock dt=%g host %u ms per 120 reads", name + 6, dt, ms - ms0);
+                ms0 = ms;
+            }
+        }
         uint32_t x = rd32(g_ecx + 8), y = rd32(g_ecx + 12), dir = rd32(g_ecx + 0x30), side = rd32(g_ecx + 0x2558);
-        int i = 0; while (i < n && seen[i][0] != g_ecx) i++;
-        if (i == n && n < 16) { seen[n][0] = g_ecx; seen[n][1] = ~0u; n++; }
+        int i = 0;
+        while (i < n && seen[i][0] != g_ecx) i++;
+        if (i == n && n < 16) {
+            seen[n][0] = g_ecx;
+            seen[n][1] = ~0u;
+            n++;
+        }
         if (i < 16 && (seen[i][1] != x || seen[i][2] != y || seen[i][3] != dir || seen[i][4] != side)) {
-            seen[i][1] = x; seen[i][2] = y; seen[i][3] = dir; seen[i][4] = side;
-            float fx, fy; memcpy(&fx, &x, 4); memcpy(&fy, &y, 4);
-            rt_trace("%s ecx=%08X type=%u side=%d x=%g y=%g dir=%u", name + 6, g_ecx, rd32(g_ecx + 0x2570), (int)side, fx, fy, dir);
+            seen[i][1] = x;
+            seen[i][2] = y;
+            seen[i][3] = dir;
+            seen[i][4] = side;
+            float fx, fy;
+            memcpy(&fx, &x, 4);
+            memcpy(&fy, &y, 4);
+            rt_trace("%s ecx=%08X type=%u side=%d x=%g y=%g dir=%u", name + 6, g_ecx, rd32(g_ecx + 0x2570), (int)side,
+                     fx, fy, dir);
         }
         return;
     }
     if (!strncmp(name, "args:", 5)) {
-        rt_trace("%s (0x%08X) ecx=%08X args %08X %08X %08X", name + 5, va, g_ecx,
-                 rd32(g_esp + 4), rd32(g_esp + 8), rd32(g_esp + 12));
+        rt_trace("%s (0x%08X) ecx=%08X args %08X %08X %08X", name + 5, va, g_ecx, rd32(g_esp + 4), rd32(g_esp + 8),
+                 rd32(g_esp + 12));
         {   // RT_ARGS_DUMP=N: also the first N dwords at ecx as floats (finding position/heading fields)
-            static int n = -1; static uint32_t off;   // RT_ARGS_DUMP_OFF=hex: start the dump at ecx+off
-            if (n < 0) { n = getenv("RT_ARGS_DUMP") ? atoi(getenv("RT_ARGS_DUMP")) : 0;
-                         off = getenv("RT_ARGS_DUMP_OFF") ? (uint32_t)strtoul(getenv("RT_ARGS_DUMP_OFF"), 0, 16) : 0; }
+            static int n = -1;
+            static uint32_t off;   // RT_ARGS_DUMP_OFF=hex: start the dump at ecx+off
+            if (n < 0) {
+                n = getenv("RT_ARGS_DUMP") ? atoi(getenv("RT_ARGS_DUMP")) : 0;
+                off = getenv("RT_ARGS_DUMP_OFF") ? (uint32_t)strtoul(getenv("RT_ARGS_DUMP_OFF"), 0, 16) : 0;
+            }
             if (n > 0 && g_ecx >= 0x10000) {
-                char buf[4096]; int k = 0;
+                char buf[4096];
+                int k = 0;
                 for (int i = 0; i < n && k < (int)sizeof buf - 32; i++) {
-                    uint32_t base = getenv("RT_ARGS_DUMP_DEREF") ? rd32(g_ecx + (uint32_t)strtoul(getenv("RT_ARGS_DUMP_DEREF"), 0, 16)) : g_ecx;
-                    uint32_t v = rd32(base + off + 4u * (uint32_t)i); float f; memcpy(&f, &v, 4);
+                    uint32_t base = getenv("RT_ARGS_DUMP_DEREF")
+                                        ? rd32(g_ecx + (uint32_t)strtoul(getenv("RT_ARGS_DUMP_DEREF"), 0, 16))
+                                        : g_ecx;
+                    uint32_t v = rd32(base + off + 4u * (uint32_t)i);
+                    float f;
+                    memcpy(&f, &v, 4);
                     k += getenv("RT_ARGS_DUMP_HEX") ? snprintf(buf + k, sizeof buf - k, " %08X", v)
                                                     : snprintf(buf + k, sizeof buf - k, " %g", f);
                 }

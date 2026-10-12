@@ -11,8 +11,10 @@
 static void on_fault(int sig, siginfo_t *si, void *ctx) {
     (void)ctx;
     uintptr_t a = (uintptr_t)si->si_addr, b = (uintptr_t)g_mem_base;
-    rt_log("FAULT: signal %d at host %p (guest 0x%08llX) in sub_%08X, esp=0x%08X eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X", sig, si->si_addr,
-           (unsigned long long)(a - b), g_cur_func, g_esp, g_eax, g_ebx, g_ecx, g_edx, g_esi, g_edi, g_ebp);
+    rt_log("FAULT: signal %d at host %p (guest 0x%08llX) in sub_%08X, esp=0x%08X eax=%08X ebx=%08X ecx=%08X edx=%08X "
+           "esi=%08X edi=%08X ebp=%08X",
+           sig, si->si_addr, (unsigned long long)(a - b), g_cur_func, g_esp, g_eax, g_ebx, g_ecx, g_edx, g_esi, g_edi,
+           g_ebp);
     recomp_dump_trace("fault");
     _exit(139);
 }

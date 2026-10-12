@@ -24,7 +24,7 @@ static void frame_pace(void) {
     if (wait > 0) {
         uint32_t ms = (uint32_t)(wait * 1000.0 / (double)SDL_GetPerformanceFrequency());
         if (ms > 1) SDL_Delay(ms - 1);
-        while ((double)SDL_GetPerformanceCounter() < next) { }
+        while ((double)SDL_GetPerformanceCounter() < next) {}
         g_wait_ticks += wait;
     }
 }
@@ -47,22 +47,30 @@ static void frame_stats(double swap_ticks) {
     if (now - t0 >= f && n) {
         double span = now - t0;
         rt_trace("perf: %d fps, avg %.1f ms, worst %.1f ms, %d frames >20 ms, swap %.1f ms, paced-wait %.1f ms",
-                 (int)(n * f / span + 0.5), span * 1000 / f / n, worst * 1000 / f, (int)over,
-                 swap_sum * 1000 / f / n, g_wait_ticks * 1000 / f / n);
+                 (int)(n * f / span + 0.5), span * 1000 / f / n, worst * 1000 / f, (int)over, swap_sum * 1000 / f / n,
+                 g_wait_ticks * 1000 / f / n);
 #ifdef __APPLE__
         /* Three slow seconds in a row: `sample` this process (5 s of stacks) into logs/, at most 3 times a
            run, so a slow scene explains itself without anyone attaching a profiler. */
         static int slow, taken;
-        static int thr; if (!thr) { const char *e = getenv("RT_SLOW_FPS"); thr = e ? atoi(e) : 24; }
+        static int thr;
+        if (!thr) {
+            const char *e = getenv("RT_SLOW_FPS");
+            thr = e ? atoi(e) : 24;
+        }
         slow = n * f / span < thr ? slow + 1 : 0;
         if (slow >= 3 && taken < 3) {
             char cmd[256];
-            snprintf(cmd, sizeof cmd, "sample %d 5 -file logs/sample-auto-%d.txt >/dev/null 2>&1 &", (int)getpid(), taken);
+            snprintf(cmd, sizeof cmd, "sample %d 5 -file logs/sample-auto-%d.txt >/dev/null 2>&1 &", (int)getpid(),
+                     taken);
             if (system(cmd) == 0) rt_trace("perf: slow scene, sampling into logs/sample-auto-%d.txt", taken);
-            taken++; slow = -10;
+            taken++;
+            slow = -10;
         }
 #endif
-        t0 = now; n = 0; worst = swap_sum = over = g_wait_ticks = 0;
+        t0 = now;
+        n = 0;
+        worst = swap_sum = over = g_wait_ticks = 0;
     }
 }
 

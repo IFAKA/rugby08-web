@@ -30,5 +30,11 @@ HLE(RegQueryValueExA) {   /* (hkey, name, reserved, type, data, cbData) */
     return ERROR_FILE_NOT_FOUND_;
 }
 
-HLE(RegEnumValueA) { (void)a; return ERROR_NO_MORE_ITEMS_; }
-HLE(RegCloseKey) { (void)a; return ERROR_SUCCESS_; }
+HLE(RegEnumValueA) {
+    (void)a;
+    return ERROR_NO_MORE_ITEMS_;
+}
+HLE(RegCloseKey) {
+    (void)a;
+    return ERROR_SUCCESS_;
+}

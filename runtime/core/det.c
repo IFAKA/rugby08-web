@@ -38,7 +38,10 @@ static uint64_t (*g_deadline_fn)(void);   /* winmm: the earliest timer due */
 void det_set_deadline_fn(uint64_t (*fn)(void)) { g_deadline_fn = fn; }
 
 int det_on(void) {
-    if (rt_det < 0) { const char *e = getenv("RT_DET"); rt_det = e && *e == '1'; }
+    if (rt_det < 0) {
+        const char *e = getenv("RT_DET");
+        rt_det = e && *e == '1';
+    }
     return rt_det;
 }
 uint64_t det_now_ns(void) { return __atomic_load_n(&g_vt, __ATOMIC_RELAXED); }
@@ -49,9 +52,9 @@ uint64_t det_now_ns(void) { return __atomic_load_n(&g_vt, __ATOMIC_RELAXED); }
  * advances DET_SPIN_NS. Reads scattered through real work (profiling stopwatches) never count, so
  * an ordinary frame's dt stays exactly 1/60 s. Counts are per thread and depend only on the guest's
  * own code path: deterministic. */
-#define DET_SPIN 32
+#define DET_SPIN     32
 #define DET_SPIN_GAP 64
-#define DET_SPIN_NS 500000ull
+#define DET_SPIN_NS  500000ull
 static RECOMP_TLS uint32_t t_reads, t_last_entries;
 uint32_t rt_enter_mark(void);   /* log.c: guest function entries on this thread */
 uint64_t det_clock_read(void) {
@@ -72,7 +75,9 @@ void det_init_main(void) {            /* the boot thread: slot 0, holds the bato
     pthread_mutex_lock(&g_mu);
     pthread_cond_init(&g_t[0].cv, NULL);
     g_t[0].state = T_RUN;
-    g_n = 1; g_cur = 0; t_id = 0;
+    g_n = 1;
+    g_cur = 0;
+    t_id = 0;
     pthread_mutex_unlock(&g_mu);
     rt_log("det: deterministic mode on");
 }
@@ -80,7 +85,10 @@ void det_init_main(void) {            /* the boot thread: slot 0, holds the bato
 static int runnable(dthr_t *t) {
     if (t->state == T_RUN) return 1;
     if (t->state != T_WAIT) return 0;
-    if ((t->ready && t->ready(t->arg)) || t->deadline <= g_vt) { t->state = T_RUN; return 1; }
+    if ((t->ready && t->ready(t->arg)) || t->deadline <= g_vt) {
+        t->state = T_RUN;
+        return 1;
+    }
     return 0;
 }
 
@@ -96,16 +104,27 @@ static void schedule(int me) {
         }
         if (next >= 0) break;
         uint64_t m = UINT64_MAX;
-        for (int j = 0; j < g_n; j++) if (g_t[j].state == T_WAIT && g_t[j].deadline < m) m = g_t[j].deadline;
-        if (g_deadline_fn) { uint64_t d = g_deadline_fn(); if (d < m) m = d; }
+        for (int j = 0; j < g_n; j++)
+            if (g_t[j].state == T_WAIT && g_t[j].deadline < m) m = g_t[j].deadline;
+        if (g_deadline_fn) {
+            uint64_t d = g_deadline_fn();
+            if (d < m) m = d;
+        }
         if (m == UINT64_MAX) rt_fatal("det: deadlock (every guest thread waits with no deadline)");
         __atomic_store_n(&g_vt, m, __ATOMIC_RELAXED);
         g_slices = 0;
     }
     if (next == me) return;
     static int chaos = -1;   /* RT_DET_CHAOS=1: random host delays at every hand-over (synctest) */
-    if (chaos < 0) { const char *e = getenv("RT_DET_CHAOS"); chaos = e && *e == '1'; }
-    if (chaos) { pthread_mutex_unlock(&g_mu); usleep((useconds_t)(rand() % 40)); pthread_mutex_lock(&g_mu); }
+    if (chaos < 0) {
+        const char *e = getenv("RT_DET_CHAOS");
+        chaos = e && *e == '1';
+    }
+    if (chaos) {
+        pthread_mutex_unlock(&g_mu);
+        usleep((useconds_t)(rand() % 40));
+        pthread_mutex_lock(&g_mu);
+    }
     g_cur = next;
     pthread_cond_signal(&g_t[next].cv);
     if (g_t[me].state == T_DEAD) return;
@@ -116,7 +135,7 @@ static void schedule(int me) {
  * and no idle time jump (a loading screen, a movie waiting for its audio clock, a thread polling
  * shared state another thread updates on a timer), time also passes with work, like a CPU clock:
  * DET_WORK_NS per slice. Ordinary frames never get there, so their dt stays 1/60 s. */
-#define DET_STALL 256
+#define DET_STALL   256
 #define DET_WORK_NS 100000ull
 void det_preempt(void) {
     if (t_id < 0) return;
@@ -139,17 +158,24 @@ int det_wait(det_ready_fn ready, void *arg, uint64_t deadline) {
     pthread_mutex_lock(&g_mu);
     dthr_t *t = &g_t[t_id];
     if (!(ready && ready(arg)) && deadline > g_vt) {
-        t->state = T_WAIT; t->ready = ready; t->arg = arg; t->deadline = deadline;
+        t->state = T_WAIT;
+        t->ready = ready;
+        t->arg = arg;
+        t->deadline = deadline;
         schedule(t_id);
     }
-    t->state = T_RUN; t->ready = NULL;
+    t->state = T_RUN;
+    t->ready = NULL;
     int ok = ready && ready(arg);
     pthread_mutex_unlock(&g_mu);
     return ok;
 }
 
 void det_sleep_ms(uint32_t ms) {
-    if (!ms) { det_yield(); return; }
+    if (!ms) {
+        det_yield();
+        return;
+    }
     det_wait(NULL, NULL, det_now_ns() + (uint64_t)ms * 1000000ull);
 }
 
@@ -160,7 +186,10 @@ int det_thread_new(det_ready_fn ready, void *arg) {
     int id = g_n++;
     dthr_t *t = &g_t[id];
     pthread_cond_init(&t->cv, NULL);
-    t->state = ready ? T_WAIT : T_RUN; t->ready = ready; t->arg = arg; t->deadline = UINT64_MAX;
+    t->state = ready ? T_WAIT : T_RUN;
+    t->ready = ready;
+    t->arg = arg;
+    t->deadline = UINT64_MAX;
     pthread_mutex_unlock(&g_mu);
     return id;
 }
@@ -169,7 +198,8 @@ void det_thread_begin(int id) {
     pthread_mutex_lock(&g_mu);
     t_id = id;
     while (g_cur != id) pthread_cond_wait(&g_t[id].cv, &g_mu);
-    g_t[id].state = T_RUN; g_t[id].ready = NULL;
+    g_t[id].state = T_RUN;
+    g_t[id].ready = NULL;
     pthread_mutex_unlock(&g_mu);
 }
 void det_thread_end(void) {
@@ -184,12 +214,16 @@ void det_thread_end(void) {
 /* ---- frames ---------------------------------------------------------------------------------- */
 static det_frame_fn g_hooks[8];
 static int g_nhooks;
-void det_on_frame(det_frame_fn fn) { if (g_nhooks < 8) g_hooks[g_nhooks++] = fn; }
+void det_on_frame(det_frame_fn fn) {
+    if (g_nhooks < 8) g_hooks[g_nhooks++] = fn;
+}
 
 static uint64_t hash_range(uint64_t h, uint32_t lo, uint32_t hi) {
     const uint64_t *p = (const uint64_t *)G2H(lo);
     for (uint32_t n = (hi - lo) / 8; n; n--, p++) {
-        h ^= *p; h *= 0x100000001B3ull; h ^= h >> 29;
+        h ^= *p;
+        h *= 0x100000001B3ull;
+        h ^= h >> 29;
     }
     return h;
 }
@@ -205,15 +239,19 @@ uint64_t det_hash(void) {
 /* RT_DET_HASH=N: "det: frame F hash H" every N frames. RT_DET_PAGES=F: page hashes at frame F
  * (one line per 64 KiB page) to locate the first difference between two runs. */
 static void hash_frame(uint32_t frame) {
-    static int every = -1; static long pages_at = -1;
+    static int every = -1;
+    static long pages_at = -1;
     if (every < 0) {
         const char *e = getenv("RT_DET_HASH"), *p = getenv("RT_DET_PAGES");
-        every = e ? atoi(e) : 0; pages_at = p ? atol(p) : -1;
+        every = e ? atoi(e) : 0;
+        pages_at = p ? atol(p) : -1;
     }
     if (every > 0 && frame % (uint32_t)every == 0)
         rt_trace("det: frame %u hash %016llX vt %llu", frame, (unsigned long long)det_hash(), (unsigned long long)g_vt);
     if ((long)frame == pages_at) {
-        uint32_t ranges[3][2] = { { RT_IMAGE_BASE, RT_IMAGE_END }, { RT_STACK0_LO, RT_STACK0_HI }, { RT_HEAP_LO, rt_heap_top() } };
+        uint32_t ranges[3][2] = { { RT_IMAGE_BASE, RT_IMAGE_END },
+                                  { RT_STACK0_LO, RT_STACK0_HI },
+                                  { RT_HEAP_LO, rt_heap_top() } };
         for (int r = 0; r < 3; r++)
             for (uint32_t a = ranges[r][0]; a < ranges[r][1]; a += 0x10000) {
                 uint32_t e = a + 0x10000 < ranges[r][1] ? a + 0x10000 : ranges[r][1];
@@ -228,9 +266,13 @@ void det_frame(uint32_t frame) {
     for (int i = 0; i < g_nhooks; i++) g_hooks[i](frame);
     uint64_t slot = (uint64_t)frame * 1000000000ull / 60ull;
     static unsigned over, n;   /* frames whose work ran past their 1/60 s slot (dt > 1/60 there) */
-    if (slot > g_vt) __atomic_store_n(&g_vt, slot, __ATOMIC_RELAXED); else over++;
+    if (slot > g_vt) __atomic_store_n(&g_vt, slot, __ATOMIC_RELAXED);
+    else over++;
     g_slices = 0;
-    if (++n == 600) { rt_log("det: %u of 600 frames ran past their slot", over); over = n = 0; }
+    if (++n == 600) {
+        rt_log("det: %u of 600 frames ran past their slot", over);
+        over = n = 0;
+    }
     det_yield();
     hash_frame(frame);
 }

@@ -27,20 +27,35 @@ void path_guest_cwd(char *out, size_t n) {
 void path_full_guest(const char *guest, char *out, size_t n) {
     char buf[2048];
     if (guest[0] && guest[1] == ':') snprintf(buf, sizeof buf, "%s", guest);
-    else if (guest[0] == '\\' || guest[0] == '/') { char c[1024]; path_guest_cwd(c, sizeof c); snprintf(buf, sizeof buf, "%c:%s", c[0], guest); }
-    else { char c[1024]; path_guest_cwd(c, sizeof c); snprintf(buf, sizeof buf, "%s\\%s", c, guest); }
-    for (char *p = buf; *p; p++) if (*p == '/') *p = '\\';
+    else if (guest[0] == '\\' || guest[0] == '/') {
+        char c[1024];
+        path_guest_cwd(c, sizeof c);
+        snprintf(buf, sizeof buf, "%c:%s", c[0], guest);
+    } else {
+        char c[1024];
+        path_guest_cwd(c, sizeof c);
+        snprintf(buf, sizeof buf, "%s\\%s", c, guest);
+    }
+    for (char *p = buf; *p; p++)
+        if (*p == '/') *p = '\\';
     /* split and rebuild */
-    char *parts[256]; int np = 0;
+    char *parts[256];
+    int np = 0;
     char drive[3] = { (char)toupper((unsigned char)buf[0]), ':', 0 };
     char *s = buf + 2, *tok;
     while ((tok = strsep(&s, "\\"))) {
         if (!*tok || !strcmp(tok, ".")) continue;
-        if (!strcmp(tok, "..")) { if (np) np--; continue; }
+        if (!strcmp(tok, "..")) {
+            if (np) np--;
+            continue;
+        }
         if (np < 256) parts[np++] = tok;
     }
     size_t o = (size_t)snprintf(out, n, "%s", drive);
-    if (!np && o + 1 < n) { out[o++] = '\\'; out[o] = 0; }
+    if (!np && o + 1 < n) {
+        out[o++] = '\\';
+        out[o] = 0;
+    }
     for (int i = 0; i < np && o < n; i++) o += (size_t)snprintf(out + o, n - o, "\\%s", parts[i]);
 }
 
@@ -71,17 +86,27 @@ static void resolve_ci(const char *base, const char *rel, char *out, size_t n) {
         char cand[2048];
         snprintf(cand, sizeof cand, "%s/%s", out, tok);
         struct stat st;
-        if (missing || !stat(cand, &st)) { snprintf(out + len, n - len, "/%s", tok); continue; }
+        if (missing || !stat(cand, &st)) {
+            snprintf(out + len, n - len, "/%s", tok);
+            continue;
+        }
         DIR *d = opendir(out);
         int found = 0;
         if (d) {
             struct dirent *e;
             while ((e = readdir(d))) {
-                if (!strcasecmp(e->d_name, tok)) { snprintf(out + len, n - len, "/%s", e->d_name); found = 1; break; }
+                if (!strcasecmp(e->d_name, tok)) {
+                    snprintf(out + len, n - len, "/%s", e->d_name);
+                    found = 1;
+                    break;
+                }
             }
             closedir(d);
         }
-        if (!found) { missing = 1; snprintf(out + len, n - len, "/%s", tok); }
+        if (!found) {
+            missing = 1;
+            snprintf(out + len, n - len, "/%s", tok);
+        }
     }
 }
 
@@ -89,7 +114,11 @@ static void mkdirs_for(const char *file) {
     char d[2048];
     snprintf(d, sizeof d, "%s", file);
     for (char *p = d + 1; *p; p++) {
-        if (*p == '/') { *p = 0; mkdir(d, 0755); *p = '/'; }
+        if (*p == '/') {
+            *p = 0;
+            mkdir(d, 0755);
+            *p = '/';
+        }
     }
 }
 
@@ -104,8 +133,15 @@ int path_to_host(const char *guest, char *host, size_t n, int for_write) {
         char ov[2048];
         resolve_ci(over, rest, ov, sizeof ov);
         struct stat st;
-        if (for_write) { mkdirs_for(ov); snprintf(host, n, "%s", ov); return 0; }
-        if (!stat(ov, &st)) { snprintf(host, n, "%s", ov); return 0; }
+        if (for_write) {
+            mkdirs_for(ov);
+            snprintf(host, n, "%s", ov);
+            return 0;
+        }
+        if (!stat(ov, &st)) {
+            snprintf(host, n, "%s", ov);
+            return 0;
+        }
         resolve_ci(rt_game_dir, rest, host, n);
         return 0;
     }

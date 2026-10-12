@@ -38,7 +38,7 @@ FvfLayout fvf_layout(DWORD fvf, bool legacy) {
 
 // D3DPRIMITIVETYPE -> GL mode and vertex/index count. set: the draw path's original table (DrawPrimitive
 // knew triangles only, DrawIndexedPrimitiveUP drew everything as a list); unknown types draw nothing.
-bool gl_primitive(D3DPRIMITIVETYPE t, UINT prims, PrimSet set, GLenum* mode, UINT* count) {
+bool gl_primitive(D3DPRIMITIVETYPE t, UINT prims, PrimSet set, GLenum *mode, UINT *count) {
     *mode = GL_TRIANGLES;
     *count = 0;
     if (set == PRIM_INDEXED_UP) {
@@ -46,22 +46,40 @@ bool gl_primitive(D3DPRIMITIVETYPE t, UINT prims, PrimSet set, GLenum* mode, UIN
         return true;
     }
     switch (t) {
-    case D3DPT_TRIANGLELIST: *mode = GL_TRIANGLES; *count = prims * 3; return true;
-    case D3DPT_TRIANGLESTRIP: *mode = GL_TRIANGLE_STRIP; *count = prims + 2; return true;
-    case D3DPT_TRIANGLEFAN: *mode = GL_TRIANGLE_FAN; *count = prims + 2; return true;
+    case D3DPT_TRIANGLELIST:
+        *mode = GL_TRIANGLES;
+        *count = prims * 3;
+        return true;
+    case D3DPT_TRIANGLESTRIP:
+        *mode = GL_TRIANGLE_STRIP;
+        *count = prims + 2;
+        return true;
+    case D3DPT_TRIANGLEFAN:
+        *mode = GL_TRIANGLE_FAN;
+        *count = prims + 2;
+        return true;
     default: break;
     }
     if (set == PRIM_TRIANGLES) return false;
     switch (t) {
-    case D3DPT_LINELIST: *mode = GL_LINES; *count = prims * 2; return true;
-    case D3DPT_LINESTRIP: *mode = GL_LINE_STRIP; *count = prims + 1; return true;
-    case D3DPT_POINTLIST: *mode = GL_POINTS; *count = prims; return true;
+    case D3DPT_LINELIST:
+        *mode = GL_LINES;
+        *count = prims * 2;
+        return true;
+    case D3DPT_LINESTRIP:
+        *mode = GL_LINE_STRIP;
+        *count = prims + 1;
+        return true;
+    case D3DPT_POINTLIST:
+        *mode = GL_POINTS;
+        *count = prims;
+        return true;
     default: return false;
     }
 }
 
 // The program for this draw, its trace line, the render-target Y flip and the clip plane.
-void D3D9Device::draw_begin(const char* path, unsigned count) {
+void D3D9Device::draw_begin(const char *path, unsigned count) {
     if (g_shader_program == 0) init_shaders();
     use_draw_program();
     trace_draw(path, count);
@@ -70,12 +88,12 @@ void D3D9Device::draw_begin(const char* path, unsigned count) {
     if (m_clip_plane_enabled) glUniform4fv(g_clip_plane_uniform, 1, m_clip_planes[0]);
 }
 
-void D3D9Device::viewport_size(float* w, float* h) const {
+void D3D9Device::viewport_size(float *w, float *h) const {
     *w = g_viewport.Width > 0 ? (float)g_viewport.Width : (float)g_logical_width;
     *h = g_viewport.Height > 0 ? (float)g_viewport.Height : (float)g_logical_height;
 }
 
-void D3D9Device::target_size(float* w, float* h) const {
+void D3D9Device::target_size(float *w, float *h) const {
     *w = m_current_rt ? (float)m_current_rt->m_width : (float)g_logical_width;
     *h = m_current_rt ? (float)m_current_rt->m_height : (float)g_logical_height;
 }
@@ -116,8 +134,8 @@ void D3D9Device::draw_uniforms(float rhw_w, float rhw_h) {
 
     if (g_texture_factor_uniform != -1) {
         D3DCOLOR f = m_texture_factor;
-        glUniform4f(g_texture_factor_uniform, ((f >> 16) & 0xFF) / 255.0f, ((f >> 8) & 0xFF) / 255.0f, (f & 0xFF) / 255.0f,
-                    ((f >> 24) & 0xFF) / 255.0f);
+        glUniform4f(g_texture_factor_uniform, ((f >> 16) & 0xFF) / 255.0f, ((f >> 8) & 0xFF) / 255.0f,
+                    (f & 0xFF) / 255.0f, ((f >> 24) & 0xFF) / 255.0f);
     }
 
     // D3D stores the mipmap LOD bias as a float in a DWORD. GL's LOD rule picks lower-resolution mips
@@ -142,14 +160,14 @@ void D3D9Device::draw_uniforms(float rhw_w, float rhw_h) {
 
 // Stream-0 vertex attributes of the fixed-function program, from the buffer bound to GL_ARRAY_BUFFER
 // (base: byte offset of vertex 0), and the lighting uniforms. tex1: bind the second texture coordinate.
-void D3D9Device::draw_attribs(const FvfLayout& l, GLsizei stride, size_t base, bool tex1) {
+void D3D9Device::draw_attribs(const FvfLayout &l, GLsizei stride, size_t base, bool tex1) {
     if ((l.xyz || l.rhw) && g_position_location != -1) {
         glEnableVertexAttribArray(g_position_location);
-        glVertexAttribPointer(g_position_location, l.rhw ? 4 : 3, GL_FLOAT, GL_FALSE, stride, (void*)(base + l.pos));
+        glVertexAttribPointer(g_position_location, l.rhw ? 4 : 3, GL_FLOAT, GL_FALSE, stride, (void *)(base + l.pos));
     }
     if (l.normal && g_normal_location != -1) {
         glEnableVertexAttribArray(g_normal_location);
-        glVertexAttribPointer(g_normal_location, 3, GL_FLOAT, GL_FALSE, stride, (void*)(base + l.nrm));
+        glVertexAttribPointer(g_normal_location, 3, GL_FLOAT, GL_FALSE, stride, (void *)(base + l.nrm));
     } else if (g_normal_location != -1) {
         glDisableVertexAttribArray(g_normal_location);
         glVertexAttrib3f(g_normal_location, 0.0f, 0.0f, 1.0f);
@@ -162,7 +180,7 @@ void D3D9Device::draw_attribs(const FvfLayout& l, GLsizei stride, size_t base, b
 
     if (l.diffuse && g_color_location != -1) {   // lit: the vertex colour may be the material (D3DMCS_COLOR1)
         glEnableVertexAttribArray(g_color_location);
-        glVertexAttribPointer(g_color_location, 4, GL_UNSIGNED_BYTE, GL_TRUE, stride, (void*)(base + l.col));
+        glVertexAttribPointer(g_color_location, 4, GL_UNSIGNED_BYTE, GL_TRUE, stride, (void *)(base + l.col));
     } else if (g_color_location != -1) {
         glDisableVertexAttribArray(g_color_location);
         glVertexAttrib4f(g_color_location, 1.0f, 1.0f, 1.0f, 1.0f);
@@ -170,7 +188,7 @@ void D3D9Device::draw_attribs(const FvfLayout& l, GLsizei stride, size_t base, b
 
     if (l.tex_count > 0 && g_texcoord_location != -1) {
         glEnableVertexAttribArray(g_texcoord_location);
-        glVertexAttribPointer(g_texcoord_location, 2, GL_FLOAT, GL_FALSE, stride, (void*)(base + l.tex));
+        glVertexAttribPointer(g_texcoord_location, 2, GL_FLOAT, GL_FALSE, stride, (void *)(base + l.tex));
     } else if (g_texcoord_location != -1) {
         glDisableVertexAttribArray(g_texcoord_location);
         glVertexAttrib2f(g_texcoord_location, 0.0f, 0.0f);
@@ -178,7 +196,7 @@ void D3D9Device::draw_attribs(const FvfLayout& l, GLsizei stride, size_t base, b
     if (tex1 && l.tex_count > 1 && g_texcoord1_location != -1) {
         glEnableVertexAttribArray(g_texcoord1_location);
         glVertexAttribPointer(g_texcoord1_location, fvf_tex_components(g_current_fvf, 1), GL_FLOAT, GL_FALSE, stride,
-                              (void*)(base + l.tex1));
+                              (void *)(base + l.tex1));
     } else if (g_texcoord1_location != -1) {
         glDisableVertexAttribArray(g_texcoord1_location);
         glVertexAttrib2f(g_texcoord1_location, 0.0f, 0.0f);
@@ -229,13 +247,13 @@ void D3D9Device::draw_textures(int tex_count, bool unbind, Lightmap lightmap) {
 
 // Guest vertices for the fixed-function program: D3DCOLOR diffuse is BGRA in memory, GL reads RGBA.
 // A programmable shader swizzles its colour inputs itself (progvs_vertex_source).
-const void* up_vertices(const void* data, size_t size, UINT n, GLsizei stride, const FvfLayout& l) {
+const void *up_vertices(const void *data, size_t size, UINT n, GLsizei stride, const FvfLayout &l) {
     static std::vector<uint8_t> converted;
     if (!l.diffuse || g_progvs_active) return data;
     converted.resize(size);
     memcpy(converted.data(), data, size);
     for (UINT i = 0; i < n; ++i) {   // alpha stays: D3D honours diffuse alpha 0 (UI glow, fades)
-        uint8_t* c = converted.data() + (size_t)i * stride + l.col;
+        uint8_t *c = converted.data() + (size_t)i * stride + l.col;
         std::swap(c[0], c[2]);
     }
     return converted.data();
@@ -244,7 +262,7 @@ const void* up_vertices(const void* data, size_t size, UINT n, GLsizei stride, c
 // Into the UP buffer bound to target: grow (x2) when too small, then orphan before writing. The
 // previous draw may still read the old storage, and writing into it makes Apple's GL-on-Metal flush
 // the queue and wait (40% of a match frame); fresh storage never waits.
-void up_upload(GLenum target, size_t* capacity, size_t size, const void* data) {
+void up_upload(GLenum target, size_t *capacity, size_t size, const void *data) {
     if (size > *capacity) *capacity = size * 2;
     glBufferData(target, *capacity, nullptr, GL_DYNAMIC_DRAW);
     glBufferSubData(target, 0, size, data);

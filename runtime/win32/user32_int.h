@@ -5,30 +5,36 @@
 #include "win32.h"
 #include "plat.h"
 
-#define WM_CREATE 0x0001
-#define WM_DESTROY 0x0002
-#define WM_SIZE 0x0005
-#define WM_ACTIVATE 0x0006
-#define WM_PAINT 0x000F
-#define WM_CLOSE 0x0010
-#define WM_QUIT 0x0012
-#define WM_ERASEBKGND 0x0014
+#define WM_CREATE      0x0001
+#define WM_DESTROY     0x0002
+#define WM_SIZE        0x0005
+#define WM_ACTIVATE    0x0006
+#define WM_PAINT       0x000F
+#define WM_CLOSE       0x0010
+#define WM_QUIT        0x0012
+#define WM_ERASEBKGND  0x0014
 #define WM_ACTIVATEAPP 0x001C
-#define WM_NCCREATE 0x0081
-#define WM_NCDESTROY 0x0082
+#define WM_NCCREATE    0x0081
+#define WM_NCDESTROY   0x0082
 
 #define HWND_DESKTOP_ 0x00010010u
-#define HWND_BASE 0x00010020u
-#define MAX_WINDOWS 64
-#define MAX_CLASSES 32
+#define HWND_BASE     0x00010020u
+#define MAX_WINDOWS   64
+#define MAX_CLASSES   32
 
-typedef struct { int used; char name[64]; uint16_t atom; uint32_t style, wndproc, extra, hinst; } wclass_t;
+typedef struct {
+    int used;
+    char name[64];
+    uint16_t atom;
+    uint32_t style, wndproc, extra, hinst;
+} wclass_t;
 typedef struct {
     int used, visible, host;          /* host: backed by the platform window */
     char *title;
     uint32_t wndproc, style, exstyle, hinst, parent, id, userdata;
     int x, y, w, h;
-    uint8_t *extra; uint32_t nextra;
+    uint8_t *extra;
+    uint32_t nextra;
 } wnd_t;
 
 extern pthread_mutex_t g_user32_mu;  /* window classes and the message queue */

@@ -31,7 +31,8 @@ void rt_entry_hooks_arm(void) { rt_entry_hooks = 1; }
 static void entry_hooks_init(void) {
     static const char *const v[] = { "RT_PROBE", "RT_PROBE_DUMP", "RT_SHADOW_ALL", "RT_SHADOW_FROM", "RT_COVERAGE" };
     rt_entry_hooks = 0;
-    for (unsigned i = 0; i < sizeof v / sizeof *v; i++) if (getenv(v[i])) rt_entry_hooks = 1;
+    for (unsigned i = 0; i < sizeof v / sizeof *v; i++)
+        if (getenv(v[i])) rt_entry_hooks = 1;
 }
 void recomp_trace_enter(uint32_t va) {
     if (rt_entry_hooks <= 0) {
@@ -42,7 +43,9 @@ void recomp_trace_enter(uint32_t va) {
         }
     }
     uint32_t *e = t_enter[t_enter_idx++ & (ENTER_RING - 1)];
-    e[0] = va; e[1] = g_ecx; e[2] = g_esp;
+    e[0] = va;
+    e[1] = g_ecx;
+    e[2] = g_esp;
     if ((t_enter_idx & 4095) == 0) rt_guest_yield();   /* cpu.c guest lock: let waiting threads run */
     rt_shadow_auto(va);
     rt_probe_enter(va);
@@ -57,7 +60,10 @@ void recomp_dump_trace(const char *why) {
         for (uint32_t i = t_enter_idx > ENTER_RING ? t_enter_idx - ENTER_RING : 0; i < t_enter_idx; i++) {
             const uint32_t *e = t_enter[i & (ENTER_RING - 1)];
             o += snprintf(line + o, sizeof line - (size_t)o, " %08X(%08X,%08X)", e[0], e[1], e[2]);
-            if (++k % 16 == 0 || i + 1 == t_enter_idx) { rt_log(" %s", line); o = 0; }
+            if (++k % 16 == 0 || i + 1 == t_enter_idx) {
+                rt_log(" %s", line);
+                o = 0;
+            }
         }
     }
     rt_log("icall trace (%s), last %d:", why, ICALL_TRACE_SIZE);

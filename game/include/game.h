@@ -14,9 +14,16 @@
 #include "recomp_types.h"
 #include "rt.h"
 
-#define GAME_OVERRIDE(fn) void fn##_lifted(void); void fn(void)
+#define GAME_OVERRIDE(fn)                                                                                              \
+    void fn##_lifted(void);                                                                                            \
+    void fn(void)
 #define GAME_ARG(n) rd32(g_esp + 4u + 4u * (uint32_t)(n))   /* stack argument n (0 = first) */
 /* return v in eax; pop = the bytes of arguments a stdcall/thiscall callee pops (0 for cdecl) */
-#define GAME_RETURN(v, pop) do { g_eax = (uint32_t)(v); g_esp += 4u + (pop); return; } while (0)
+#define GAME_RETURN(v, pop)                                                                                            \
+    do {                                                                                                               \
+        g_eax = (uint32_t)(v);                                                                                         \
+        g_esp += 4u + (pop);                                                                                           \
+        return;                                                                                                        \
+    } while (0)
 
 #endif

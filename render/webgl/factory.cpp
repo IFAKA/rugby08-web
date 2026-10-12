@@ -6,24 +6,23 @@
 static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE g_webgl_context = 0;
 
 class D3D9 : public IDirect3D9 {
-public:
-    virtual HRESULT CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType,
-                                HWND hFocusWindow, DWORD BehaviorFlags,
-                                D3DPRESENT_PARAMETERS* pPresentationParameters,
-                                IDirect3DDevice9** ppReturnedDeviceInterface) override {
+  public:
+    virtual HRESULT CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags,
+                                 D3DPRESENT_PARAMETERS *pPresentationParameters,
+                                 IDirect3DDevice9 **ppReturnedDeviceInterface) override {
         if (!ppReturnedDeviceInterface) return -1;
-        
+
         // Create WebGL context
         EmscriptenWebGLContextAttributes attrs;
         emscripten_webgl_init_context_attributes(&attrs);
         attrs.majorVersion = 2;
         attrs.minorVersion = 0;
-        
+
         // D3D9 backbuffer is D3DFMT_X8R8G8B8 (no alpha channel)
         // Canvas alpha must be disabled to match, otherwise DXT3 texture alpha
         // leaks into framebuffer and browser compositing darkens the output
         attrs.alpha = EM_FALSE;
-        
+
         g_webgl_context = emscripten_webgl_create_context(g_canvas_selector, &attrs);
         if (g_webgl_context <= 0) {
             printf("Failed to create WebGL context\n");
@@ -47,8 +46,7 @@ public:
         }
 
         // Determine backbuffer resolution: use app's request, fall back to canvas size
-        if (pPresentationParameters &&
-            pPresentationParameters->BackBufferWidth > 0 &&
+        if (pPresentationParameters && pPresentationParameters->BackBufferWidth > 0 &&
             pPresentationParameters->BackBufferHeight > 0) {
             g_logical_width = pPresentationParameters->BackBufferWidth;
             g_logical_height = pPresentationParameters->BackBufferHeight;
@@ -73,16 +71,12 @@ public:
 
     // Extended overload: specify which canvas element to render to.
     // Falls back to the standard CreateDevice with g_canvas_selector set.
-    HRESULT CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType,
-                         HWND hFocusWindow, DWORD BehaviorFlags,
-                         D3DPRESENT_PARAMETERS* pPresentationParameters,
-                         IDirect3DDevice9** ppReturnedDeviceInterface,
-                         const char* canvasSelector) {
-        if (canvasSelector && canvasSelector[0]) {
-            g_canvas_selector = canvasSelector;
-        }
-        return CreateDevice(Adapter, DeviceType, hFocusWindow, BehaviorFlags,
-                            pPresentationParameters, ppReturnedDeviceInterface);
+    HRESULT CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags,
+                         D3DPRESENT_PARAMETERS *pPresentationParameters, IDirect3DDevice9 **ppReturnedDeviceInterface,
+                         const char *canvasSelector) {
+        if (canvasSelector && canvasSelector[0]) { g_canvas_selector = canvasSelector; }
+        return CreateDevice(Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters,
+                            ppReturnedDeviceInterface);
     }
 
     virtual ULONG AddRef() override {
@@ -93,12 +87,12 @@ public:
         delete this;
         return 0;
     }
-    
+
     virtual UINT GetAdapterCount() override {
         return 1; // Single adapter for WebGL
     }
 
-    virtual HRESULT GetAdapterIdentifier(UINT Adapter, DWORD Flags, D3DADAPTER_IDENTIFIER9* pIdentifier) override {
+    virtual HRESULT GetAdapterIdentifier(UINT Adapter, DWORD Flags, D3DADAPTER_IDENTIFIER9 *pIdentifier) override {
         if (!pIdentifier) return D3DERR_INVALIDCALL;
         memset(pIdentifier, 0, sizeof(D3DADAPTER_IDENTIFIER9));
         strncpy(pIdentifier->Driver, "emscripten_webgl", MAX_DEVICE_IDENTIFIER_STRING);
@@ -106,13 +100,9 @@ public:
         return D3D_OK;
     }
 
+    virtual UINT GetAdapterModeCount(UINT Adapter, D3DFORMAT Format) override { return 1; }
 
-
-    virtual UINT GetAdapterModeCount(UINT Adapter, D3DFORMAT Format) override {
-        return 1;
-    }
-
-    virtual HRESULT EnumAdapterModes(UINT Adapter, D3DFORMAT Format, UINT Mode, D3DDISPLAYMODE* pMode) override {
+    virtual HRESULT EnumAdapterModes(UINT Adapter, D3DFORMAT Format, UINT Mode, D3DDISPLAYMODE *pMode) override {
         if (!pMode) return D3DERR_INVALIDCALL;
         if (Mode >= 1) return D3DERR_INVALIDCALL;
 
@@ -125,7 +115,7 @@ public:
         return D3D_OK;
     }
 
-    virtual HRESULT GetAdapterDisplayMode(UINT Adapter, D3DDISPLAYMODE* pMode) override {
+    virtual HRESULT GetAdapterDisplayMode(UINT Adapter, D3DDISPLAYMODE *pMode) override {
         if (!pMode) return D3DERR_INVALIDCALL;
         int w, h;
         emscripten_get_canvas_element_size(g_canvas_selector, &w, &h);
@@ -136,16 +126,17 @@ public:
         return D3D_OK;
     }
 
-    virtual HRESULT CheckDeviceFormat(UINT Adapter, D3DDEVTYPE DeviceType, D3DFORMAT AdapterFormat, DWORD Usage, D3DRESOURCETYPE RType, D3DFORMAT CheckFormat) override {
+    virtual HRESULT CheckDeviceFormat(UINT Adapter, D3DDEVTYPE DeviceType, D3DFORMAT AdapterFormat, DWORD Usage,
+                                      D3DRESOURCETYPE RType, D3DFORMAT CheckFormat) override {
         return D3D_OK;
     }
 
-    virtual HRESULT CheckDepthStencilMatch(UINT Adapter, D3DDEVTYPE DeviceType, D3DFORMAT AdapterFormat, D3DFORMAT RenderTargetFormat, D3DFORMAT DepthStencilFormat) override {
+    virtual HRESULT CheckDepthStencilMatch(UINT Adapter, D3DDEVTYPE DeviceType, D3DFORMAT AdapterFormat,
+                                           D3DFORMAT RenderTargetFormat, D3DFORMAT DepthStencilFormat) override {
         return D3D_OK;
     }
 
-
-    virtual HRESULT GetDeviceCaps(UINT Adapter, D3DDEVTYPE DeviceType, D3DCAPS9* pCaps) override {
+    virtual HRESULT GetDeviceCaps(UINT Adapter, D3DDEVTYPE DeviceType, D3DCAPS9 *pCaps) override {
         // Shared implementation "lie"
         if (!pCaps) return -1;
         memset(pCaps, 0, sizeof(D3DCAPS9));
@@ -168,8 +159,8 @@ public:
 };
 
 // Entry point
-extern "C" IDirect3D9* WINAPI Direct3DCreate9(UINT SDKVersion) {
-    return new D3D9();
-}
+extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion) { return new D3D9(); }
 
-extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t) { return t ? static_cast<D3D9Texture *>(t)->GetGLTexture() : 0; }
+extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t) {
+    return t ? static_cast<D3D9Texture *>(t)->GetGLTexture() : 0;
+}

@@ -15,8 +15,8 @@ D3D9W_ATTRIBS(D3D9W_DEF_A)
 D3D9W_UNIFORMS(D3D9W_DEF_U)
 
 struct Loc {
-    GLint* var;
-    const char* name;
+    GLint *var;
+    const char *name;
     bool attrib;
 };
 #define D3D9W_ROW_A(n) { &g_##n##_location, "a_" #n, true },
@@ -25,15 +25,15 @@ static const Loc k_locs[] = { D3D9W_ATTRIBS(D3D9W_ROW_A) D3D9W_UNIFORMS(D3D9W_RO
 static const int k_nlocs = (int)(sizeof k_locs / sizeof k_locs[0]);
 
 std::vector<GLint> g_ff_locs;
-static const std::vector<GLint>* g_applied_locs = nullptr;
+static const std::vector<GLint> *g_applied_locs = nullptr;
 
-void loc_query(GLuint p, std::vector<GLint>& v) {
+void loc_query(GLuint p, std::vector<GLint> &v) {
     v.resize(k_nlocs);
     for (int i = 0; i < k_nlocs; ++i)
         v[i] = k_locs[i].attrib ? glGetAttribLocation(p, k_locs[i].name) : glGetUniformLocation(p, k_locs[i].name);
 }
 
-void loc_apply(const std::vector<GLint>& v) {
+void loc_apply(const std::vector<GLint> &v) {
     if (g_applied_locs == &v) return;
     for (int i = 0; i < k_nlocs; ++i) *k_locs[i].var = v[i];
     g_applied_locs = &v;

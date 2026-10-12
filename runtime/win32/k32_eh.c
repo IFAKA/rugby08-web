@@ -22,17 +22,18 @@ RECOMP_TLS uint32_t g_eh_resume;
 extern const uint32_t recomp_eh_cont[];      /* gen/recomp/recomp_dispatch.c, sorted */
 extern const uint32_t recomp_eh_cont_count;
 
-#define EXCEPTION_NONCONTINUABLE 0x01u
-#define EXCEPTION_UNWINDING      0x02u
-#define EXCEPTION_EXIT_UNWIND    0x04u
+#define EXCEPTION_NONCONTINUABLE   0x01u
+#define EXCEPTION_UNWINDING        0x02u
+#define EXCEPTION_EXIT_UNWIND      0x04u
 #define ExceptionContinueExecution 0u
-#define CHAIN_END 0xFFFFFFFFu
+#define CHAIN_END                  0xFFFFFFFFu
 
 static int is_continuation(uint32_t va) {
     size_t lo = 0, hi = recomp_eh_cont_count;
     while (lo < hi) {
         size_t m = (lo + hi) / 2;
-        if (recomp_eh_cont[m] < va) lo = m + 1; else hi = m;
+        if (recomp_eh_cont[m] < va) lo = m + 1;
+        else hi = m;
     }
     return lo < recomp_eh_cont_count && recomp_eh_cont[lo] == va;
 }
@@ -40,8 +41,7 @@ static int is_continuation(uint32_t va) {
 /* Only a catch continuation diverts, and only to the frame ebp names: unwind funclets run with the
  * same ebp and tail-jump to destructors, which must stay ordinary tail calls. */
 void rt_eh_jump(uint32_t va) {
-    if (!is_continuation(va))
-        return;
+    if (!is_continuation(va)) return;
     for (rt_ehpad_t *p = g_eh_top; p; p = p->prev) {
         if (p->ebp && p->ebp == g_ebp) {
             g_eh_active = 0;
@@ -60,16 +60,22 @@ static uint32_t make_record(uint32_t below, uint32_t code, uint32_t flags, uint3
                             uint32_t *ctx) {
     uint32_t rec = (below - 0x400u) & ~15u;
     memset(G2H(rec), 0, 0x50);
-    wr32(rec + 0, code); wr32(rec + 4, flags);
+    wr32(rec + 0, code);
+    wr32(rec + 4, flags);
     if (nargs > 15) nargs = 15;
     wr32(rec + 16, nargs);
     for (uint32_t i = 0; i < nargs; i++) wr32(rec + 20 + 4 * i, rd32(args + 4 * i));
     *ctx = rec + 0x60;
     memset(G2H(*ctx), 0, 0x2CC);
     wr32(*ctx + 0, 0x10007u);               /* CONTEXT_FULL */
-    wr32(*ctx + 0x9C, g_edi); wr32(*ctx + 0xA0, g_esi); wr32(*ctx + 0xA4, g_ebx);
-    wr32(*ctx + 0xA8, g_edx); wr32(*ctx + 0xAC, g_ecx); wr32(*ctx + 0xB0, g_eax);
-    wr32(*ctx + 0xB4, g_ebp); wr32(*ctx + 0xC4, g_esp);
+    wr32(*ctx + 0x9C, g_edi);
+    wr32(*ctx + 0xA0, g_esi);
+    wr32(*ctx + 0xA4, g_ebx);
+    wr32(*ctx + 0xA8, g_edx);
+    wr32(*ctx + 0xAC, g_ecx);
+    wr32(*ctx + 0xB0, g_eax);
+    wr32(*ctx + 0xB4, g_ebp);
+    wr32(*ctx + 0xC4, g_esp);
     return rec;
 }
 

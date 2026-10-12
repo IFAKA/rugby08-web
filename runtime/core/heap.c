@@ -18,14 +18,14 @@
 #define RT_WAS_EMSCRIPTEN 1
 #undef __EMSCRIPTEN__
 #endif
-#define ONLY_MSPACES 1
-#define MSPACES 1
-#define HAVE_MMAP 0
-#define HAVE_MORECORE 0
-#define USE_LOCKS 1
-#define USE_SPIN_LOCKS 0
+#define ONLY_MSPACES    1
+#define MSPACES         1
+#define HAVE_MMAP       0
+#define HAVE_MORECORE   0
+#define USE_LOCKS       1
+#define USE_SPIN_LOCKS  0
 #define NO_MALLOC_STATS 1
-#define NO_MALLINFO 1
+#define NO_MALLINFO     1
 #define DLMALLOC_EXPORT static
 #define MALLOC_FAILURE_ACTION
 #include "../third_party/dlmalloc/dlmalloc.c"
@@ -49,10 +49,12 @@ uint32_t rt_heap_top(void) { return (H2G(((mstate)g_ms)->top) + 7u) & ~7u; }
 
 static uint32_t h2g_or0(void *p) { return p ? H2G(p) : 0; }
 
-uint32_t gmalloc(uint32_t size)  { return h2g_or0(mspace_malloc(g_ms, size ? size : 1)); }
-uint32_t gcalloc(uint32_t size)  { return h2g_or0(mspace_calloc(g_ms, 1, size ? size : 1)); }
+uint32_t gmalloc(uint32_t size) { return h2g_or0(mspace_malloc(g_ms, size ? size : 1)); }
+uint32_t gcalloc(uint32_t size) { return h2g_or0(mspace_calloc(g_ms, 1, size ? size : 1)); }
 uint32_t gmemalign(uint32_t al, uint32_t size) { return h2g_or0(mspace_memalign(g_ms, al, size ? size : 1)); }
-void gfree(uint32_t va) { if (va) mspace_free(g_ms, G2H(va)); }
+void gfree(uint32_t va) {
+    if (va) mspace_free(g_ms, G2H(va));
+}
 uint32_t gmsize(uint32_t va) { return va ? (uint32_t)mspace_usable_size(G2H(va)) : 0; }
 uint32_t grealloc(uint32_t va, uint32_t size) {
     if (!va) return gmalloc(size);

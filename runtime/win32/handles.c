@@ -7,13 +7,16 @@
 #include <sys/time.h>
 
 #define MAX_HANDLES 16384
-#define H_BASE 0x100u
+#define H_BASE      0x100u
 static hobj_t *g_h[MAX_HANDLES];
 static pthread_mutex_t g_hmu = PTHREAD_MUTEX_INITIALIZER;
 
 static uint32_t h_slot(hobj_t *o) {   /* a free table slot now refers to o; caller holds g_hmu */
     for (uint32_t i = 1; i < MAX_HANDLES; i++) {
-        if (!g_h[i]) { g_h[i] = o; return H_BASE + 4 * i; }
+        if (!g_h[i]) {
+            g_h[i] = o;
+            return H_BASE + 4 * i;
+        }
     }
     pthread_mutex_unlock(&g_hmu);
     rt_fatal("handle table full");
@@ -37,7 +40,10 @@ uint32_t h_dup(uint32_t h) {
     pthread_mutex_lock(&g_hmu);
     hobj_t *o = g_h[(h - H_BASE) / 4];
     uint32_t nh = 0;
-    if (o) { o->refs++; nh = h_slot(o); }
+    if (o) {
+        o->refs++;
+        nh = h_slot(o);
+    }
     pthread_mutex_unlock(&g_hmu);
     return nh;
 }
@@ -50,7 +56,10 @@ uint32_t h_open_named(htype_t type, const char *name) {
     uint32_t nh = 0;
     for (uint32_t i = 1; i < MAX_HANDLES && !nh; i++) {
         hobj_t *o = g_h[i];
-        if (o && o->type == type && !strcmp(o->name, name)) { o->refs++; nh = h_slot(o); }
+        if (o && o->type == type && !strcmp(o->name, name)) {
+            o->refs++;
+            nh = h_slot(o);
+        }
     }
     pthread_mutex_unlock(&g_hmu);
     return nh;
@@ -97,8 +106,7 @@ static int try_acquire(hobj_t *o) {
         o->owner = rt_host_tid();
         o->count++;
         return 1;
-    default:            /* threads, processes, files: signaled = done */
-        return o->signaled;
+    default: /* threads, processes, files: signaled = done */ return o->signaled;
     }
 }
 

@@ -1,7 +1,7 @@
 // state.cpp -- the renderer's global GL/D3D state (declared in internal.h).
 #include "internal.h"
 
-const char* g_canvas_selector = "#canvas";
+const char *g_canvas_selector = "#canvas";
 
 // Current FVF
 DWORD g_current_fvf = 0;
@@ -18,7 +18,7 @@ float g_max_anisotropy = 1.0f; // 1.0 = disabled (no extension)
 
 // FFP State storage
 D3DLIGHT9 g_lights[8];
-bool g_light_enabled[8] = {false};
+bool g_light_enabled[8] = { false };
 D3DMATERIAL9 g_material;
 
 GLuint g_up_vbo = 0;
@@ -26,12 +26,12 @@ GLuint g_up_ibo = 0;
 size_t g_up_vbo_size = 0;  // Track VBO size for persistent buffer optimization
 size_t g_up_ibo_size = 0;  // Track IBO size for persistent buffer optimization
 
-GLuint& g_cached_texture = g_last_bound_texture_id;
+GLuint &g_cached_texture = g_last_bound_texture_id;
 
 // Viewport and Scissor state caching (to avoid glGet* calls)
-GLint g_cached_viewport[4] = {0, 0, 0, 0};  // Overwritten by first SetViewport
+GLint g_cached_viewport[4] = { 0, 0, 0, 0 };  // Overwritten by first SetViewport
 GLboolean g_cached_scissor_test = GL_FALSE;
-GLint g_cached_scissor_box[4] = {0, 0, 0, 0};  // Overwritten by first SetScissorRect
+GLint g_cached_scissor_box[4] = { 0, 0, 0, 0 };  // Overwritten by first SetScissorRect
 
 DWORD g_texture_stage_states[8][33];
 D3DVIEWPORT9 g_viewport;
@@ -41,16 +41,14 @@ int g_logical_height = 0;
 // Sampler states [Sampler][Type]
 DWORD g_sampler_states[8][14]; // Up to D3DSAMP_DMAPOFFSET
 
-
 // Check for OpenGL errors (silent in release builds)
-void CheckGLError(const char* label) {
+void CheckGLError(const char *label) {
     GLenum err = glGetError();
     while (err != GL_NO_ERROR) {
         // Silently consume errors
         err = glGetError();
     }
 }
-
 
 D3DMATRIX g_transform_view;   // the camera position for specular lighting
 

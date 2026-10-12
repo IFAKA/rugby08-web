@@ -39,9 +39,14 @@ HLE(InitializeCriticalSection) {
     cs_get(a[0]);
     return 0;
 }
-HLE(DeleteCriticalSection) { (void)a; return 0; }   /* keep the mutex: cheap, and avoids reuse races */
+HLE(DeleteCriticalSection) {
+    (void)a;
+    return 0;
+}   /* keep the mutex: cheap, and avoids reuse races */
 /* Deterministic mode: only the baton holder runs, so ownership is plain bookkeeping (det.c). */
-typedef struct { int owner, count; } dcs_t;
+typedef struct {
+    int owner, count;
+} dcs_t;
 static dcs_t g_dcs[MAX_CS];
 static int dcs_free(void *p) { return ((dcs_t *)p)->count == 0; }
 
@@ -51,7 +56,8 @@ HLE(EnterCriticalSection) {
         dcs_t *d = &g_dcs[rd32(a[0] + 0x10)];
         int me = det_thread_id();
         while (d->count && d->owner != me) det_wait(dcs_free, d, UINT64_MAX);
-        d->owner = me; d->count++;
+        d->owner = me;
+        d->count++;
         wr32(a[0] + 8, rd32(a[0] + 8) + 1);
         wr32(a[0] + 0xC, rt_thread_tib() >> 12);
         return 0;
@@ -96,11 +102,18 @@ HLE(CreateEventA) {   /* (sa, manual, initial, name) */
     o->signaled = a[2] != 0;
     return named(h, a[3]);
 }
-HLE(SetEvent) { hobj_t *o = h_get(a[0], H_EVENT); if (!o) return set_err(ERROR_INVALID_HANDLE_); h_signal(o); return TRUE_; }
+HLE(SetEvent) {
+    hobj_t *o = h_get(a[0], H_EVENT);
+    if (!o) return set_err(ERROR_INVALID_HANDLE_);
+    h_signal(o);
+    return TRUE_;
+}
 HLE(ResetEvent) {
     hobj_t *o = h_get(a[0], H_EVENT);
     if (!o) return set_err(ERROR_INVALID_HANDLE_);
-    pthread_mutex_lock(&o->mu); o->signaled = 0; pthread_mutex_unlock(&o->mu);
+    pthread_mutex_lock(&o->mu);
+    o->signaled = 0;
+    pthread_mutex_unlock(&o->mu);
     return TRUE_;
 }
 HLE(CreateMutexA) {   /* (sa, initialOwner, name) */
@@ -108,7 +121,10 @@ HLE(CreateMutexA) {   /* (sa, initialOwner, name) */
     if (ex) return ex;
     uint32_t h = h_new(H_MUTEX);
     hobj_t *o = h_get(h, H_MUTEX);
-    if (a[1]) { o->owner = rt_host_tid(); o->count = 1; }
+    if (a[1]) {
+        o->owner = rt_host_tid();
+        o->count = 1;
+    }
     rt_last_error = 0;
     return named(h, a[2]);
 }
@@ -116,7 +132,10 @@ HLE(ReleaseMutex) {
     hobj_t *o = h_get(a[0], H_MUTEX);
     if (!o) return set_err(ERROR_INVALID_HANDLE_);
     pthread_mutex_lock(&o->mu);
-    if (o->count > 0 && o->owner == rt_host_tid() && --o->count == 0) { o->owner = 0; pthread_cond_broadcast(&o->cv); }
+    if (o->count > 0 && o->owner == rt_host_tid() && --o->count == 0) {
+        o->owner = 0;
+        pthread_cond_broadcast(&o->cv);
+    }
     pthread_mutex_unlock(&o->mu);
     return TRUE_;
 }
@@ -143,7 +162,10 @@ HLE(ReleaseSemaphore) {   /* (h, count, prev) */
 
 HLE(WaitForSingleObject) {
     hobj_t *o = h_get(a[0], H_FREE);
-    if (!o) { rt_log("WaitForSingleObject: bad handle 0x%08X", a[0]); return 0xFFFFFFFFu; }
+    if (!o) {
+        rt_log("WaitForSingleObject: bad handle 0x%08X", a[0]);
+        return 0xFFFFFFFFu;
+    }
     return h_wait(o, a[1]);
 }
 
@@ -159,7 +181,11 @@ HLE(TlsAlloc) {
     (void)a;
     pthread_mutex_lock(&g_tlsmu);
     for (uint32_t i = 0; i < 64; i++) {
-        if (!(g_tls_used & (1ull << i))) { g_tls_used |= 1ull << i; pthread_mutex_unlock(&g_tlsmu); return i; }
+        if (!(g_tls_used & (1ull << i))) {
+            g_tls_used |= 1ull << i;
+            pthread_mutex_unlock(&g_tlsmu);
+            return i;
+        }
     }
     pthread_mutex_unlock(&g_tlsmu);
     return 0xFFFFFFFFu;
@@ -167,12 +193,22 @@ HLE(TlsAlloc) {
 HLE(TlsFree) {
     pthread_mutex_lock(&g_tlsmu);
     int ok = a[0] < 64 && (g_tls_used & (1ull << a[0]));
-    if (ok) { g_tls_used &= ~(1ull << a[0]); rt_thread_tls_set_all(a[0], 0); }   /* the next TlsAlloc of this slot starts at 0 */
+    if (ok) {
+        g_tls_used &= ~(1ull << a[0]);
+        rt_thread_tls_set_all(a[0], 0);
+    }   /* the next TlsAlloc of this slot starts at 0 */
     pthread_mutex_unlock(&g_tlsmu);
     return ok ? TRUE_ : set_err(ERROR_INVALID_PARAMETER_);
 }
-HLE(TlsGetValue) { rt_last_error = 0; return a[0] < 64 ? rd32(rt_thread_tib() + 0xE10 + 4 * a[0]) : 0; }
-HLE(TlsSetValue) { if (a[0] >= 64) return set_err(ERROR_INVALID_PARAMETER_); wr32(rt_thread_tib() + 0xE10 + 4 * a[0], a[1]); return TRUE_; }
+HLE(TlsGetValue) {
+    rt_last_error = 0;
+    return a[0] < 64 ? rd32(rt_thread_tib() + 0xE10 + 4 * a[0]) : 0;
+}
+HLE(TlsSetValue) {
+    if (a[0] >= 64) return set_err(ERROR_INVALID_PARAMETER_);
+    wr32(rt_thread_tib() + 0xE10 + 4 * a[0], a[1]);
+    return TRUE_;
+}
 
 /* ---- threads ------------------------------------------------------------------------------------ */
 #define THREAD_STACK (1u << 20)
@@ -237,16 +273,40 @@ HLE(ResumeThread) {
     return prev;
 }
 HLE(ExitThread) {
-    if (t_self) { hobj_t *o = h_get(t_self->handle, H_THREAD); o->exit_code = a[0]; h_signal(o); }
+    if (t_self) {
+        hobj_t *o = h_get(t_self->handle, H_THREAD);
+        o->exit_code = a[0];
+        h_signal(o);
+    }
     det_thread_end();
     pthread_exit(NULL);
 }
-HLE(TerminateThread) { rt_log("TerminateThread(0x%08X) ignored", a[0]); return TRUE_; }
-HLE(GetExitCodeThread) { hobj_t *o = h_get(a[0], H_THREAD); if (!o) return set_err(ERROR_INVALID_HANDLE_); wr32(a[1], o->exit_code); return TRUE_; }
-HLE(GetCurrentThread) { (void)a; return 0xFFFFFFFEu; }
-HLE(GetCurrentThreadId) { (void)a; return rt_thread_tib() >> 12; }
-HLE(GetThreadPriority) { (void)a; return 0; }
-HLE(SetThreadPriority) { (void)a; return TRUE_; }
+HLE(TerminateThread) {
+    rt_log("TerminateThread(0x%08X) ignored", a[0]);
+    return TRUE_;
+}
+HLE(GetExitCodeThread) {
+    hobj_t *o = h_get(a[0], H_THREAD);
+    if (!o) return set_err(ERROR_INVALID_HANDLE_);
+    wr32(a[1], o->exit_code);
+    return TRUE_;
+}
+HLE(GetCurrentThread) {
+    (void)a;
+    return 0xFFFFFFFEu;
+}
+HLE(GetCurrentThreadId) {
+    (void)a;
+    return rt_thread_tib() >> 12;
+}
+HLE(GetThreadPriority) {
+    (void)a;
+    return 0;
+}
+HLE(SetThreadPriority) {
+    (void)a;
+    return TRUE_;
+}
 HLE(DuplicateHandle) {   /* (srcproc, src, dstproc, &dst, access, inherit, options) */
     uint32_t h = a[1];
     if (h == 0xFFFFFFFEu && t_self) h = t_self->handle;   /* GetCurrentThread() pseudo-handle */
@@ -257,10 +317,22 @@ HLE(DuplicateHandle) {   /* (srcproc, src, dstproc, &dst, access, inherit, optio
 }
 
 static void sleep_ms(uint32_t ms) {
-    if (det_on() && det_thread_id() >= 0) { det_sleep_ms(ms); return; }
-    if (!ms) { sched_yield(); return; }
+    if (det_on() && det_thread_id() >= 0) {
+        det_sleep_ms(ms);
+        return;
+    }
+    if (!ms) {
+        sched_yield();
+        return;
+    }
     struct timespec ts = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
     nanosleep(&ts, NULL);
 }
-HLE(Sleep) { sleep_ms(a[0]); return 0; }
-HLE(SleepEx) { sleep_ms(a[0]); return 0; }
+HLE(Sleep) {
+    sleep_ms(a[0]);
+    return 0;
+}
+HLE(SleepEx) {
+    sleep_ms(a[0]);
+    return 0;
+}

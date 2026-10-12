@@ -14,7 +14,9 @@ static uint32_t now_ms(void) {
 }
 
 /* ---- message queue ---------------------------------------------------------------------------- */
-typedef struct { uint32_t hwnd, msg, wp, lp, time; } qmsg_t;
+typedef struct {
+    uint32_t hwnd, msg, wp, lp, time;
+} qmsg_t;
 #define QCAP 512
 static qmsg_t g_q[QCAP];
 static int g_qn;
@@ -34,8 +36,7 @@ static void pump(int wait_ms) {
         if (!g_main) continue;
         if (m.msg == WM_SIZE || m.msg == WM_ACTIVATE || m.msg == WM_ACTIVATEAPP)
             user32_send(g_main, m.msg, m.wparam, m.lparam);
-        else
-            user32_post(g_main, m.msg, m.wparam, m.lparam);
+        else user32_post(g_main, m.msg, m.wparam, m.lparam);
     }
 }
 
@@ -65,7 +66,10 @@ static int take(uint32_t out, uint32_t hwnd, uint32_t lo, uint32_t hi, int remov
 
 HLE(PeekMessageA) {   /* (msg, hwnd, min, max, remove) */
     static int first = 1;
-    if (first) { first = 0; rt_trace("message pump: first PeekMessageA"); }
+    if (first) {
+        first = 0;
+        rt_trace("message pump: first PeekMessageA");
+    }
     if (take(a[0], a[1], a[2], a[3], a[4] & 1)) return TRUE_;
     pump(0);
     return take(a[0], a[1], a[2], a[3], a[4] & 1) ? TRUE_ : FALSE_;
@@ -82,10 +86,17 @@ static int has_msg(void *p) {   /* det_wait readiness for GetMessageA(hwnd, lo, 
 
 HLE(GetMessageA) {    /* (msg, hwnd, min, max): 0 on WM_QUIT */
     static int first = 1;
-    if (first) { first = 0; rt_trace("message pump: first GetMessageA"); }
+    if (first) {
+        first = 0;
+        rt_trace("message pump: first GetMessageA");
+    }
     if (det_on() && det_thread_id() >= 0) {   /* messages come only from guest threads and Present (det.c) */
         uint32_t f[3] = { a[1], a[2], a[3] };
-        while (!take(a[0], a[1], a[2], a[3], 1)) { pump(0); if (!take(a[0], a[1], a[2], a[3], 1)) det_wait(has_msg, f, UINT64_MAX); else break; }
+        while (!take(a[0], a[1], a[2], a[3], 1)) {
+            pump(0);
+            if (!take(a[0], a[1], a[2], a[3], 1)) det_wait(has_msg, f, UINT64_MAX);
+            else break;
+        }
         return rd32(a[0] + 4) == WM_QUIT ? 0 : TRUE_;
     }
     while (!take(a[0], a[1], a[2], a[3], 1)) pump(10);
@@ -106,19 +117,34 @@ HLE(TranslateMessage) {
 HLE(DispatchMessageA) {
     uint32_t m = a[0];
     static int first = 1;
-    if (first && rd32(m)) { first = 0; rt_trace("message pump: first DispatchMessageA msg 0x%04X", rd32(m + 4)); }
+    if (first && rd32(m)) {
+        first = 0;
+        rt_trace("message pump: first DispatchMessageA msg 0x%04X", rd32(m + 4));
+    }
     return user32_send(rd32(m), rd32(m + 4), rd32(m + 8), rd32(m + 12));
 }
 
-HLE(PostMessageA) { user32_post(a[0], a[1], a[2], a[3]); return TRUE_; }
-HLE(PostQuitMessage) { user32_post(0, WM_QUIT, a[0], 0); return 0; }
+HLE(PostMessageA) {
+    user32_post(a[0], a[1], a[2], a[3]);
+    return TRUE_;
+}
+HLE(PostQuitMessage) {
+    user32_post(0, WM_QUIT, a[0], 0);
+    return 0;
+}
 HLE(SendMessageA) { return user32_send(a[0], a[1], a[2], a[3]); }
-HLE(SendNotifyMessageA) { user32_send(a[0], a[1], a[2], a[3]); return TRUE_; }
+HLE(SendNotifyMessageA) {
+    user32_send(a[0], a[1], a[2], a[3]);
+    return TRUE_;
+}
 
 HLE(DefWindowProcA) {  /* (hwnd, msg, wp, lp) */
     switch (a[1]) {
     case WM_NCCREATE: return TRUE_;
-    case WM_CLOSE: { uint32_t h = a[0]; return hle_DestroyWindow(&h); }
+    case WM_CLOSE: {
+        uint32_t h = a[0];
+        return hle_DestroyWindow(&h);
+    }
     case WM_ERASEBKGND: return TRUE_;
     }
     return 0;
@@ -127,7 +153,8 @@ HLE(DefWindowProcA) {  /* (hwnd, msg, wp, lp) */
 HLE(MessageBoxA) {     /* (hwnd, text, caption, type) */
     rt_trace("MessageBoxA \"%s\": %s", gstr(a[2]) ? gstr(a[2]) : "", gstr(a[1]) ? gstr(a[1]) : "");
     switch (a[3] & 0xF) {
-    case 3: case 4: return 6;         /* MB_YESNO(CANCEL) -> IDYES */
+    case 3:
+    case 4: return 6;         /* MB_YESNO(CANCEL) -> IDYES */
     case 2: return 3;                 /* MB_ABORTRETRYIGNORE -> IDABORT */
     case 5: return 2;                 /* MB_RETRYCANCEL -> IDCANCEL */
     }

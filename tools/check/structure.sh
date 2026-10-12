@@ -26,7 +26,7 @@ done < <(git ls-files 'runtime/*' 'platform/*' 'render/*' 'game/*' 'tools/*' 'sc
   grep -E '\.(c|cpp|h|hpp|js|py|sh|html|glsl|vert|frag)$' | grep -vE "$EXEMPT")
 
 echo "==== web (__EMSCRIPTEN__ in runtime/)" >>"$LOG"
-web=$(git grep -c '__EMSCRIPTEN__' -- 'runtime/*' 'platform/*' 'render/*' 'game/*' |
+web=$(git grep -c '__EMSCRIPTEN__' -- 'runtime/*.c' 'runtime/*.cpp' 'runtime/*.h' 'runtime/*.hpp' 'game/*.c' 'game/*.h' |
   grep -vE '^(platform/|render/|runtime/third_party/|runtime/core/heap\.c:)' | tee -a "$LOG" | grep -c .)
 
 echo "==== readme (source directories without README.md)" >>"$LOG"

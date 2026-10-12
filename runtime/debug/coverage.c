@@ -16,13 +16,19 @@ void rt_coverage_mark(uint32_t va) {
 }
 
 void rt_coverage_frame(uint32_t frame) {
-    static const char *spec; static int parsed;
+    static const char *spec;
+    static int parsed;
     rt_present_frame = frame;
     rt_dump_at(frame);
-    if (!parsed) { parsed = 1; spec = getenv("RT_COVERAGE"); }
+    if (!parsed) {
+        parsed = 1;
+        spec = getenv("RT_COVERAGE");
+    }
     if (!spec) return;
-    for (const char *p = spec; *p; ) {
-        unsigned from = 0, to = 0; char file[256] = ""; int n = 0;
+    for (const char *p = spec; *p;) {
+        unsigned from = 0, to = 0;
+        char file[256] = "";
+        int n = 0;
         if (sscanf(p, "%u-%u:%255[^,]%n", &from, &to, file, &n) < 3) return;
         if (frame == from) {
             size_t sz = (RT_IMAGE_END - RT_IMAGE_BASE + 7) / 8;
@@ -38,6 +44,7 @@ void rt_coverage_frame(uint32_t frame) {
             if (f) fclose(f);
             rt_log("coverage %u-%u -> %s", from, to, file);
         }
-        p += n; if (*p == ',') p++;
+        p += n;
+        if (*p == ',') p++;
     }
 }

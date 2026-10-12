@@ -11,13 +11,15 @@
  * arguments, compare with the host's libm / C cast, print one line and exit (0 = all match). */
 static double crt(uint32_t va, int n, double a, double b) {   /* cdecl double f(double[, double]) */
     uint32_t args[4];
-    memcpy(&args[0], &a, 8); memcpy(&args[2], &b, 8);
+    memcpy(&args[0], &a, 8);
+    memcpy(&args[2], &b, 8);
     int top = g_fp_top;
     guest_callv(va, 2 * n, args);
     double r = g_fp_top > top ? g_st[0] : NAN;
     while (g_fp_top > top) {                 /* pop what the call left: the result */
         for (int i = 0; i < 7; i++) g_st[i] = g_st[i + 1];
-        g_st[7] = 0.0; g_fp_top--;
+        g_st[7] = 0.0;
+        g_fp_top--;
     }
     return r;
 }
@@ -43,9 +45,14 @@ void rt_selftest_crt(void) {
     for (unsigned i = 0; i < sizeof f / sizeof *f; i++) {     /* _ftol: argument in ST0, result edx:eax */
         int top = g_fp_top;
         for (int k = 7; k > 0; k--) g_st[k] = g_st[k - 1];
-        g_st[0] = f[i]; g_fp_top++;
+        g_st[0] = f[i];
+        g_fp_top++;
         int32_t g = (int32_t)guest_callv(0x872F18u, 0, NULL), h = (int32_t)f[i];
-        while (g_fp_top > top) { for (int k = 0; k < 7; k++) g_st[k] = g_st[k + 1]; g_st[7] = 0.0; g_fp_top--; }
+        while (g_fp_top > top) {
+            for (int k = 0; k < 7; k++) g_st[k] = g_st[k + 1];
+            g_st[7] = 0.0;
+            g_fp_top--;
+        }
         n++;
         if (g != h && bad++ < 8) rt_trace("crt selftest: _ftol(%g) = %d, C cast %d", f[i], g, h);
     }

@@ -4,19 +4,24 @@
 #include "resources.h"
 
 #ifndef GL_COMPRESSED_RGB_S3TC_DXT1_EXT
-#define GL_COMPRESSED_RGB_S3TC_DXT1_EXT 0x83F0
+#define GL_COMPRESSED_RGB_S3TC_DXT1_EXT  0x83F0
 #define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT 0x83F1
 #define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT 0x83F2
 #define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
 #endif
 #define D3DFMT_GLI1 ((D3DFORMAT)0x31494C47)   // the GLI library's FOURCC for RGB DXT1
 
-static bool compressed(D3DFORMAT f) { return f == D3DFMT_DXT1 || f == D3DFMT_DXT3 || f == D3DFMT_DXT5 || f == D3DFMT_GLI1; }
+static bool compressed(D3DFORMAT f) {
+    return f == D3DFMT_DXT1 || f == D3DFMT_DXT3 || f == D3DFMT_DXT5 || f == D3DFMT_GLI1;
+}
 
 static UINT bits_per_pixel(D3DFORMAT f) {
     switch (f) {
     case D3DFMT_R8G8B8: return 24;
-    case D3DFMT_R5G6B5: case D3DFMT_A4R4G4B4: case D3DFMT_A1R5G5B5: case D3DFMT_INDEX16: return 16;
+    case D3DFMT_R5G6B5:
+    case D3DFMT_A4R4G4B4:
+    case D3DFMT_A1R5G5B5:
+    case D3DFMT_INDEX16: return 16;
     default: return 32;
     }
 }
@@ -34,7 +39,7 @@ static GLenum gl_compressed_format(D3DFORMAT f) {
     }
 }
 
-static size_t dxt_size(D3DFORMAT f, UINT w, UINT h, size_t* pitch) {
+static size_t dxt_size(D3DFORMAT f, UINT w, UINT h, size_t *pitch) {
     size_t block = (f == D3DFMT_DXT1 || f == D3DFMT_GLI1) ? 8 : 16;   // bytes per 4x4 block
     if (pitch) *pitch = ((w + 3) / 4) * block;
     return ((w + 3) / 4) * ((h + 3) / 4) * block;
@@ -43,9 +48,9 @@ static size_t dxt_size(D3DFORMAT f, UINT w, UINT h, size_t* pitch) {
 static inline uint32_t rgba(uint32_t r, uint32_t g, uint32_t b, uint32_t a) { return r | g << 8 | b << 16 | a << 24; }
 
 // n texels of D3D format f (little-endian ARGB-style packing) -> RGBA8 bytes for GL.
-static void to_rgba8(D3DFORMAT f, const void* data, size_t n, uint32_t* out) {
-    const uint16_t* s16 = static_cast<const uint16_t*>(data);
-    const uint32_t* s32 = static_cast<const uint32_t*>(data);
+static void to_rgba8(D3DFORMAT f, const void *data, size_t n, uint32_t *out) {
+    const uint16_t *s16 = static_cast<const uint16_t *>(data);
+    const uint32_t *s32 = static_cast<const uint32_t *>(data);
     switch ((int)f) {
     case D3DFMT_A8R8G8B8:
     case D3DFMT_X8R8G8B8:   // X8: opaque; A8 keeps its alpha
@@ -75,7 +80,7 @@ static void to_rgba8(D3DFORMAT f, const void* data, size_t n, uint32_t* out) {
         return;
     case D3DFMT_R8G8B8: {   // B, G, R bytes
         printf("[WARN] D3DFMT_R8G8B8 texture uploaded - untested path\n");
-        const uint8_t* s = static_cast<const uint8_t*>(data);
+        const uint8_t *s = static_cast<const uint8_t *>(data);
         for (size_t i = 0; i < n; ++i, s += 3) out[i] = rgba(s[2], s[1], s[0], 0xFF);
         return;
     }
@@ -112,7 +117,7 @@ D3D9Texture::~D3D9Texture() {
         g_mipmapped_textures.erase(m_texture);
         glDeleteTextures(1, &m_texture);
     }
-    delete[] static_cast<uint8_t*>(m_locked_data);
+    delete[] static_cast<uint8_t *>(m_locked_data);
 }
 
 ULONG D3D9Texture::AddRef() { return 1; }   // the D3D8 layer owns the lifetime
@@ -122,13 +127,13 @@ ULONG D3D9Texture::Release() {
     return 0;
 }
 
-HRESULT D3D9Texture::GetSurfaceLevel(UINT Level, IDirect3DSurface9** ppSurfaceLevel) {
+HRESULT D3D9Texture::GetSurfaceLevel(UINT Level, IDirect3DSurface9 **ppSurfaceLevel) {
     if (!ppSurfaceLevel || Level != 0) return D3DERR_INVALIDCALL;   // level 0 only
     *ppSurfaceLevel = new D3D9Surface(m_width, m_height, m_texture, false);
     return D3D_OK;
 }
 
-HRESULT D3D9Texture::LockRect(UINT Level, D3DLOCKED_RECT* pLockedRect, const void* pRect, DWORD Flags) {
+HRESULT D3D9Texture::LockRect(UINT Level, D3DLOCKED_RECT *pLockedRect, const void *pRect, DWORD Flags) {
     if (!pLockedRect || m_locked_data) return -1;   // locked twice would leak the first copy
     UINT w = std::max(1u, m_width >> Level), h = std::max(1u, m_height >> Level);
     size_t size;
@@ -166,11 +171,12 @@ HRESULT D3D9Texture::UnlockRect(UINT Level) {
     if (Level > 0) {
         g_mipmapped_textures.insert(m_texture);
     } else if (!compressed(m_format)) {
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, (int)std::floor(std::log2((double)std::max(m_width, m_height))));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL,
+                        (int)std::floor(std::log2((double)std::max(m_width, m_height))));
         glGenerateMipmap(GL_TEXTURE_2D);
         g_mipmapped_textures.insert(m_texture);
     }
-    delete[] static_cast<uint8_t*>(m_locked_data);
+    delete[] static_cast<uint8_t *>(m_locked_data);
     m_locked_data = nullptr;
     return D3D_OK;
 }

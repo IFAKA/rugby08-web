@@ -10,10 +10,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct { char *p; size_t n, cap; } buf_t;
+typedef struct {
+    char *p;
+    size_t n, cap;
+} buf_t;
 
 static void put(buf_t *b, const char *s, size_t n) {
-    if (b->n + n + 1 > b->cap) { b->cap = (b->n + n + 1) * 2; b->p = realloc(b->p, b->cap); }
+    if (b->n + n + 1 > b->cap) {
+        b->cap = (b->n + n + 1) * 2;
+        b->p = realloc(b->p, b->cap);
+    }
     memcpy(b->p + b->n, s, n);
     b->n += n;
     b->p[b->n] = 0;
@@ -49,10 +55,13 @@ static char *translate(GLenum stage, const char *src) {
         put(&out, v + 15, strlen(v + 15));
         return out.p;
     }
-    static const char *const vs[][2] = { { "attribute", "in" }, { "varying", "out" }, { "texture2D", "texture" },
+    static const char *const vs[][2] = {
+        { "attribute", "in" }, { "varying", "out" }, { "texture2D", "texture" }, { "textureCube", "texture" }
+    };
+    static const char *const fs[][2] = { { "varying", "in" },
+                                         { "gl_FragColor", "rt_FragColor" },
+                                         { "texture2D", "texture" },
                                          { "textureCube", "texture" } };
-    static const char *const fs[][2] = { { "varying", "in" }, { "gl_FragColor", "rt_FragColor" },
-                                         { "texture2D", "texture" }, { "textureCube", "texture" } };
     put(&out, "#version 410 core\n", 18);
     if (stage == GL_FRAGMENT_SHADER) put(&out, "out vec4 rt_FragColor;\n", 23);
     if (stage == GL_FRAGMENT_SHADER) rewrite(&out, src, fs, 4);

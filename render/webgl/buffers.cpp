@@ -28,7 +28,7 @@ void GLBufferStore::destroy() {
     locked = nullptr;
 }
 
-HRESULT GLBufferStore::lock(UINT offset, UINT size, void** ppbData, DWORD flags) {
+HRESULT GLBufferStore::lock(UINT offset, UINT size, void **ppbData, DWORD flags) {
     if (!ppbData || locked) return -1;
     locked_size = size == 0 ? length - offset : size;   // size 0: to the end of the buffer
     locked_offset = offset;
@@ -52,7 +52,7 @@ HRESULT GLBufferStore::unlock(GLenum target) {
         glBufferSubData(target, locked_offset, locked_size, locked);
 #ifndef __EMSCRIPTEN__
     } else if (locked_flags & D3DLOCK_NOOVERWRITE) {
-        void* dst = glMapBufferRange(target, locked_offset, locked_size, GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
+        void *dst = glMapBufferRange(target, locked_offset, locked_size, GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT);
         if (dst) {
             memcpy(dst, locked, locked_size);
             glUnmapBuffer(target);

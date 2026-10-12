@@ -9,8 +9,8 @@
 
 /* Per-thread CPU state (declared RECOMP_TLS in the vendored recomp_types.h) */
 RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp, g_ebx, g_esi, g_edi, g_ebp;
-RECOMP_TLS double   g_st[8];
-RECOMP_TLS int      g_fp_top;
+RECOMP_TLS double g_st[8];
+RECOMP_TLS int g_fp_top;
 RECOMP_TLS uint16_t g_fpu_cw = 0x027F;
 RECOMP_TLS uint32_t g_flag_k, g_flag_a, g_flag_b, g_flag_cf;
 RECOMP_TLS uint32_t g_fs_base;
@@ -34,7 +34,12 @@ uint64_t recomp_host_rdtsc(void) {
 
 /* ---- bridges ------------------------------------------------------------ */
 #define MAX_HOST_BRIDGES 8192
-typedef struct { const char *name; rt_hle_fn fn; uint16_t pop; uint8_t keep_lock; } host_bridge_t;
+typedef struct {
+    const char *name;
+    rt_hle_fn fn;
+    uint16_t pop;
+    uint8_t keep_lock;
+} host_bridge_t;
 static host_bridge_t g_host[MAX_HOST_BRIDGES];
 static uint32_t g_host_count;
 static pthread_mutex_t g_host_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -60,7 +65,7 @@ static RECOMP_TLS int t_big_held;
 static int big_on(void) {
     if (g_big_on < 0) {   /* the shadow check undoes its writes: only safe while no other guest thread runs */
         const char *e = getenv("RT_BIGLOCK");
-        g_big_on = (!(e && *e == '0') || getenv("RT_SHADOW_ALL") != NULL) && !det_on();   /* det.c schedules instead */
+        g_big_on = (!(e && *e == '0') || getenv("RT_SHADOW_ALL") != NULL) && !det_on(); /* det.c schedules instead */
     }
     return g_big_on;
 }
@@ -81,9 +86,14 @@ static void big_unlock(void) {
     pthread_mutex_unlock(&g_big_mu);
 }
 void rt_guest_yield(void) {
-    if (rt_det == 1) { det_preempt(); return; }
-    if (t_big_held && __atomic_load_n(&g_big_next, __ATOMIC_RELAXED) != __atomic_load_n(&g_big_serving, __ATOMIC_RELAXED) + 1) {
-        big_unlock(); big_lock();      /* someone is waiting: let them in */
+    if (rt_det == 1) {
+        det_preempt();
+        return;
+    }
+    if (t_big_held &&
+        __atomic_load_n(&g_big_next, __ATOMIC_RELAXED) != __atomic_load_n(&g_big_serving, __ATOMIC_RELAXED) + 1) {
+        big_unlock();
+        big_lock(); /* someone is waiting: let them in */
     }
 }
 
@@ -91,7 +101,7 @@ static void run_bridge(const char *dll, const char *name, rt_hle_fn fn, uint16_t
     const uint32_t *a = (const uint32_t *)G2H(g_esp + 4);
     uint32_t ret;
     if (fn) {
-        int held = t_big_held && !keep;   /* keep: a call that never blocks stays on the guest lock */
+        int held = t_big_held && !keep; /* keep: a call that never blocks stays on the guest lock */
         if (held) big_unlock();
         ret = fn(a);
         if (held) big_lock();
@@ -100,7 +110,7 @@ static void run_bridge(const char *dll, const char *name, rt_hle_fn fn, uint16_t
         ret = 0;
     }
     g_eax = ret;
-    g_esp += 4 + pop;          /* dummy return address + stdcall args */
+    g_esp += 4 + pop; /* dummy return address + stdcall args */
 }
 
 static void import_trampoline(void) {
@@ -128,10 +138,11 @@ uint32_t rt_host_bridge(const char *name, rt_hle_fn fn, uint16_t pop) {
  * call. Releasing it sent the main thread to the back of the FIFO behind every busy guest thread on each
  * of the ~thousands of D3D calls per frame: half the main thread's time in a match was lock waiting. */
 void rt_host_bridge_keep_lock(uint32_t va) {
-    if (va >= RT_BRIDGE_HOST && va < RT_BRIDGE_HOST + 16 * g_host_count) g_host[(va - RT_BRIDGE_HOST) >> 4].keep_lock = 1;
+    if (va >= RT_BRIDGE_HOST && va < RT_BRIDGE_HOST + 16 * g_host_count)
+        g_host[(va - RT_BRIDGE_HOST) >> 4].keep_lock = 1;
 }
 
-recomp_func_t rt_shadow_lookup(uint32_t va);   /* interp.c: the shadow check's return trampoline */
+recomp_func_t rt_shadow_lookup(uint32_t va); /* interp.c: the shadow check's return trampoline */
 recomp_func_t recomp_lookup_manual(uint32_t va) {
     if (va == 0xFFD00000u) return rt_shadow_lookup(va);
     if (va >= RT_BRIDGE_IMPORT && va < RT_BRIDGE_IMPORT + 16 * rt_import_count) {
@@ -145,7 +156,10 @@ recomp_func_t recomp_lookup_manual(uint32_t va) {
     return NULL;
 }
 
-recomp_func_t recomp_lookup_import(uint32_t va) { (void)va; return NULL; }
+recomp_func_t recomp_lookup_import(uint32_t va) {
+    (void)va;
+    return NULL;
+}
 
 recomp_func_t recomp_lookup(uint32_t va) {
     uint32_t lo = 0, hi = recomp_dispatch_count;
@@ -153,7 +167,8 @@ recomp_func_t recomp_lookup(uint32_t va) {
         uint32_t mid = (lo + hi) >> 1;
         uint32_t m = recomp_dispatch_table[mid].address;
         if (m == va) return recomp_dispatch_table[mid].func;
-        if (m < va) lo = mid + 1; else hi = mid;
+        if (m < va) lo = mid + 1;
+        else hi = mid;
     }
     /* outside the image: run-time loaded sound-bank code (runtime/core/aems.c) */
     return (va < RT_IMAGE_BASE || va >= RT_IMAGE_END) ? aems_lookup(va) : NULL;
@@ -163,8 +178,7 @@ recomp_func_t recomp_lookup(uint32_t va) {
 uint32_t rt_com_vtable(const char *iface, const rt_method_t *m, int n) {
     (void)iface;
     uint32_t vt = gcalloc(4u * (uint32_t)n);
-    for (int i = 0; i < n; i++)
-        wr32(vt + 4u * (uint32_t)i, rt_host_bridge(m[i].name, m[i].fn, m[i].pop));
+    for (int i = 0; i < n; i++) wr32(vt + 4u * (uint32_t)i, rt_host_bridge(m[i].name, m[i].fn, m[i].pop));
     return vt;
 }
 
@@ -222,16 +236,27 @@ uint32_t guest_callv(uint32_t va, int n, const uint32_t *args) {
         rt_log("guest_call: no function at 0x%08X", va);
         return 0;
     }
-    int take = big_on() && !t_big_held;    /* a host thread or an import calling back into guest code */
+    int take = big_on() && !t_big_held; /* a host thread or an import calling back into guest code */
     if (take) big_lock();
     uint32_t sv_esp = g_esp, sv_ebx = g_ebx, sv_esi = g_esi, sv_edi = g_edi, sv_ebp = g_ebp;
     uint32_t sv_cur = g_cur_func;
-    for (int i = n - 1; i >= 0; i--) { g_esp -= 4; wr32(g_esp, args[i]); }
-    g_esp -= 4; wr32(g_esp, RECOMP_RETADDR);
+    for (int i = n - 1; i >= 0; i--) {
+        g_esp -= 4;
+        wr32(g_esp, args[i]);
+    }
+    g_esp -= 4;
+    wr32(g_esp, RECOMP_RETADDR);
     if (fn) fn();
-    else { recomp_miss(0, va, sv_cur); rt_interp(va); }   /* no lifted body: interpret it */
+    else {
+        recomp_miss(0, va, sv_cur);
+        rt_interp(va);
+    } /* no lifted body: interpret it */
     uint32_t ret = g_eax;
-    g_esp = sv_esp; g_ebx = sv_ebx; g_esi = sv_esi; g_edi = sv_edi; g_ebp = sv_ebp;
+    g_esp = sv_esp;
+    g_ebx = sv_ebx;
+    g_esi = sv_esi;
+    g_edi = sv_edi;
+    g_ebp = sv_ebp;
     g_cur_func = sv_cur;
     if (take) big_unlock();
     return ret;
@@ -248,9 +273,9 @@ uint32_t guest_call(uint32_t va, int n, ...) {
 
 /* ---- dispatch misses ---------------------------------------------------------------------------- */
 #define MAX_MISSES 65536
-#define MISS_SLOTS (2 * MAX_MISSES)             /* open-addressing set of VAs already reported; slot 0 = empty */
+#define MISS_SLOTS (2 * MAX_MISSES) /* open-addressing set of VAs already reported; slot 0 = empty */
 static uint32_t g_miss[MISS_SLOTS];
-static int g_nmiss, g_miss_zero;                  /* g_miss_zero: VA 0 was reported (it cannot live in the set) */
+static int g_nmiss, g_miss_zero; /* g_miss_zero: VA 0 was reported (it cannot live in the set) */
 static pthread_mutex_t g_miss_mu = PTHREAD_MUTEX_INITIALIZER;
 static FILE *g_miss_f;
 
@@ -274,16 +299,28 @@ static void dyncode_capture(uint32_t va) {
 void recomp_miss(int tail, uint32_t va, uint32_t from) {
     pthread_mutex_lock(&g_miss_mu);
     if (va == 0) {
-        if (g_miss_zero) { pthread_mutex_unlock(&g_miss_mu); return; }
+        if (g_miss_zero) {
+            pthread_mutex_unlock(&g_miss_mu);
+            return;
+        }
         g_miss_zero = 1;
     } else {
         uint32_t h = (va * 2654435761u) >> 15 & (MISS_SLOTS - 1);
         while (g_miss[h] && g_miss[h] != va) h = (h + 1) & (MISS_SLOTS - 1);
-        if (g_miss[h] == va) { pthread_mutex_unlock(&g_miss_mu); return; }
-        if (g_nmiss < MAX_MISSES) { g_miss[h] = va; g_nmiss++; }   /* full: report, but do not remember */
+        if (g_miss[h] == va) {
+            pthread_mutex_unlock(&g_miss_mu);
+            return;
+        }
+        if (g_nmiss < MAX_MISSES) {
+            g_miss[h] = va;
+            g_nmiss++;
+        } /* full: report, but do not remember */
     }
     if (!g_miss_f) g_miss_f = fopen("logs/icall_miss.txt", "w");
-    if (g_miss_f) { fprintf(g_miss_f, "0x%08X %s from 0x%08X\n", va, tail ? "ITAIL" : "ICALL", from); fflush(g_miss_f); }
+    if (g_miss_f) {
+        fprintf(g_miss_f, "0x%08X %s from 0x%08X\n", va, tail ? "ITAIL" : "ICALL", from);
+        fflush(g_miss_f);
+    }
     pthread_mutex_unlock(&g_miss_mu);
     rt_log("%s: unresolved VA 0x%08X from 0x%08X", tail ? "ITAIL" : "ICALL", va, from);
     dyncode_capture(va);

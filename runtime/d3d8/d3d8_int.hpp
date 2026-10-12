@@ -8,8 +8,13 @@ extern "C" uint32_t gstr_put(uint32_t va, const char *s, uint32_t cap);
 
 // Real HRESULTs for the guest (d3d9-webgl's own D3DERR_* are small negative placeholders).
 enum : uint32_t {
-    D3D_OK_ = 0, E_NOTIMPL_ = 0x80004001u, E_NOINTERFACE_ = 0x80004002u, E_OUTOFMEMORY_ = 0x8007000Eu,
-    D3DERR_INVALIDCALL_ = 0x8876086Cu, D3DERR_NOTAVAILABLE_ = 0x8876086Au, D3DERR_DEVICELOST_ = 0x88760868u,
+    D3D_OK_ = 0,
+    E_NOTIMPL_ = 0x80004001u,
+    E_NOINTERFACE_ = 0x80004002u,
+    E_OUTOFMEMORY_ = 0x8007000Eu,
+    D3DERR_INVALIDCALL_ = 0x8876086Cu,
+    D3DERR_NOTAVAILABLE_ = 0x8876086Au,
+    D3DERR_DEVICELOST_ = 0x88760868u,
     D3DERR_OUTOFVIDEOMEMORY_ = 0x8876017Cu,
 };
 // D3D8 formats d3d9-webgl's enum does not name.
@@ -51,8 +56,14 @@ IDirect3DTexture9 *d3d8_texture9(Obj *tex);
 
 // d3d8_vshader.cpp: a D3D8 vertex shader -- its declaration (stream elements, constants) and, for
 // a programmable one, MojoShader's GLSL ES 3.00 translation.
-struct Vs8Elem { uint8_t stream, reg, type; uint16_t offset; };   // reg: D3DVSDE_*, type: D3DVSDT_*
-struct Vs8Const { uint32_t reg; float v[4]; };
+struct Vs8Elem {
+    uint8_t stream, reg, type;
+    uint16_t offset;
+};   // reg: D3DVSDE_*, type: D3DVSDT_*
+struct Vs8Const {
+    uint32_t reg;
+    float v[4];
+};
 struct MOJOSHADER_parseData;
 struct Vs8 {
     std::vector<Vs8Elem> elems;

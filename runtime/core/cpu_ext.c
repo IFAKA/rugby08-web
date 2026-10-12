@@ -12,7 +12,8 @@ void recomp_soft_fault(uint32_t va, const char *what) {
     enum { N = 256 };
     static uint32_t seen[N];
     static int n;
-    for (int i = 0; i < n; i++) if (seen[i] == va) return;
+    for (int i = 0; i < n; i++)
+        if (seen[i] == va) return;
     if (n < N) seen[n++] = va;
     rt_log("CPU soft fault %s at 0x%08X (in sub_%08X), continuing", what, va, g_cur_func);
 }
@@ -36,9 +37,15 @@ void recomp_bcd_daa(uint32_t *eax, uint32_t *fl) {
     uint8_t al = (uint8_t)*eax, old = al;
     uint32_t f = *fl, cf = f & F_CF;
     f &= ~F_CF;
-    if ((al & 0x0F) > 9 || (f & F_AF)) { al += 6; f |= F_AF; if (cf || old > 0xF9) f |= F_CF; }
-    else f &= ~F_AF;
-    if (old > 0x99 || cf) { al += 0x60; f |= F_CF; }
+    if ((al & 0x0F) > 9 || (f & F_AF)) {
+        al += 6;
+        f |= F_AF;
+        if (cf || old > 0xF9) f |= F_CF;
+    } else f &= ~F_AF;
+    if (old > 0x99 || cf) {
+        al += 0x60;
+        f |= F_CF;
+    }
     *eax = (*eax & 0xFFFFFF00u) | al;
     *fl = szp(f, al);
 }
@@ -47,9 +54,15 @@ void recomp_bcd_das(uint32_t *eax, uint32_t *fl) {
     uint8_t al = (uint8_t)*eax, old = al;
     uint32_t f = *fl, cf = f & F_CF;
     f &= ~F_CF;
-    if ((al & 0x0F) > 9 || (f & F_AF)) { if (old < 6 || cf) f |= F_CF; al -= 6; f |= F_AF; }
-    else f &= ~F_AF;
-    if (old > 0x99 || cf) { al -= 0x60; f |= F_CF; }
+    if ((al & 0x0F) > 9 || (f & F_AF)) {
+        if (old < 6 || cf) f |= F_CF;
+        al -= 6;
+        f |= F_AF;
+    } else f &= ~F_AF;
+    if (old > 0x99 || cf) {
+        al -= 0x60;
+        f |= F_CF;
+    }
     *eax = (*eax & 0xFFFFFF00u) | al;
     *fl = szp(f, al);
 }
@@ -106,13 +119,17 @@ void recomp_fbstp(uint32_t va, double v) {
     double a = fabs(v);
     if (!(a < 1e18)) {            /* invalid: store the packed-BCD indefinite */
         for (int i = 0; i < 7; i++) wr8(va + (uint32_t)i, 0);
-        wr8(va + 7, 0xC0); wr8(va + 8, 0xFF); wr8(va + 9, 0xFF);
+        wr8(va + 7, 0xC0);
+        wr8(va + 8, 0xFF);
+        wr8(va + 9, 0xFF);
         return;
     }
     uint64_t n = (uint64_t)a;
     for (int i = 0; i < 9; i++) {
-        uint8_t lo = (uint8_t)(n % 10); n /= 10;
-        uint8_t hi = (uint8_t)(n % 10); n /= 10;
+        uint8_t lo = (uint8_t)(n % 10);
+        n /= 10;
+        uint8_t hi = (uint8_t)(n % 10);
+        n /= 10;
         wr8(va + (uint32_t)i, (uint8_t)((hi << 4) | lo));
     }
     wr8(va + 9, neg ? 0x80 : 0);

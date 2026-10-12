@@ -18,12 +18,21 @@ static uint32_t g_wav_bytes;
 static void wav_header(void) {
     uint8_t h[44];
     uint32_t rate = PLAT_AUDIO_RATE, byterate = rate * 4;
-    memcpy(h, "RIFF", 4); uint32_t riff = 36 + g_wav_bytes; memcpy(h + 4, &riff, 4);
+    memcpy(h, "RIFF", 4);
+    uint32_t riff = 36 + g_wav_bytes;
+    memcpy(h + 4, &riff, 4);
     memcpy(h + 8, "WAVEfmt ", 8);
-    uint32_t fmtlen = 16; uint16_t pcm = 1, ch = 2, align = 4, bits = 16;
-    memcpy(h + 16, &fmtlen, 4); memcpy(h + 20, &pcm, 2); memcpy(h + 22, &ch, 2);
-    memcpy(h + 24, &rate, 4); memcpy(h + 28, &byterate, 4); memcpy(h + 32, &align, 2); memcpy(h + 34, &bits, 2);
-    memcpy(h + 36, "data", 4); memcpy(h + 40, &g_wav_bytes, 4);
+    uint32_t fmtlen = 16;
+    uint16_t pcm = 1, ch = 2, align = 4, bits = 16;
+    memcpy(h + 16, &fmtlen, 4);
+    memcpy(h + 20, &pcm, 2);
+    memcpy(h + 22, &ch, 2);
+    memcpy(h + 24, &rate, 4);
+    memcpy(h + 28, &byterate, 4);
+    memcpy(h + 32, &align, 2);
+    memcpy(h + 34, &bits, 2);
+    memcpy(h + 36, "data", 4);
+    memcpy(h + 40, &g_wav_bytes, 4);
     fseek(g_wav, 0, SEEK_SET);
     fwrite(h, 1, sizeof h, g_wav);
     fseek(g_wav, 0, SEEK_END);
@@ -33,7 +42,7 @@ static void pull(float *out, int frames) {
     g_mix(out, frames);
     if (!g_wav) return;
     int16_t s[BLOCK * 2];
-    for (int done = 0; done < frames; ) {
+    for (int done = 0; done < frames;) {
         int n = frames - done < BLOCK ? frames - done : BLOCK;
         for (int i = 0; i < 2 * n; i++) {
             float v = out[2 * done + i] * 32767.0f;
@@ -99,7 +108,8 @@ static void web_pacer(void) {
         pull(buf, BLOCK);
         for (int i = 0; i < BLOCK; i++) {
             int32_t j = (int32_t)((uint32_t)(wr + i) % RING_FRAMES) * 2;
-            g_ring[j] = buf[2 * i]; g_ring[j + 1] = buf[2 * i + 1];
+            g_ring[j] = buf[2 * i];
+            g_ring[j + 1] = buf[2 * i + 1];
         }
         __atomic_store_n(&g_ctl[0], wr + BLOCK, __ATOMIC_RELEASE);
         if (running) continue;
@@ -112,7 +122,11 @@ static void web_pacer(void) {
         } else if (now - due > hz / 4) due = now;
     }
 }
-static void *web_pacer_thread(void *arg) { (void)arg; web_pacer(); return NULL; }
+static void *web_pacer_thread(void *arg) {
+    (void)arg;
+    web_pacer();
+    return NULL;
+}
 #endif
 
 int plat_audio_start(plat_audio_mix_fn mix) {
@@ -126,10 +140,13 @@ int plat_audio_start(plat_audio_mix_fn mix) {
         else rt_log("audio: cannot write %s", rt_audio_capture_path);
     }
     SDL_AudioSpec want = { 0 }, have;
-    want.freq = PLAT_AUDIO_RATE; want.format = AUDIO_F32SYS; want.channels = 2; want.samples = BLOCK;
+    want.freq = PLAT_AUDIO_RATE;
+    want.format = AUDIO_F32SYS;
+    want.channels = 2;
+    want.samples = BLOCK;
     want.callback = callback;
     SDL_AudioDeviceID dev = 0;
-#ifndef __EMSCRIPTEN__   /* the browser keeps audio suspended until a user gesture and runs SDL's callback on the busy main thread: clock the mixer by the pacer instead */
+#ifndef __EMSCRIPTEN__ /* the browser keeps audio suspended until a user gesture and runs SDL's callback on the busy main thread: clock the mixer by the pacer instead */
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0) dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
 #endif
     if (dev) {

@@ -10,9 +10,18 @@
 /* ---- version / system ------------------------------------------------------------------------ */
 HLE(GetVersionExA) {   /* Windows XP SP2 */
     uint32_t p = a[0], sz = rd32(p);
-    wr32(p + 4, 5); wr32(p + 8, 1); wr32(p + 12, 2600); wr32(p + 16, 2);
+    wr32(p + 4, 5);
+    wr32(p + 8, 1);
+    wr32(p + 12, 2600);
+    wr32(p + 16, 2);
     gstr_put(p + 20, "Service Pack 2", 128);
-    if (sz >= 156) { wr16(p + 148, 2); wr16(p + 150, 0); wr16(p + 152, 0x100); wr8(p + 154, 1); wr8(p + 155, 0); }
+    if (sz >= 156) {
+        wr16(p + 148, 2);
+        wr16(p + 150, 0);
+        wr16(p + 152, 0x100);
+        wr8(p + 154, 1);
+        wr8(p + 155, 0);
+    }
     return TRUE_;
 }
 
@@ -21,12 +30,14 @@ HLE(GetSystemInfo) {   /* SYSTEM_INFO, 36 bytes: one Pentium Pro class CPU (runt
     memset(G2H(p), 0, 36);
     wr16(p + 0, 0);             /* PROCESSOR_ARCHITECTURE_INTEL */
     wr32(p + 4, 4096);          /* page size */
-    wr32(p + 8, 0x10000);  wr32(p + 12, 0x7FFEFFFF);
+    wr32(p + 8, 0x10000);
+    wr32(p + 12, 0x7FFEFFFF);
     wr32(p + 16, 1);            /* active processor mask */
     wr32(p + 20, 1);            /* number of processors */
     wr32(p + 24, 586);          /* PROCESSOR_INTEL_PENTIUM */
     wr32(p + 28, 0x10000);      /* allocation granularity */
-    wr16(p + 32, 6); wr16(p + 34, 0x0109);
+    wr16(p + 32, 6);
+    wr16(p + 34, 0x0109);
     return 0;
 }
 
@@ -34,11 +45,14 @@ HLE(GetSystemInfo) {   /* SYSTEM_INFO, 36 bytes: one Pentium Pro class CPU (runt
 HLE(IsProcessorFeaturePresent) { return (a[0] == 8 || a[0] == 2) ? TRUE_ : FALSE_; }
 
 /* ---- modules ------------------------------------------------------------------------------------ */
-typedef struct { const char *name; uint32_t base; } module_t;
+typedef struct {
+    const char *name;
+    uint32_t base;
+} module_t;
 static module_t g_mods[64] = {
     { "kernel32.dll", 0x7C800000u }, { "user32.dll", 0x77D40000u }, { "gdi32.dll", 0x77F10000u },
-    { "advapi32.dll", 0x77DD0000u }, { "winmm.dll", 0x76B40000u }, { "d3d8.dll", 0x6D9A0000u },
-    { "dsound.dll", 0x73F10000u }, { "dinput.dll", 0x5F580000u }, { "ddraw.dll", 0x73760000u },
+    { "advapi32.dll", 0x77DD0000u }, { "winmm.dll", 0x76B40000u },  { "d3d8.dll", 0x6D9A0000u },
+    { "dsound.dll", 0x73F10000u },   { "dinput.dll", 0x5F580000u }, { "ddraw.dll", 0x73760000u },
     { "ntdll.dll", 0x7C900000u },
 };
 static int g_nmods = 10;
@@ -46,7 +60,8 @@ static pthread_mutex_t g_modmu = PTHREAD_MUTEX_INITIALIZER;
 
 static const char *base_name(const char *p) {
     const char *b = p;
-    for (const char *s = p; *s; s++) if (*s == '\\' || *s == '/') b = s + 1;
+    for (const char *s = p; *s; s++)
+        if (*s == '\\' || *s == '/') b = s + 1;
     return b;
 }
 
@@ -56,7 +71,11 @@ static uint32_t module_lookup(const char *name, int add) {
     if (!strchr(n, '.')) strncat(n, ".dll", sizeof n - strlen(n) - 1);
     pthread_mutex_lock(&g_modmu);
     for (int i = 0; i < g_nmods; i++)
-        if (!strcasecmp(g_mods[i].name, n)) { uint32_t b = g_mods[i].base; pthread_mutex_unlock(&g_modmu); return b; }
+        if (!strcasecmp(g_mods[i].name, n)) {
+            uint32_t b = g_mods[i].base;
+            pthread_mutex_unlock(&g_modmu);
+            return b;
+        }
     uint32_t b = 0;
     if (add && g_nmods < 64) {
         b = 0x10000000u + 0x100000u * (uint32_t)g_nmods;
@@ -82,10 +101,16 @@ HLE(LoadLibraryA) {
     if (!b) set_err(126);
     return b;
 }
-HLE(FreeLibrary) { (void)a; return TRUE_; }
+HLE(FreeLibrary) {
+    (void)a;
+    return TRUE_;
+}
 
 HLE(GetProcAddress) {
-    if (a[1] < 0x10000u) { rt_log("GetProcAddress(0x%08X, #%u) -> 0", a[0], a[1]); return 0; }
+    if (a[1] < 0x10000u) {
+        rt_log("GetProcAddress(0x%08X, #%u) -> 0", a[0], a[1]);
+        return 0;
+    }
     const char *n = gstr(a[1]);
     for (uint32_t i = 0; i < rt_import_count; i++)
         if (!strcmp(rt_imports[i].name, n)) return RT_BRIDGE_IMPORT + 16 * i;
@@ -109,11 +134,21 @@ HLE(GetCommandLineA) {
 }
 
 static const char *g_env[] = { "ALLUSERSPROFILE=C:\\Documents and Settings\\All Users",
-    "APPDATA=C:\\Documents and Settings\\Player\\Application Data", "COMPUTERNAME=RUGBY08",
-    "HOMEDRIVE=C:", "HOMEPATH=\\Documents and Settings\\Player", "NUMBER_OF_PROCESSORS=1",
-    "OS=Windows_NT", "PATH=C:\\WINDOWS\\system32;C:\\WINDOWS", "SystemDrive=C:",
-    "SystemRoot=C:\\WINDOWS", "TEMP=C:\\WINDOWS\\Temp", "TMP=C:\\WINDOWS\\Temp",
-    "USERNAME=Player", "USERPROFILE=C:\\Documents and Settings\\Player", "windir=C:\\WINDOWS", NULL };
+                               "APPDATA=C:\\Documents and Settings\\Player\\Application Data",
+                               "COMPUTERNAME=RUGBY08",
+                               "HOMEDRIVE=C:",
+                               "HOMEPATH=\\Documents and Settings\\Player",
+                               "NUMBER_OF_PROCESSORS=1",
+                               "OS=Windows_NT",
+                               "PATH=C:\\WINDOWS\\system32;C:\\WINDOWS",
+                               "SystemDrive=C:",
+                               "SystemRoot=C:\\WINDOWS",
+                               "TEMP=C:\\WINDOWS\\Temp",
+                               "TMP=C:\\WINDOWS\\Temp",
+                               "USERNAME=Player",
+                               "USERPROFILE=C:\\Documents and Settings\\Player",
+                               "windir=C:\\WINDOWS",
+                               NULL };
 
 HLE(GetEnvironmentStrings) {
     (void)a;
@@ -134,9 +169,18 @@ HLE(GetEnvironmentStringsW) {
     }
     return p;
 }
-HLE(FreeEnvironmentStringsA) { gfree(a[0]); return TRUE_; }
-HLE(FreeEnvironmentStringsW) { gfree(a[0]); return TRUE_; }
-HLE(SetEnvironmentVariableA) { (void)a; return TRUE_; }
+HLE(FreeEnvironmentStringsA) {
+    gfree(a[0]);
+    return TRUE_;
+}
+HLE(FreeEnvironmentStringsW) {
+    gfree(a[0]);
+    return TRUE_;
+}
+HLE(SetEnvironmentVariableA) {
+    (void)a;
+    return TRUE_;
+}
 
 HLE(GetStartupInfoA) {   /* STARTUPINFOA, 68 bytes */
     memset(G2H(a[0]), 0, 68);
@@ -149,25 +193,67 @@ static uint32_t g_std[3];
 HLE(GetStdHandle) {
     int i = (int)(0xFFFFFFF6u - a[0]);   /* -10, -11, -12 */
     if (i < 0 || i > 2) return INVALID_HANDLE;
-    if (!g_std[i]) { g_std[i] = h_new(H_STD); h_get(g_std[i], H_STD)->count = i; }
+    if (!g_std[i]) {
+        g_std[i] = h_new(H_STD);
+        h_get(g_std[i], H_STD)->count = i;
+    }
     return g_std[i];
 }
-HLE(SetStdHandle) { (void)a; return TRUE_; }
+HLE(SetStdHandle) {
+    (void)a;
+    return TRUE_;
+}
 HLE(SetHandleCount) { return a[0]; }
-HLE(GetConsoleMode) { (void)a; return FALSE_; }
-HLE(SetConsoleMode) { (void)a; return FALSE_; }
-HLE(GetNumberOfConsoleInputEvents) { if (a[1]) wr32(a[1], 0); return FALSE_; }
-HLE(PeekConsoleInputA) { if (a[3]) wr32(a[3], 0); return FALSE_; }
-HLE(ReadConsoleInputA) { if (a[3]) wr32(a[3], 0); return FALSE_; }
+HLE(GetConsoleMode) {
+    (void)a;
+    return FALSE_;
+}
+HLE(SetConsoleMode) {
+    (void)a;
+    return FALSE_;
+}
+HLE(GetNumberOfConsoleInputEvents) {
+    if (a[1]) wr32(a[1], 0);
+    return FALSE_;
+}
+HLE(PeekConsoleInputA) {
+    if (a[3]) wr32(a[3], 0);
+    return FALSE_;
+}
+HLE(ReadConsoleInputA) {
+    if (a[3]) wr32(a[3], 0);
+    return FALSE_;
+}
 
 /* ---- processes / errors / debugging -------------------------------------------------------------- */
-HLE(GetCurrentProcess) { (void)a; return 0xFFFFFFFFu; }
-HLE(GetCurrentProcessId) { (void)a; return 0x1000; }
-HLE(ExitProcess) { rt_trace("exit: ExitProcess(%u)", a[0]); exit((int)a[0]); }
-HLE(TerminateProcess) { rt_trace("exit: TerminateProcess(%u)", a[1]); exit((int)a[1]); }
-HLE(GetLastError) { (void)a; return rt_last_error; }
-HLE(SetLastError) { rt_last_error = a[0]; return 0; }
-HLE(IsDebuggerPresent) { (void)a; return FALSE_; }
+HLE(GetCurrentProcess) {
+    (void)a;
+    return 0xFFFFFFFFu;
+}
+HLE(GetCurrentProcessId) {
+    (void)a;
+    return 0x1000;
+}
+HLE(ExitProcess) {
+    rt_trace("exit: ExitProcess(%u)", a[0]);
+    exit((int)a[0]);
+}
+HLE(TerminateProcess) {
+    rt_trace("exit: TerminateProcess(%u)", a[1]);
+    exit((int)a[1]);
+}
+HLE(GetLastError) {
+    (void)a;
+    return rt_last_error;
+}
+HLE(SetLastError) {
+    rt_last_error = a[0];
+    return 0;
+}
+HLE(IsDebuggerPresent) {
+    (void)a;
+    return FALSE_;
+}
 HLE(DebugBreak) {   /* the CRT's /RTC failure path ends here: the trace ring shows the failing call */
     static int n;
     (void)a;
@@ -194,7 +280,15 @@ HLE(FormatMessageA) {
 }
 
 static uint32_t g_unhandled_filter;
-HLE(SetUnhandledExceptionFilter) { uint32_t o = g_unhandled_filter; g_unhandled_filter = a[0]; return o; }
-HLE(UnhandledExceptionFilter) { (void)a; rt_log("UnhandledExceptionFilter called"); return 1; }
+HLE(SetUnhandledExceptionFilter) {
+    uint32_t o = g_unhandled_filter;
+    g_unhandled_filter = a[0];
+    return o;
+}
+HLE(UnhandledExceptionFilter) {
+    (void)a;
+    rt_log("UnhandledExceptionFilter called");
+    return 1;
+}
 
 /* RaiseException / RtlUnwind: k32_eh.c */

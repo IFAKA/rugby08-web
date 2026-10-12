@@ -13,7 +13,8 @@ static recomp_func_t find(const aems_bank_t *b, uint32_t canon_va) {
     while (lo < hi) {
         uint32_t mid = (lo + hi) >> 1, a = b->fns[mid].address;
         if (a == canon_va) return b->fns[mid].func;
-        if (a < canon_va) lo = mid + 1; else hi = mid;
+        if (a < canon_va) lo = mid + 1;
+        else hi = mid;
     }
     return NULL;
 }

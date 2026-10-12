@@ -11,7 +11,9 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef struct { uint8_t vk, scan, ext; } keymap_t;   /* SDL scancode -> Win32 virtual key + set-1 scan code */
+typedef struct {
+    uint8_t vk, scan, ext;
+} keymap_t;   /* SDL scancode -> Win32 virtual key + set-1 scan code */
 extern keymap_t g_keys[SDL_NUM_SCANCODES];
 extern uint8_t g_vk_down[256], g_dik_down[256];
 extern int g_mdx, g_mdy, g_mdw;          /* mouse motion since the last plat_mouse_delta */

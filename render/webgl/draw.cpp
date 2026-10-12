@@ -53,7 +53,7 @@ HRESULT D3D9Device::DrawIndexedPrimitive(D3DPRIMITIVETYPE PrimitiveType, INT Bas
     UINT n;
     gl_primitive(PrimitiveType, primCount, PRIM_ALL, &mode, &n);
     bool index32 = m_current_ib_format == D3DFMT_INDEX32;
-    void* indices = (void*)(uintptr_t)(startIndex * (index32 ? 4 : 2));
+    void *indices = (void *)(uintptr_t)(startIndex * (index32 ? 4 : 2));
     trace_blend(stride);
     ff_blend_attrib(base, stride);
     progvs_attribs(base, stride, m_fbo_rendering, BaseVertexIndex);
@@ -80,8 +80,8 @@ HRESULT D3D9Device::DrawIndexedPrimitive(D3DPRIMITIVETYPE PrimitiveType, INT Bas
 }
 
 // From a guest pointer (menus, HUD, text, particles).
-HRESULT D3D9Device::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, const void* pVertexStreamZeroData,
-                                    UINT VertexStreamZeroStride) {
+HRESULT D3D9Device::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount,
+                                    const void *pVertexStreamZeroData, UINT VertexStreamZeroStride) {
     if (!pVertexStreamZeroData) return -1;
     draw_begin("DPUP", (unsigned)PrimitiveCount);
     EnsureUPBuffers();
@@ -136,8 +136,8 @@ HRESULT D3D9Device::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT Primiti
 
 // From guest vertex and index pointers (skinned crowd, flags, some UI).
 HRESULT D3D9Device::DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT MinVertexIndex, UINT NumVertices,
-                                           UINT PrimitiveCount, const void* pIndexData, D3DFORMAT IndexDataFormat,
-                                           const void* pVertexStreamZeroData, UINT VertexStreamZeroStride) {
+                                           UINT PrimitiveCount, const void *pIndexData, D3DFORMAT IndexDataFormat,
+                                           const void *pVertexStreamZeroData, UINT VertexStreamZeroStride) {
     if (!pVertexStreamZeroData || !pIndexData) return -1;
     draw_begin("DIPUP", (unsigned)PrimitiveCount);
     EnsureUPBuffers();
@@ -150,7 +150,8 @@ HRESULT D3D9Device::DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT 
     FvfLayout l = fvf_layout(g_current_fvf, false);
     GLsizei stride = VertexStreamZeroStride > 0 ? (GLsizei)VertexStreamZeroStride : l.stride;
     size_t vsize = (size_t)stride * NumVertices;   // vertices 0..NumVertices-1 of the guest array
-    up_upload(GL_ARRAY_BUFFER, &g_up_vbo_size, vsize, up_vertices(pVertexStreamZeroData, vsize, NumVertices, stride, l));
+    up_upload(GL_ARRAY_BUFFER, &g_up_vbo_size, vsize,
+              up_vertices(pVertexStreamZeroData, vsize, NumVertices, stride, l));
     GLenum mode;
     UINT n;
     gl_primitive(PrimitiveType, PrimitiveCount, PRIM_INDEXED_UP, &mode, &n);

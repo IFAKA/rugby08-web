@@ -34,15 +34,24 @@ static void vlog(FILE *also, const char *fmt, va_list ap) {
 }
 
 void rt_log(const char *fmt, ...) {
-    va_list ap; va_start(ap, fmt); vlog(rt_verbose ? stderr : NULL, fmt, ap); va_end(ap);
+    va_list ap;
+    va_start(ap, fmt);
+    vlog(rt_verbose ? stderr : NULL, fmt, ap);
+    va_end(ap);
 }
 
 void rt_trace(const char *fmt, ...) {
-    va_list ap; va_start(ap, fmt); vlog(stdout, fmt, ap); va_end(ap);
+    va_list ap;
+    va_start(ap, fmt);
+    vlog(stdout, fmt, ap);
+    va_end(ap);
 }
 
 void rt_fatal(const char *fmt, ...) {
-    va_list ap; va_start(ap, fmt); vlog(stderr, fmt, ap); va_end(ap);
+    va_list ap;
+    va_start(ap, fmt);
+    vlog(stderr, fmt, ap);
+    va_end(ap);
     rt_log("FATAL: g_cur_func=0x%08X esp=0x%08X", g_cur_func, g_esp);
     recomp_dump_trace("fatal");
     exit(3);

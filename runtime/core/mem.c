@@ -48,7 +48,6 @@ uint32_t rt_load_image(const char *path, uint32_t *entry_out) {
 
 /* Point every IAT slot at its bridge VA (gen/runtime/imports.c order = bridge index). */
 void rt_bind_imports(void) {
-    for (uint32_t i = 0; i < rt_import_count; i++)
-        wr32(rt_imports[i].iat_va, RT_BRIDGE_IMPORT + 16 * i);
+    for (uint32_t i = 0; i < rt_import_count; i++) wr32(rt_imports[i].iat_va, RT_BRIDGE_IMPORT + 16 * i);
     rt_log("imports: %u IAT slots bound", rt_import_count);
 }
