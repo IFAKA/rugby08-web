@@ -99,15 +99,18 @@ stopped (instant replays, highlights). Found 2026-10-12 (snapshot during the f27
   +0x28/+0x2C decoded frames A/B, +0x30 a single frame, +0x38 flags (bit 2: interpolate A->B, bit 3:
   single frame). While recording the cursor sits at the tail and A/B are the last two frames.
 - Frame (0x118C bytes): +0x000 30 x 128-byte per-player animation block (ids, times, weights);
-  +0xF00 30 x {x, y, z, heading} with positions in centimetres; +0x10E0 30 x u16 (sequence/state);
+  +0xF00 30 x {x, y, z, w} with positions in 1/52.5 m (w is not the heading); +0x10E0 30 x u16 (sequence/state);
   +0x111C ball position (metres), +0x1128 ball 4x4 matrix; +0x1168 u8; +0x116C timestamp (s);
   +0x1170..+0x117C; +0x117D 8 controller-marker bytes (4 home, 4 away); +0x1188 flags.
 - Code: FUN_0045A560 UpdatePlayers (thiscall on the manager: frames -> replay actors, ball, markers),
   FUN_0045B1F0 picks frames A/B/single, FUN_00459C00 advances playback by dt (decodes records),
   FUN_00458620 / FUN_004589AA Huffman delta decoders (1100 ints per frame), FUN_00457A40 / FUN_00457C40
   frame <-> packed ints (cm and radians as ints). Highlights save these records to disk.
-- Recording only appends compressed records at the stream's cursor (frames A/B stay at whatever was
-  last played back: 49.7 s while the live match was at 16200). Decoding: thiscall
+- Frame B (+0x2C) is the frame the recorder wrote last: in live play all 30 players match the live
+  ones within 0.8 cm and the ball exactly, at every sample (RT_MS_REPLAY_CHECK, 13500..19800); only
+  cutscenes (recording paused, players staged or parked) differ. Slot k = team (k / 15), player k % 15.
+  Positions are in 1/52.5 m units (52.5 = 1 / 0.01905: three quarters of an inch), the ball in metres.
+- The stream becomes a ring (the oldest records are dropped), so decoding must start from a known frame. Decoding: thiscall
   FUN_00458620(ecx = manager+0x3C, the Huffman tree; frame, record, add=1): frame += record's deltas
   (add=0 subtracts, for rewinding). Record: +0 u16 length to the next record, +2 u16 offset of the
   Huffman bits, raw bytes from +8, the length repeated before the next record (walk backwards).

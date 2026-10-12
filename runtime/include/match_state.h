@@ -54,6 +54,13 @@ uint64_t ms_setup_hash(void);
 void ms_launch(void);                     /* hook: FUN_004F3D10 entry */
 void ms_setup_frame(uint32_t frame);      /* RT_MS_AFTER_LAUNCH (ms_frame calls it) */
 
+/* match_replay.c: the game's replay record stream (PlayBack::CReplayManager) */
+uint32_t ms_replay_manager(void);
+int ms_replay_stream(uint32_t *start, uint32_t *end);   /* written records [start, end) */
+void ms_replay_decode(uint32_t frame, uint32_t rec);    /* the game's decoder: frame += record */
+uint32_t ms_replay_current(void);                       /* the frame recorded last (0x118C bytes), or 0 */
+void ms_replay_frame(uint32_t frame);                   /* RT_MS_REPLAY_CHECK (ms_frame calls it) */
+
 void ms_frame(uint32_t frame);            /* Present hook: RT_MS_LOG=N trace line every N frames */
 
 #ifdef __cplusplus
