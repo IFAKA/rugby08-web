@@ -2,7 +2,7 @@
 // draws. States: d3d8_state.cpp; shaders: d3d8_dev_shaders.cpp; shared state: d3d8_dev.hpp.
 #include "d3d8_dev.hpp"
 extern "C" void rt_coverage_frame(uint32_t frame);
-extern "C" void ms_frame(uint32_t frame);   // match_state.c
+#include "match_state.h"
 #include "plat.h"
 #include <GLES3/gl3.h>
 #include <cstdlib>

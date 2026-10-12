@@ -1,8 +1,7 @@
-/* match_state.c -- the live match in guest memory (docs/MATCH_STATE.md).
- * Exploration probe while the map is being built:
+/* match_probe.c -- diagnosis probes used to map the live match in guest memory (docs/MATCH_STATE.md):
  *   RT_MS_SCAN=F[,F...]: at those frames, every heap object whose first dword is one of the known
  *   class vtables (RTTI), and every image dword that points at one of them ("ms: obj", "ms: ref"). */
-#include "rt.h"
+#include "debug.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -122,7 +121,7 @@ static void snap(uint32_t frame) {
     rt_trace("ms: snapshot %s", path);
 }
 
-void ms_frame(uint32_t frame) {
+void ms_probe_frame(uint32_t frame) {
     static const char *snap_at = (const char *)-1;
     if (snap_at == (const char *)-1) snap_at = getenv("RT_MS_SNAP");
     for (const char *p = snap_at; p && *p; p = strchr(p, ',') ? strchr(p, ',') + 1 : "")

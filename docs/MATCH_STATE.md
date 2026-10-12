@@ -1,8 +1,21 @@
-# The live match in guest memory (on.match_map, in progress)
+# The live match in guest memory (on.match_map)
 
-Found with `runtime/core/match_state.c` probes (RT_MS_SCAN, RT_MS_DUMP, RT_MS_SNAP) on the native
-det run of `tests/replays/match_play.txt` (keyboard home team, kickoff ~15000, rucks/scrums/lineouts
-up to 30000), RTTI vtables (`analysis/vtables.json`) and Ghidra constructors. Units: metres, seconds.
+Read by `runtime/core/match_state.c` (API: `runtime/include/match_state.h`; `RT_MS_LOG=N` traces one
+`ms:` line every N frames). Found with the probes in `runtime/debug/match_probe.c` on the native det run
+of `tests/replays/match_play.txt` (keyboard home team; open play, rucks, scrums, lineouts, a penalty, a
+try and its conversion up to frame 30000), RTTI vtables (`analysis/vtables.json`) and Ghidra
+constructors. Check: `tools/net/match_state_check.sh` (evaluation `tools/net/match_state_eval.py`).
+Units: metres, game seconds. Pitch frame: origin at the centre spot, x across (touch near +-35; players
+reach +-36.6 at lineouts), z along (play seen in -64..+11), y up.
+
+## Verified against the screen (same run, `logs/ms/p_*.png`, shots every 600 frames)
+- Clock: HUD 01:47 at f14400 = decoded 107.1 s; HUD 29:28 at f29400 = 1768.2 s.
+- Score: HUD 0-0 until the New Zealand penalty (~f17450), 0-3 until the try (~f26800), 0-10 after the
+  conversion (~f27700); the decoded score matches at every sample.
+- Phases (CRugby state): Free = open play; Formation = rucks, mauls and scrums ("SCRUM TO" on the HUD);
+  LineOut; GoalKick (the conversion); Kickoff; Empty = cutscenes (walk-out, replays: players parked).
+- In open play the clock runs exactly 88 game seconds per 600 frames for this match length (81 of 81
+  samples); it stops at dead balls.
 
 ## Roots
 - `0x00A31988` CRugby* (the match; set by its ctor FUN_0062b2b0, 0 outside a match). `0x00A31980` = 1 once built.
@@ -17,10 +30,10 @@ up to 30000), RTTI vtables (`analysis/vtables.json`) and Ghidra constructors. Un
 | +0x60 | u32 counter, grows ~1/frame in play |
 | +0x64 | CRugbyLineOut* |
 | +0x68, +0x6C | CRugbyTeam* home (side 0), away (side 1) |
-| +0x70 | CRugbyRuck* (0 when no ruck) |
+| +0x70 | CRugbyRuck* (stays set after a ruck ends: not a "ruck now" flag) |
 | +0x84 | Setplay Overlord*, +0x88 CollisionMaster*, +0x8C PathFinder* |
 | +0x98 | BallManager* |
-| +0x9C | AiStateMachine<CRugby>*: +4 = current state; its vtable names the phase (KickoffState, FormationState, RunState, FreeState, LineOutState, PuntState, GoalKickState, DropOut22State, IKickState, QuickOptionState, EmptyState) |
+| +0x9C | AiStateMachine<CRugby>*: +4 = current state; its vtable names the phase (KickoffState 0x8ED0A4, FormationState 0x8ECFF4, RunState 0x8ED194 (not seen), FreeState 0x8ED010, LineOutState 0x8ED0C8, PuntState 0x8ED110, GoalKickState 0x8ED088, DropOut22State 0x8ECFA8, IKickState 0x8ED168, QuickOptionState 0x8ED050, EmptyState 0x8ED134) |
 | +0xB8 | CReferee* |
 | +0xDC | Difficulty Manager*, +0xE4 Impact Manager* |
 
@@ -31,7 +44,11 @@ up to 30000), RTTI vtables (`analysis/vtables.json`) and Ghidra constructors. Un
 ## CRugbyPlayer (vtable 0x008E5E00, 0x240 bytes, ctor FUN_0060a1a0(team, number 1..15))
 +0x0A index byte, +0x78 shirt number byte, +0x90 team*, +0x84/+0x88/+0x8C live position x/y/z
 (matches the ball while held), +0xA0 heading (degrees), +0xA4/+0xAC and +0xB0/+0xB8 target/previous
-positions, +0x3C stamina-like (84..100). To do: velocity, animation id/time, role.
+positions, +0x3C stamina-like (84..100), +0x10 its record in the team setup block. Off the field for
+a cutscene the game parks a player at x = z = 95.25. +0xBC PlayerStateMachine (+4 the current state):
+PassLineState 0x8ED82C, ForwardState 0x8ED3A0, GuardState 0x8ED4D4, EmptyPlayerState 0x8ED984,
+FullBackState 0x8EDA2C, KickState 0x8ED968, SceneLeavingState 0x8EDB44, HumanState 0x8ED9D8 (one player at a time:
+likely the controlled one), ScrumHalfState 0x8EDAF0, OnGroundState 0x8EDA80, SequenceState 0x8EDAB8.
 
 ## BallManager (vtable 0x008E6B74, 0x1DC bytes, ctor FUN_00621ca0)
 +0x30/+0x34/+0x38 position, +0x3C/+0x40/+0x44 velocity (in flight; gravity in y), +0x58 3x3 rotation,
@@ -45,8 +62,9 @@ positions, +0x3C stamina-like (84..100). To do: velocity, animation id/time, rol
 - setup+0x1908: score events, singly linked list of 0x14-byte nodes {u16 scorer player id, u32 type,
   u32 team id, float clock, next}. Added by FUN_005ce320(setup, team id, player id, type, time, notify)
   (FUN_005ce32a appends and posts a CScoreData message 0xA7); freed by FUN_005ce520.
-  Types: 0 try ("adding try", FUN_00616e20), 1 and 2 the two place-kick results of FUN_00430b30, 3 the
-  3-point kick seen at f17450 (HUD 0-3). Points of 1/2 still to confirm from a conversion.
+  Types: 0 try ("adding try", FUN_00616e20) 5 points; 1 conversion 2 points (the try + conversion took
+  the HUD from 0-3 to 0-10); 2 and 3 the 3-point kicks (penalty, drop goal: FUN_00430b30 gives 1 or 2
+  from the kick kind; the penalty at f17450 was type 3).
   There is no stored score total: the HUD and the scorers list (FUN_00577e60) read this list.
 - Per-player match stats in the team block's player records (100 bytes each, record 0 at block+0;
   CRugbyPlayer+0x10 points at its record): +0x48 u16 tries, +0x3E..+0x43 kick counters.
@@ -65,8 +83,9 @@ PlayerStateMachine, +0xF8 MoveGroupInstance, +0x19C CannedSequenceInstance, +0x1
 0.9167 per frame (55/60): animation time. To do: the instance's sequence id and how the game picks it.
 
 ## Still to find
-RNG, animation id per player, which pad index each PhysicalInputBlock is, points of score types 1/2.
+RNG, animation id per player, which pad index each PhysicalInputBlock is, the setup bytes that make a
+match (teams, stadium, settings: on.match_setup).
 
-## Probes (runtime/core/match_state.c)
+## Probes (runtime/debug/match_probe.c)
 RT_MS_SCAN=F,... objects by vtable + image refs; RT_MS_DUMP=A-B/S with RT_MS_DUMP_EXTRA=VA:SIZE,... and
 RT_MS_DUMP_SUB=PLAYEROFF:SIZE,... -> logs/ms/dump.bin; RT_MS_SNAP=F,... whole image+heap -> logs/ms/snap_F.bin.

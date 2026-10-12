@@ -447,7 +447,7 @@
       ],
       "desc": "Match state found in guest memory and read by runtime/core/match_state.c (docs/MATCH_STATE.md): 30 players, ball, score, clock, phase, controlled player per pad, match setup.",
       "check": "tools/net/match_state_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "on.match_setup",

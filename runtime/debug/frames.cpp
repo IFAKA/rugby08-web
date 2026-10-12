@@ -2,6 +2,7 @@
 // trace line, the --frames exit with its --screenshot, replay `shot` PNGs, the menu-change probe of
 // replays, and RT_TRACE_DRAWS_FRAME (draw trace of chosen frames, with a PNG of each).
 #include "rt.h"
+#include "debug.h"
 #include "plat.h"
 #include "d3d9.h"
 #include <GLES3/gl3.h>
@@ -66,6 +67,7 @@ static void save_frame_png(int w, int h, const char *path) {
 }
 
 void d3d8_debug_present(uint32_t frame, int w, int h) {
+    ms_probe_frame(frame);   // match_probe.c: RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP
     if (rt_replay_path[0]) menu_change_probe(frame, w, h);
     if (frame == 1 || frame % 60 == 0 || (int)frame == rt_frame_limit) rt_trace("frame %u", frame);
     if (rt_frame_limit > 0 && (int)frame >= rt_frame_limit) {

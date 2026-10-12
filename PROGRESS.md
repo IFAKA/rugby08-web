@@ -358,3 +358,17 @@ Next: `./init.sh next` shows what to fix.
 - Fix: the host's keyboard also drives player 1's virtual pad (plat_local_pad, same mapping as friends: Enter/S accept, Esc Start, arrows), and still feeds the game's keyboard device. Replays are unaffected (automated runs skip plat_local_pad).
 - shell.html: an Esc that releases pointer lock (the browser keeps the key) is handed to the game as an Esc tap.
 - Verified: headless Chrome, Enter during inenpc.vp6 -> title screen. Found by native det RT_COVERAGE/RT_PROBE diff vs web (?env=RT_COVERAGE=a-b:/dev/stdout prints coverage to the console).
+
+## 2026-10-12 — branch `online-ha` (worktree ../rugby08-ha): online merged onto the tidy layout
+- Per user: master fast-forwarded to tidy (ec043f5), new branch online-ha from master, `online` merged in (one merge, conflicts resolved against the new layout). Ported by hand where tidy split files: sdl_plat.c -> sdl_window/keys/events + new sdl_desk.c (netplay keyboard+mouse) and sdl_pad.c (live pad); dinput/dsound/log hunks into their split files (dinput_state.c, dsound_mix.c, runtime/debug/selftest_crt.c, miss.c); frame pacing into platform/native/frame.c and platform/web/platform.c (det_period_ms now in det.c); tools/patch_d3d9w.py replaced by a direct edit of render/webgl/program_ff.cpp (VS constants 96..99); online's tools moved to tools/net/, tools/check/, tools/web/.
+- Gates kept green: det.c hashing -> det_hash.c; netplay.c -> netplay.c + net_frame.c (step split into named helpers) + net_join.c; POV draw hooks -> d3d8_pov.cpp; target #ifdefs out of runtime/ (plat_frame_yield is a native no-op). `./init.sh lint` and `./init.sh structure` ok.
+- Verified: merged lifter output byte-identical to online's gen/recomp (143 files). On the merge build: net.det_synctest, net.lockstep, net.pov_view, net.pov_independent, net.desync_detect, net.handoff, native.smoke, native.menu, lift.crt_math PASS.
+- Learned: the auto-merge silently duplicated a function both sides added (handles.c can_acquire: the det commit is on both branches); the compiler caught it.
+- Next: web build + web checks, regress compare against ../rugby08-base, then on.match_map on this branch.
+- Web on the merge: clang-format had split `=>` in EM_JS JavaScript (build failed); fenced with clang-format off/on. web.compile/assets/serve/smoke/crt_math, net.web_lockstep, net.live_input, net.web_dropin PASS.
+- regress compare vs ../rugby08-base (master): all 14 scenarios differ, as expected from online's intended det-mode changes (Sleep(0) passes virtual time, movie pacing); not yet shown equal to online's own binary.
+
+## 2026-10-12 — on.match_map PASS (branch online-ha)
+- runtime/core/match_state.c + include/match_state.h: ms_active/phase/clock/player/ball/score/controlled, RT_MS_LOG=N trace line; probes moved to runtime/debug/match_probe.c (RT_MS_SCAN/DUMP/SNAP).
+- Verified on screenshots of the same run: HUD clock = decoded clock (01:47 at f14400, 29:28 at f29400), score 0-3 -> 0-10 matches, phases Free = open play, Formation = rucks/mauls/scrums, LineOut, GoalKick, Kickoff, Empty = cutscenes. Open-play clock 8.8 s per 60 frames (81/81). Points table settled: try 5, type 1 conversion 2, types 2/3 three.
+- Check tools/net/match_state_check.sh (eval match_state_eval.py) PASS. Next: on.match_setup (setup bytes; two natives by different menu routes reach kickoff with identical setup).
