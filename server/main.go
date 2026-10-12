@@ -25,8 +25,9 @@
 // Host-mode messages (on.match_net: one game, the host's, plays the match; friends show it), framed
 // {u8 type, u8 slot, u32 frame, u16 len, len bytes} and relayed to everyone else but never logged:
 // 'S' the match setup (host, at launch; the room keeps the latest), 'F' a match frame (host; payload
-// byte 0 = 0 is a key frame, the room keeps the latest), 'K' a key request and 'P' a pad (friends). A
-// newcomer gets the room's log, then the kept setup, then the kept key frame.
+// byte 0 = 0 is a key frame, the room keeps the latest), 'E' the match is over (host; the room forgets
+// setup and key), 'U' paused or not (host), 'K' a key request, 'P' a pad and 'Z' a pause request
+// (friends). A newcomer gets the room's log, then the kept setup, then the kept key frame.
 package main
 
 import (
@@ -101,7 +102,7 @@ func msgLen(b []byte) int {
 		return 6
 	case 'W', 'R':
 		return 2
-	case 'S', 'F', 'K', 'P':
+	case 'S', 'F', 'K', 'P', 'E', 'Z', 'U':
 		if len(b) < haHeader {
 			return haHeader
 		}
@@ -110,7 +111,8 @@ func msgLen(b []byte) int {
 	return 0
 }
 
-// haHeader: the header of the host-mode messages ('S', 'F', 'K', 'P'): type, slot, u32 frame, u16 len.
+// haHeader: the header of the host-mode messages ('S', 'F', 'K', 'P', 'E', 'Z', 'U'): type, slot, u32 frame,
+// u16 len.
 const haHeader = 8
 
 // ---- WebSocket (RFC 6455), server side ---------------------------------------------------------
@@ -504,14 +506,17 @@ func (c *client) game(b []byte) {
 			if r.pending[k] {
 				r.pending[k], r.from[k] = false, f
 			}
-		case 'S', 'F', 'K', 'P':
+		case 'S', 'F', 'K', 'P', 'E', 'Z', 'U':
 			if k != c.slot {
 				continue
 			}
-			if m[0] == 'S' {
+			switch {
+			case m[0] == 'S':
 				r.setup = m
-			} else if m[0] == 'F' && len(m) > haHeader && m[haHeader] == 0 {
+			case m[0] == 'F' && len(m) > haHeader && m[haHeader] == 0:
 				r.key = m
+			case m[0] == 'E': // the match is over: a newcomer must not be sent into it
+				r.setup, r.key = nil, nil
 			}
 			r.pass(m, c.slot)
 		}

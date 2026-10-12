@@ -1,0 +1,18 @@
+# on.match_flow host: PLAY NOW match (match_play.txt's menus, Scotland v New Zealand), quit at match time T (RT_MS_QUIT_AT).
+# After the launch only the intro skips: the host plays no other input (its menus stay the friend's to drive
+# when the friend pauses). Back on the main menu, the check relaunches the same match from there (RT_MS_RELAUNCH, which also skips
+# the relaunched match's intro).
+8100 click 320 240
+8400 tap Return
+9000 tap S
+9300 tap S
+9600 tap S
+9900 tap S
+10400 tap S
+11200 tap S
+11700 down Left
+11760 up Left
+12100 tap S
+12600 tap S
+13000 tap S
+13400 tap S

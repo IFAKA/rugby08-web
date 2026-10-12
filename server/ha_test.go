@@ -34,7 +34,7 @@ func queued(c *client) [][]byte {
 }
 
 func TestMsgLenHostMode(t *testing.T) {
-	for _, ty := range []byte{'S', 'F', 'K', 'P'} {
+	for _, ty := range []byte{'S', 'F', 'K', 'P', 'E', 'Z', 'U'} {
 		if n := msgLen([]byte{ty, 0, 0}); n != haHeader {
 			t.Errorf("%c short: %d, want %d", ty, n, haHeader)
 		}
@@ -95,5 +95,23 @@ func TestHostModeRelay(t *testing.T) {
 	got = queued(late)
 	if len(got) != 3 || !bytes.Equal(got[0], in) || !bytes.Equal(got[1], setup) || !bytes.Equal(got[2], key) {
 		t.Errorf("newcomer got %v", got)
+	}
+}
+
+func TestHostModeEndForgetsMatch(t *testing.T) {
+	r := &room{code: "E"}
+	host, friend := testClient(r, 0), testClient(r, 1)
+	host.game(append(haMsg('S', 0, 1, []byte{1}), haMsg('F', 0, 2, []byte{0, 9})...))
+	host.game(haMsg('E', 0, 3, nil))
+	if r.setup != nil || r.key != nil {
+		t.Fatal("setup or key kept after the match ended")
+	}
+	if got := queued(friend); len(got) != 3 || got[2][0] != 'E' {
+		t.Fatalf("friend got %d messages, want S, F, E", len(got))
+	}
+	late := testClient(r, 2)
+	r.dumpHA(late)
+	if len(queued(late)) != 0 {
+		t.Fatal("a newcomer was sent the ended match")
 	}
 }

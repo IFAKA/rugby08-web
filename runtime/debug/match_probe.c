@@ -143,6 +143,7 @@ static void snap(uint32_t frame) {
 
 void ms_probe_frame(uint32_t frame) {
     ms_stream_check_frame();
+    ms_quit_frame(frame);
     static const char *snap_at = (const char *)-1;
     if (snap_at == (const char *)-1) snap_at = getenv("RT_MS_SNAP");
     for (const char *p = snap_at; p && *p; p = strchr(p, ',') ? strchr(p, ',') + 1 : "")

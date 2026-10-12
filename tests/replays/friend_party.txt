@@ -1,0 +1,12 @@
+# on.match_flow friend: MY RUGBY, back to the main menu, then nothing: the host's 'S' takes it into the host's match.
+# Its pad is the host's controller 2: during the host's Team Select (~11000-12100) it moves to the away side.
+8100 click 320 240
+8400 tap Return
+9500 down Down
+9520 up Down
+9700 tap S
+10000 tap S
+10500 tap W
+11000 tap W
+11400 pad 0 down lright
+11460 pad 0 up lright

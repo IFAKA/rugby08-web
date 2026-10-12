@@ -51,6 +51,7 @@ uint32_t ms_setup_size(void);
 #define MS_SETUP_BYTES (0x1908 + 4 + 1)
 int ms_setup_capture(uint8_t *out);       /* MS_SETUP_BYTES into out; returns the count */
 void ms_setup_offer(const uint8_t *in);   /* the next launch plays this setup instead of its own */
+void ms_setup_last(uint8_t *out);         /* the setup of the last launch (MS_SETUP_BYTES) */
 uint64_t ms_setup_hash(void);
 void ms_launch(void);                     /* hook: FUN_004F3D10 entry */
 void ms_setup_frame(uint32_t frame);      /* RT_MS_AFTER_LAUNCH (ms_frame calls it) */
@@ -92,6 +93,14 @@ void ms_measure_frame(uint32_t frame); /* ms_frame calls it */
 void net_ha_setup(const uint8_t *setup);    /* host, at the launch */
 void net_ha_frame_out(uint32_t frame_no, const uint8_t *head, uint32_t frame, uint32_t rec, uint32_t rec_len);
 const uint8_t *net_ha_newest(int *fresh);   /* friend: newest host head (96) + frame, or NULL */
+void net_ha_send(char type, uint32_t frame, const void *payload, size_t len);
+int net_ha_rx_recent(uint32_t frame, uint32_t within);   /* a host frame arrived in the last `within` Presents */
+/* net_ha_flow.c: friends follow the host into and out of its matches */
+void net_ha_flow_setup(const uint8_t *setup);
+void net_ha_flow_end(void);
+void net_ha_flow_pause_request(void);
+void net_ha_flow_host_paused(int paused);
+void net_ha_flow_present(uint32_t frame);
 
 void ms_frame(uint32_t frame); /* Present hook: RT_MS_LOG=N trace line every N frames */
 

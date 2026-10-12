@@ -8,7 +8,7 @@
 # score), host -> friend latency p95 <= 6 frames, and the friend's pad moves its player on the host.
 # One summary line; details in logs/match_net/.
 cd "$(dirname "$0")/../.." || exit 1
-D=logs/match_net PORT=${PORT:-8096} ROOM=ha$$
+D=logs/match_net PORT=${PORT:-$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')} ROOM=ha$$
 rm -rf "$D" && mkdir -p "$D"
 (cd server && go build -o ../build/rugby08-server .) || {
   echo "match_net_check: FAIL (server build)"
@@ -18,6 +18,10 @@ build/rugby08-server -addr 127.0.0.1:$PORT -dir build/web >"$D/server.log" 2>&1 
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null' EXIT
 sleep 1
+kill -0 $SERVER 2>/dev/null || { # e.g. the port is taken: never test against another relay
+  echo "match_net_check: FAIL (relay did not start: $(tail -1 "$D/server.log"))"
+  exit 1
+}
 run() { # name, replay, frames, extra env...
   name=$1 replay=$2 frames=$3
   shift 3

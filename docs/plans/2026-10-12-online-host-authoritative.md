@@ -86,6 +86,13 @@ each friend's own game loads the same match and shows the host's state.
 5. **on.match_flow** — party flow: host start → friends' games enter Team Select/match; pause by
    anyone pauses all and the pauser drives the menu; full time → everyone back in own menus.
    Check: two natives run the whole flow twice in one party.
+   As built (PASS 2026-10-12, tools/net/match_flow_check.sh, runtime/core/net_ha_flow.c): 'S' takes a
+   friend from any menu into the host's match (FUN_004F3D10 with the host's setup); a friend leaves its
+   intro when the host's frames arrive (FUN_0047D860); 'E' when the host's game leaves its match
+   (quit, full time) takes friends back to their menus (FUN_00576140); a friend's pause menu sends 'Z',
+   the host presses Esc, 'U' mirrors paused/resumed to friends; the pauser's pad (a host controller with
+   a side) drives the host's menu. Not run yet: a real 80-minute full time (the same 'E' path), half
+   time, the host's cutscenes on friends (they hold the last frame).
 6. **on.ingame_ui** — Online screens drawn by the runtime inside the game picture (overlay at
    Present, game-like style, keyboard/mouse/pad): Online → Host (code) / Join (type code) / party
    badge / leave. Remove the HTML panel. Check: native replay + Playwright: host code shown in the

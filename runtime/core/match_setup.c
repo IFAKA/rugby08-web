@@ -24,6 +24,7 @@ static const struct {
 #define NSPAN (sizeof k_span / sizeof *k_span)
 
 static uint8_t g_offer[MS_SETUP_BYTES];
+static uint8_t g_last[MS_SETUP_BYTES];   /* the setup of the last launch */
 static int g_have_offer;
 static long g_launch_frame = -1;
 
@@ -35,6 +36,8 @@ int ms_setup_capture(uint8_t *out) {
     }
     return (int)n;
 }
+
+void ms_setup_last(uint8_t *out) { memcpy(out, g_last, MS_SETUP_BYTES); }
 
 void ms_setup_offer(const uint8_t *in) {
     memcpy(g_offer, in, MS_SETUP_BYTES);
@@ -82,6 +85,7 @@ void ms_launch(void) {
              (unsigned long long)own, ms_team_id(0), ms_team_id(1), rd16(ms_setup_va() + 0x1902), g_launch_frame);
     uint8_t b[MS_SETUP_BYTES];
     ms_setup_capture(b);
+    memcpy(g_last, b, sizeof b);
     net_ha_setup(b);   /* a host sends it to its friends */
     const char *out = getenv("RT_MS_SETUP_OUT");
     if (out) {

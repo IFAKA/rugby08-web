@@ -390,3 +390,9 @@ Next: `./init.sh next` shows what to fix.
 - The game's replay records decode in another game (RT_MS_STREAM_CHECK: pose blocks and ball identical over 3310 frames from one key; positions quantised to 1/52.5 m, headings to degrees): ~377 B/frame instead of 4.6 KB raw.
 - Learned: once a friend plays, the host's match takes another course (a human side's scrum waits for its input), so test inputs on the friend are triggered by the host's phase (runtime/debug/net_ha_press.c), not by frame.
 - Check tools/net/match_net_check.sh: 3799 friend frames = host frame shown within 3 cm, latency p95 0.9 frames, friend's pad moved its away player 18.8 m on the host (0.0 m before). Next: on.match_flow.
+
+## 2026-10-12 — on.match_flow PASS (branch online-ha)
+- runtime/core/net_ha_flow.c: friends follow the host into its match from any menu ('S' -> FUN_004F3D10), out of their intro (FUN_0047D860 when host frames arrive), back to their menus ('E' -> FUN_00576140); pause: friend's pause menu -> 'Z' -> host Esc -> 'U' to all; the pauser's pad drives the host menu.
+- Learned: pause state is the FE screen id (0x71) not BackendState+0x2220 (a counter); only keyboard Esc pauses; a controller needs a side to drive menus; once a friend has a side the host's match waits for its set-piece answers (test input mashes Cross). Stale relays from another worktree held fixed ports: checks now pick a free port and fail if the relay does not start.
+- Test tools: RT_MS_QUIT_AT / RT_MS_RELAUNCH (match_quit.c), RT_NET_HA_PAUSE / RT_NET_HA_MASH (net_ha_press.c).
+- Check tools/net/match_flow_check.sh: 2 matches, friend joined both from its menus with the host's setup, frames within 3 cm, left both within 120 frames, its pause held the host's clock 93 frames, its Cross resumed. Next: on.ingame_ui.

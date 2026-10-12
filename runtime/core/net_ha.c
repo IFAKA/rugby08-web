@@ -11,6 +11,8 @@
  *               frame (its replay coder, ~380 bytes); the server keeps the last key for newcomers
  *   'K' key     friend -> host: send a key next
  *   'P' pad     friend -> host every Present: rt_pad_t
+ *   'E' end     host -> friends: its match is over      'Z' pause   friend -> host: it paused
+ *   'U' paused  host -> friends: u8 paused or not        (the party flow: net_ha_flow.c)
  * A key goes first, on request and every KEY_EVERY frames; a friend decodes the records after the last
  * key in order with its own game's decoder (the same tables in every game: RT_MS_STREAM_CHECK). */
 #include "netplay_int.h"
@@ -42,6 +44,7 @@ static size_t g_dec_at;                     /* bytes of g_pk already decoded */
 static uint8_t g_newest[HEAD + FRAME_SIZE]; /* head and frame of the newest decoded */
 static int g_have, g_fresh;
 static int g_host_phase = -1;               /* the phase id in the newest head received */
+static uint32_t g_rx_at;                    /* Present at which the last frame arrived */
 
 static uint64_t now_ns(void) {
     struct timespec ts;
@@ -66,9 +69,17 @@ static void send(char type, uint32_t frame, const void *a, size_t na, const void
     net_tx_send(m, (int)(HDR + len), 0);
 }
 
-/* host: match_setup.c at the launch */
+int net_ha_rx_recent(uint32_t frame, uint32_t within) { return g_rx_at && frame - g_rx_at <= within; }
+
+void net_ha_send(char type, uint32_t frame, const void *payload, size_t len) {
+    send(type, frame, payload, len, NULL, 0);
+}
+
+/* host: match_setup.c at the launch; the new match's first frame is a key */
 void net_ha_setup(const uint8_t *setup) {
-    if (rt_net_ha == 1) send('S', g_frame, setup, MS_SETUP_BYTES, NULL, 0);
+    if (rt_net_ha != 1) return;
+    send('S', g_frame, setup, MS_SETUP_BYTES, NULL, 0);
+    g_want_key = 1;
 }
 
 /* host: match_replay.c for each recorded frame: head (96 bytes), the frame (guest), the game's record of
@@ -102,6 +113,7 @@ static void store_frame(uint32_t frame_no, const uint8_t *p, uint16_t len) {
     memcpy(g_pk + g_pk_n + 2, p, len);
     g_pk_n += 2u + len;
     memcpy(&g_host_phase, p + 1 + 8, 4);
+    g_rx_at = g_frame;
     rt_trace("ms: net rx %u %s ns %llu", frame_no, p[0] ? "rec" : "key", (unsigned long long)now_ns());
 }
 
@@ -111,12 +123,24 @@ static void handle(const uint8_t *m) {
     if (k < 0 || k == N.slot) return;
     switch (m[0]) {
     case 'S':
-        if (rt_net_ha == 2 && len == MS_SETUP_BYTES) ms_setup_offer(m + HDR);
+        if (rt_net_ha == 2 && len == MS_SETUP_BYTES) net_ha_flow_setup(m + HDR);
+        break;
+    case 'E':   /* the host's match is over: its frames are history */
+        if (rt_net_ha != 2) break;
+        g_pk_n = g_dec_at = 0;
+        g_have = 0;
+        net_ha_flow_end();
         break;
     case 'F':
         if (rt_net_ha == 2) store_frame(get32(m + 2), m + HDR, len);
         break;
     case 'K': g_want_key = 1; break;
+    case 'Z':
+        if (rt_net_ha == 1) net_ha_flow_pause_request();
+        break;
+    case 'U':
+        if (rt_net_ha == 2 && len == 1) net_ha_flow_host_paused(m[HDR]);
+        break;
     case 'P':
         if (rt_net_ha == 1 && len == sizeof(rt_pad_t)) {
             if (memcmp(&g_pad[k], m + HDR, sizeof(rt_pad_t)) != 0)
@@ -136,7 +160,10 @@ static int msg_len(const uint8_t *m, int avail) {
     case 'S':
     case 'F':
     case 'K':
-    case 'P': return avail < HDR ? HDR : HDR + (m[6] | m[7] << 8);
+    case 'P':
+    case 'E':
+    case 'Z':
+    case 'U': return avail < HDR ? HDR : HDR + (m[6] | m[7] << 8);
     case 'I': return avail < 19 ? 19 : 19 + 6 * m[18];
     case 'H': return 14;
     case 'A':
@@ -175,6 +202,7 @@ void net_ha_present(uint32_t frame) {
     g_frame = frame;
     plat_local_pad(&N.local);   /* devices; in replay runs the replay's pad events are already there */
     pump();
+    net_ha_flow_present(frame);
     rt_pads[N.slot] = N.local;
     if (rt_net_ha == 1) {
         static const rt_pad_t zero;
@@ -182,7 +210,7 @@ void net_ha_present(uint32_t frame) {
             if (k != N.slot) rt_pads[k] = g_pad_at[k] && frame - g_pad_at[k] < PAD_STALE ? g_pad[k] : zero;
         return;
     }
-    net_ha_test_press(&N.local, g_host_phase);
+    net_ha_test_press(&N.local, g_host_phase, frame);
     rt_pads[N.slot] = N.local;
     send('P', frame, &N.local, sizeof N.local, NULL, 0);
     if (g_want_key) {

@@ -106,6 +106,23 @@ controller+0x54. A friend re-applies the host's 16 floats after its own step
 (game/overrides/match/camera_update.c, runtime/core/match_camera.c). The 2D overlay camera
 (FUN_008267A0, 0x009FAE58) is separate.
 
+## Game flow: menus, match, pause (on.match_flow)
+- Game object [0x00A7ED28], current GameState at +0x90: RugbyFrontEnd (vtable 0x008CD620) in the menus,
+  loading screens (0x008CD118), BackendState (0x008CC6F0) in a match. The front end: [0x013834E8], +4 its
+  current screen (screen id word at +4): 0x0079 the in-match HUD, 0x0071 GAME PAUSED.
+- Into a match from any menu: Game->FUN_004049C0(0) then FUN_004F3D10 (the launch every menu's commit
+  calls; it returns at once if the Game is busy). Out of one: FUN_00576140 (the pause menu's confirmed
+  quit). Both measured: a friend idle in its main menu joins, a quit at a match time returns to the
+  main menu in 3 frames.
+- Backend modes: BackendState+0x48 a StateMachine<BackendState, BackendMode>, +4 the current mode
+  (CutsceneMode 0x008CD20C, MovementMode 0x008CDC78), +8 a queued request (a StateFactory, applied by
+  FUN_004053F0). FUN_0047D860 (thiscall on BackendState) queues MovementMode unless it is already the
+  mode: what ends the intro when it is skipped. BackendState+0x2220 is not a screen id (it counts up
+  during play).
+- Pause: only the keyboard's Esc pauses (no pad button); any controller playing a side drives the pause
+  menu (one without a side does not); Cross on RESUME (highlighted first) resumes; Esc on the open menu
+  does nothing. FUN_00575F90 is the menu's resume.
+
 ## Controllers
 CRugbyTeam+0xC0..+0xCC CPlayerControl*[4] (one per human on that side, 0 = none).
 CPlayerControl (vtable 0x008EE9D8): +0xC team, +0x10 controlled CRugbyPlayer* (0 at set pieces),

@@ -483,7 +483,7 @@
       ],
       "desc": "Party flow: host starts, friends' own games enter Team Select and the match; pauser drives the pause menu; full time returns everyone to their own menus; twice in one party.",
       "check": "tools/net/match_flow_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "on.ingame_ui",

@@ -14,6 +14,7 @@ extern "C"
 #endif
     void ms_probe_frame(uint32_t frame);   /* match_probe.c: RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP at a Present */
 void ms_stream_check_frame(void);      /* match_stream_check.c: RT_MS_STREAM_CHECK */
-void net_ha_test_press(rt_pad_t *local, int host_phase);   /* net_ha_press.c: RT_NET_HA_PRESS */
+void net_ha_test_press(rt_pad_t *local, int host_phase, uint32_t frame);   /* net_ha_press.c */
+void ms_quit_frame(uint32_t frame);                        /* match_quit.c: RT_MS_QUIT_AT */
 
 #endif
