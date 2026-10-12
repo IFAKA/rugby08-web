@@ -378,6 +378,34 @@
       "desc": "Online in real browser pages: keyboard presses on one page (Playwright) reach that player's pad and both pages keep equal state hashes.",
       "check": "timeout 600 /opt/homebrew/bin/python3 tools/net_live_input.py   # system Python: Playwright is not in .venv",
       "passes": true
+    },
+    {
+      "id": "net.dropin",
+      "deps": [
+        "net.lockstep"
+      ],
+      "desc": "Drop-in online play (native): player 2 joins 15 s into player 1s running game (player 1 paced at 60 fps), replays the room log, catches up without drawing and plays on with equal state hashes.",
+      "check": "FPS1=60 JOIN_AFTER=15 tools/net_test.sh --frames 2400 --timeout 400",
+      "passes": true
+    },
+    {
+      "id": "net.handoff",
+      "deps": [
+        "net.dropin"
+      ],
+      "desc": "The room outlives its creator: player 1 leaves, player 2 takes over admitting newcomers, a third player joins later and agrees with player 2 on every state hash.",
+      "check": "tools/net_handoff.sh",
+      "passes": true
+    },
+    {
+      "id": "net.web_dropin",
+      "deps": [
+        "net.dropin",
+        "net.live_input"
+      ],
+      "desc": "Drop-in in real browser pages, as players use it: the game boots straight in, the invite link comes from the in-game Friends panel, a friend opens it 20 s later, catches up, gets the \"You are in\" toast, its keys reach its pad, hashes stay equal, and the host plays on after the friend leaves.",
+      "check": "timeout 1200 /opt/homebrew/bin/python3 tools/net_dropin.py   # system Python: Playwright",
+      "passes": true
     }
   ]
 }

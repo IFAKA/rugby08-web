@@ -326,3 +326,8 @@ Next: `./init.sh next` shows what to fix.
 - Next: per-player camera (render-side view correction), live-input check in a real browser, deployment notes.
 - 2026-10-12 (later): per-player camera (runtime/d3d8/d3d8_pov.cpp, key C): local view swap for fixed-function draws, clip correction for shader draws (registers 96..99, tools/patch_d3d9w.py). The visible match is fixed-function. Independence proven: net.pov_independent (player 2 on its own camera, 15000 frames of equal hashes). Live browser input: net.live_input (Playwright). docs/ONLINE.md: how to host. Server TLS flags. Regression: native.smoke/menu/audio, lift.crt_math, web.smoke PASS.
 - Not done: browser-vs-native cross-play (desyncs: different builds), rejoin into a running match, spectators.
+
+## 2026-10-12 — online: drop-in party inside the game (branch `online`)
+- User test showed "Out of sync" on the legal screen. Two root causes: the guest saw this machine's mouse buttons/lock keys in det mode (a click skipped the legal screen on one side), and dlmalloc seeded its heap "magic" from time(0) (copies started in different seconds differed from frame 1). Both fixed; tests now click the canvas and start copies seconds apart.
+- Redesign per user: no lobby page. The game boots straight in with its room open; friends join any time from the in-game Friends panel's invite link (server replays the room log; the newcomer catches up without drawing/sound), roster changes ride in the message stream, per-player input delay, room outlives its creator, desynced copies auto-rejoin, lost connection = play on offline. Web det mode now paced at 60 fps.
+- New checks pass: net.dropin, net.handoff, net.web_dropin. Limit: joining cost grows with time played (native catch-up ~1.3x real time with drawing).

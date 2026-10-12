@@ -4,6 +4,9 @@
 #include "rt.h"
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -297,8 +300,23 @@ static void frame_stats(double swap_ticks) {
     }
 }
 
+#ifdef __EMSCRIPTEN__
+/* Deterministic mode (netplay) counts game time in frames, so frames must come at 60 per second of
+   wall time: wait for this frame's slot (the browser itself does not pace the loop). Normal play
+   measures real time between frames and needs no pacing. */
+static void web_det_pace(void) {
+    static double next;
+    double now = emscripten_get_now(), period = 1000.0 / 60.0;
+    if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
+    next += period;
+    if (next - now >= 1.0) emscripten_sleep((unsigned)(next - now));
+}
+#endif
+
 void plat_gl_swap(void) {
-#ifndef __EMSCRIPTEN__
+#ifdef __EMSCRIPTEN__
+    if (det_on()) web_det_pace();
+#else
     double s0 = (double)SDL_GetPerformanceCounter();
     if (g_win && g_gl) SDL_GL_SwapWindow(g_win);
     double sw = (double)SDL_GetPerformanceCounter() - s0;
