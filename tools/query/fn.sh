@@ -6,16 +6,25 @@
 #   --max N    print at most N lines of the body (default 200)
 cd "$(dirname "$0")/../.." || exit 1
 MAX=200
-[ "${1:-}" = --max ] && { MAX=$2; shift 2; }
+[ "${1:-}" = --max ] && {
+  MAX=$2
+  shift 2
+}
 q=${1:?usage: fn.sh ADDRESS|NAME}
 SYM=analysis/symbols.json
 if [[ $q =~ ^(0x)?[0-9A-Fa-f]{6,8}$ ]]; then
   va=$(printf '%08X' "0x${q#0x}")
 else
-  [ -f "$SYM" ] || { echo "fn: no $SYM (run tools/analysis/symbols.py)"; exit 1; }
+  [ -f "$SYM" ] || {
+    echo "fn: no $SYM (run tools/analysis/symbols.py)"
+    exit 1
+  }
   hits=$(jq -r --arg q "$q" 'to_entries[] | select(.value | ascii_downcase | contains($q | ascii_downcase)) | "\(.key) \(.value)"' "$SYM")
   n=$(printf '%s\n' "$hits" | grep -c .)
-  [ "$n" = 0 ] && { echo "fn: no function named like '$q'"; exit 1; }
+  [ "$n" = 0 ] && {
+    echo "fn: no function named like '$q'"
+    exit 1
+  }
   exact=$(printf '%s\n' "$hits" | awk -v q="$q" '$2 == q')
   [ -n "$exact" ] && hits=$exact n=1
   if [ "$n" -gt 1 ]; then
@@ -25,9 +34,12 @@ else
   fi
   va=$(printf '%s' "$hits" | awk '{print $1}' | sed 's/^0x//')
 fi
-name=$( [ -f "$SYM" ] && jq -r --arg k "0x$va" '.[$k] // empty' "$SYM")
+name=$([ -f "$SYM" ] && jq -r --arg k "0x$va" '.[$k] // empty' "$SYM")
 f=$(grep -l -m1 "^void sub_${va}(void)" gen/recomp/recomp_*.c 2>/dev/null | head -1)
-[ -n "$f" ] || { echo "fn: sub_$va is not a lifted function entry (see analysis/lift_catalog.json)"; exit 1; }
+[ -n "$f" ] || {
+  echo "fn: sub_$va is not a lifted function entry (see analysis/lift_catalog.json)"
+  exit 1
+}
 echo "// sub_$va${name:+ = $name}  ($f)"
 # the body; an EH function is a static sub_X_eh body plus a sub_X wrapper: print both
 awk -v pat="^(static )?void sub_${va}(_eh)?\\\\(void\\\\)" -v max="$MAX" '

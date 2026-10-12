@@ -1,6 +1,6 @@
 {
   "_rules": "Edit only 'passes' (and 'notes'). Set passes=true only after `./init.sh check <id>` exits 0. Items run in order unless deps allow otherwise. Adding new items is fine; deleting or weakening a check is not.",
-  "_strategy": "Follow Burnout3/xboxrecomp pattern: (1) static checks (compile, fidelity, reachability), (2) smoke tests (boot, menu, no crash), (3) user playtest (manual, crash logs seed static fixes). No replays, no frame limits, no screenshots in checks.",
+  "_strategy": "Static checks first (compile, fidelity, reachability, lint, structure), then smoke tests, then automatic behaviour checks: hidden, muted, scripted runs (tests/replays/) compared by screenshot and trace, against the original under Wine where it matters (user, 2026-10-10: no user playtests). Refactors: tools/check/regress.sh (RT_DET=1, pixel- and state-hash-exact against the old build). Crashes are fixed as whole defect classes in tools/ or runtime/, never per address.",
   "items": [
     {
       "id": "setup.tools",
@@ -303,6 +303,20 @@
       ],
       "desc": "The game's own CRT math (atan2 0x873250, exp 0x874C90 -- both through the fxam-classifying transcendental dispatcher) matches host libm within 1e-12 over a sign/zero/quadrant grid, evaluated at WinMain (RT_SELFTEST_CRT, runtime/core/log.c). Guards the 8-bit sar lift (atan2 returned x for y=0, the run direction was wrong).",
       "check": "RT_SELFTEST_CRT=1 SDL_AUDIODRIVER=dummy timeout 120 build/native/rugby08 --frames 10 --log logs/selftest_crt.log 2>&1 | grep -q \"crt selftest: .* 0 wrong -> PASS\"",
+      "passes": true
+    },
+    {
+      "id": "repo.structure",
+      "deps": [],
+      "desc": "Project structure rules (docs/ARCHITECTURE.md): hand-written files <= 300 lines, runtime/ target-neutral, a README.md per source dir, every submodule commit of ours recorded in third_party/patches/",
+      "check": "tools/check/structure.sh",
+      "passes": true
+    },
+    {
+      "id": "repo.lint",
+      "deps": [],
+      "desc": "Formatters and linters clean: clang-format + clang-tidy (C/C++), ruff (Python), shfmt + shellcheck (sh), Prettier + ESLint (web JS)",
+      "check": "tools/check/lint.sh",
       "passes": true
     }
   ]

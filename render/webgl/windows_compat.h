@@ -30,7 +30,7 @@ typedef struct _GUID {
     uint32_t Data1;
     uint16_t Data2;
     uint16_t Data3;
-    uint8_t  Data4[8];
+    uint8_t Data4[8];
 } GUID;
 typedef GUID IID;
 typedef GUID REFIID;
@@ -53,46 +53,46 @@ typedef GUID REFIID;
 // ---------------------------------------------------------------------------
 // Virtual key codes
 // ---------------------------------------------------------------------------
-#define VK_ESCAPE           0x1B
-#define VK_SPACE            0x20
-#define VK_RETURN           0x0D
-#define VK_TAB              0x09
-#define VK_SHIFT            0x10
-#define VK_CONTROL          0x11
+#define VK_ESCAPE  0x1B
+#define VK_SPACE   0x20
+#define VK_RETURN  0x0D
+#define VK_TAB     0x09
+#define VK_SHIFT   0x10
+#define VK_CONTROL 0x11
 
 // ---------------------------------------------------------------------------
 // GDI handle types
 // ---------------------------------------------------------------------------
-typedef void* HDC;
-typedef void* HBITMAP;
-typedef void* HFONT;
-typedef void* HGDIOBJ;
-typedef void* HPEN;
-typedef void* HBRUSH;
+typedef void *HDC;
+typedef void *HBITMAP;
+typedef void *HFONT;
+typedef void *HGDIOBJ;
+typedef void *HPEN;
+typedef void *HBRUSH;
 
 // ---------------------------------------------------------------------------
 // BMP / DIB structures
 // ---------------------------------------------------------------------------
 #pragma pack(push, 1)
 typedef struct tagBITMAPFILEHEADER {
-    WORD  bfType;
+    WORD bfType;
     DWORD bfSize;
-    WORD  bfReserved1;
-    WORD  bfReserved2;
+    WORD bfReserved1;
+    WORD bfReserved2;
     DWORD bfOffBits;
 } BITMAPFILEHEADER, *PBITMAPFILEHEADER;
 #pragma pack(pop)
 
 typedef struct tagBITMAPINFOHEADER {
     DWORD biSize;
-    LONG  biWidth;
-    LONG  biHeight;
-    WORD  biPlanes;
-    WORD  biBitCount;
+    LONG biWidth;
+    LONG biHeight;
+    WORD biPlanes;
+    WORD biBitCount;
     DWORD biCompression;
     DWORD biSizeImage;
-    LONG  biXPelsPerMeter;
-    LONG  biYPelsPerMeter;
+    LONG biXPelsPerMeter;
+    LONG biYPelsPerMeter;
     DWORD biClrUsed;
     DWORD biClrImportant;
 } BITMAPINFOHEADER;
@@ -106,26 +106,26 @@ typedef struct tagRGBQUAD {
 
 typedef struct tagBITMAPINFO {
     BITMAPINFOHEADER bmiHeader;
-    RGBQUAD          bmiColors[1];
+    RGBQUAD bmiColors[1];
 } BITMAPINFO;
 
-#define BI_RGB          0L
-#define DIB_RGB_COLORS  0
+#define BI_RGB         0L
+#define DIB_RGB_COLORS 0
 
 // ---------------------------------------------------------------------------
 // Font / GDI constants
 // ---------------------------------------------------------------------------
-#define FW_BOLD              700
-#define FW_NORMAL            400
-#define ANSI_CHARSET         0
-#define DEFAULT_CHARSET      1
-#define OUT_DEFAULT_PRECIS   0
-#define CLIP_DEFAULT_PRECIS  0
-#define DEFAULT_QUALITY      0
-#define DEFAULT_PITCH        0
-#define FF_DONTCARE          0
-#define MM_TEXT              1
-#define LOGPIXELSY           90
+#define FW_BOLD             700
+#define FW_NORMAL           400
+#define ANSI_CHARSET        0
+#define DEFAULT_CHARSET     1
+#define OUT_DEFAULT_PRECIS  0
+#define CLIP_DEFAULT_PRECIS 0
+#define DEFAULT_QUALITY     0
+#define DEFAULT_PITCH       0
+#define FF_DONTCARE         0
+#define MM_TEXT             1
+#define LOGPIXELSY          90
 
 // ---------------------------------------------------------------------------
 // LARGE_INTEGER
@@ -133,8 +133,14 @@ typedef struct tagBITMAPINFO {
 #ifndef _LARGE_INTEGER_DEFINED
 #define _LARGE_INTEGER_DEFINED
 typedef union _LARGE_INTEGER {
-    struct { DWORD LowPart; LONG HighPart; };
-    struct { DWORD LowPart; LONG HighPart; } u;
+    struct {
+        DWORD LowPart;
+        LONG HighPart;
+    };
+    struct {
+        DWORD LowPart;
+        LONG HighPart;
+    } u;
     long long QuadPart;
 } LARGE_INTEGER;
 #endif
@@ -152,8 +158,8 @@ typedef union _LARGE_INTEGER {
 #define _vsntprintf vsnprintf
 #define _T(x)       x
 
-#define _strnicmp   strncasecmp
-#define _stricmp    strcasecmp
+#define _strnicmp strncasecmp
+#define _stricmp  strcasecmp
 
 // ---------------------------------------------------------------------------
 // Path constants
@@ -177,27 +183,23 @@ typedef int errno_t;
 // ---------------------------------------------------------------------------
 // _splitpath_s
 // ---------------------------------------------------------------------------
-inline errno_t _splitpath_s(
-    const char* path,
-    char* drive, size_t driveNumberOfElements,
-    char* dir,   size_t dirNumberOfElements,
-    char* fname, size_t nameNumberOfElements,
-    char* ext,   size_t extNumberOfElements)
-{
+inline errno_t _splitpath_s(const char *path, char *drive, size_t driveNumberOfElements, char *dir,
+                            size_t dirNumberOfElements, char *fname, size_t nameNumberOfElements, char *ext,
+                            size_t extNumberOfElements) {
     if (drive) *drive = 0;
-    if (dir)   *dir   = 0;
+    if (dir) *dir = 0;
     if (fname) *fname = 0;
-    if (ext)   *ext   = 0;
+    if (ext) *ext = 0;
 
     if (!path) return 0;
 
-    const char* lastSlash     = strrchr(path, '/');
-    const char* lastBackSlash = strrchr(path, '\\');
-    const char* filenameStart = path;
+    const char *lastSlash = strrchr(path, '/');
+    const char *lastBackSlash = strrchr(path, '\\');
+    const char *filenameStart = path;
 
     if (lastSlash || lastBackSlash) {
         if (lastSlash > lastBackSlash) filenameStart = lastSlash + 1;
-        else                           filenameStart = lastBackSlash + 1;
+        else filenameStart = lastBackSlash + 1;
     }
 
     if (dir && dirNumberOfElements > 0) {
@@ -207,7 +209,7 @@ inline errno_t _splitpath_s(
         dir[dirLen] = 0;
     }
 
-    const char* lastDot = strrchr(filenameStart, '.');
+    const char *lastDot = strrchr(filenameStart, '.');
 
     if (lastDot) {
         if (ext && extNumberOfElements > 0) {
@@ -229,7 +231,7 @@ inline errno_t _splitpath_s(
     return 0;
 }
 
-inline void _splitpath_s(const char* path, char* drive, char* dir, char* fname, char* ext) {
+inline void _splitpath_s(const char *path, char *drive, char *dir, char *fname, char *ext) {
     _splitpath_s(path, drive, _MAX_DRIVE, dir, _MAX_DIR, fname, _MAX_FNAME, ext, _MAX_EXT);
 }
 
@@ -255,32 +257,30 @@ inline void _splitpath_s(const char* path, char* drive, char* dir, char* fname, 
 #define SW_SHOWMINIMIZED 2
 #define SW_SHOWNORMAL    1
 
-#define GWL_STYLE        (-16)
-#define HWND_NOTOPMOST   ((HWND)-2)
-#define SWP_SHOWWINDOW   0x0040
-#define GW_HWNDNEXT      2
+#define GWL_STYLE      (-16)
+#define HWND_NOTOPMOST ((HWND) - 2)
+#define SWP_SHOWWINDOW 0x0040
+#define GW_HWNDNEXT    2
 
-#define MB_OK            0
-#define MB_YESNO         4
-#define IDYES            6
-#define IDNO             7
+#define MB_OK    0
+#define MB_YESNO 4
+#define IDYES    6
+#define IDNO     7
 
-inline BOOL ShowWindow(HWND, int)                                          { return TRUE; }
-inline BOOL UpdateWindow(HWND)                                             { return TRUE; }
-inline LONG GetWindowLong(HWND, int)                                       { return 0; }
-inline LONG SetWindowLong(HWND, int, LONG)                                 { return 0; }
-inline BOOL SetWindowPos(HWND, HWND, int, int, int, int, UINT)             { return TRUE; }
-inline BOOL AdjustWindowRect(RECT*, DWORD, BOOL)                           { return TRUE; }
-inline int  ShowCursor(BOOL)                                               { return 0; }
+inline BOOL ShowWindow(HWND, int) { return TRUE; }
+inline BOOL UpdateWindow(HWND) { return TRUE; }
+inline LONG GetWindowLong(HWND, int) { return 0; }
+inline LONG SetWindowLong(HWND, int, LONG) { return 0; }
+inline BOOL SetWindowPos(HWND, HWND, int, int, int, int, UINT) { return TRUE; }
+inline BOOL AdjustWindowRect(RECT *, DWORD, BOOL) { return TRUE; }
+inline int ShowCursor(BOOL) { return 0; }
 
 inline int MessageBox(HWND, LPCSTR lpText, LPCSTR lpCaption, UINT) {
     printf("MessageBox: %s - %s\n", lpCaption ? lpCaption : "", lpText ? lpText : "");
     return IDYES;
 }
 
-inline HINSTANCE ShellExecute(HWND, LPCSTR, LPCSTR, LPCSTR, LPCSTR, INT) {
-    return (HINSTANCE)33;
-}
+inline HINSTANCE ShellExecute(HWND, LPCSTR, LPCSTR, LPCSTR, LPCSTR, INT) { return (HINSTANCE)33; }
 
 // ---------------------------------------------------------------------------
 // Memory utilities

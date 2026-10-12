@@ -25,7 +25,7 @@ uint32_t rt_load_image(const char *path, uint32_t *entry_out) {
     if (!b || fread(b, 1, (size_t)n, f) != (size_t)n) rt_fatal("cannot read %s", path);
     fclose(f);
     uint32_t pe = *(uint32_t *)(b + 0x3C);
-    if (memcmp(b + pe, "PE\0\0", 4)) rt_fatal("%s: not a PE file", path);
+    if (memcmp(b + pe, "PE\0\0", 4) != 0) rt_fatal("%s: not a PE file", path);
     uint16_t nsec = *(uint16_t *)(b + pe + 6), opt = *(uint16_t *)(b + pe + 20);
     uint8_t *oh = b + pe + 24;
     uint32_t entry = *(uint32_t *)(oh + 16), base = *(uint32_t *)(oh + 28);

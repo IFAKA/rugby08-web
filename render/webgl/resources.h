@@ -1,4 +1,4 @@
-// resources.h -- the renderer's surface, texture, buffer and state-block objects.
+// resources.h -- the renderer's surface, texture and buffer objects.
 #pragma once
 #include "internal.h"
 
@@ -16,9 +16,6 @@ class D3D9Surface : public IDirect3DSurface9 {
     virtual ~D3D9Surface();
     virtual ULONG AddRef() override;
     virtual ULONG Release() override;
-    virtual HRESULT LockRect(D3DLOCKED_RECT *pLockedRect, const RECT *pRect, DWORD Flags) override;
-    virtual HRESULT UnlockRect() override;
-    virtual HRESULT GetDesc(D3DSURFACE_DESC *pDesc) override;
 };
 
 // texture.cpp: a 2D texture; a lock hands out host memory, the unlock uploads (and converts) it.
@@ -94,17 +91,4 @@ class D3D9VertexBuffer : public IDirect3DVertexBuffer9 {
     }
     virtual HRESULT Unlock() override { return m_store.unlock(GL_ARRAY_BUFFER); }
     GLuint GetGLBuffer() const { return m_store.buffer; }
-};
-
-// State blocks are never applied: Capture/Apply do nothing.
-class D3D9StateBlock : public IDirect3DStateBlock9 {
-  public:
-    virtual ~D3D9StateBlock() {}
-    virtual ULONG AddRef() override { return 1; }
-    virtual ULONG Release() override {
-        delete this;
-        return 0;
-    }
-    virtual HRESULT Capture() override { return D3D_OK; }
-    virtual HRESULT Apply() override { return D3D_OK; }
 };

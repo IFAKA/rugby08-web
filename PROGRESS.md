@@ -319,3 +319,10 @@ Next: `./init.sh next` shows what to fix.
 - Found by reading d3d9-webgl: gl_Position used the D3D projection as is. D3D clips z to [0,w], GL to [-w,w], so geometry nearer than the near plane (low POV camera, big stadium/pitch polygons) was not clipped and drew in front of everything. Fix: gl_Position.z = z*2 - w in the fixed-function VS and in the MojoShader-translated VS (MOJOSHADER_DEPTH_CLIPPING was never defined). Submodule d3d9-webgl edit, uncommitted.
 - Next: user checks POV camera for the grey band; if it remains, trace draws (RT_TRACE_DRAWS_FRAME) on a frame that shows it.
 - web: fps counter at top-left of the canvas (shell.html #fps, updated every 0.5 s from Module.rtFrames, which Present bumps). Follows the canvas into fullscreen. Headless check: intro video reads a steady 30 fps.
+
+## 2026-10-12 — tidy branch: atomic layout, lint gates, dead code out (bit-exact vs master)
+- Layout: render/webgl/ (the D3D9-on-GL renderer, was third_party/d3d9-webgl/d3d9.cpp), runtime/{core,debug,win32,d3d8}, platform/{sdl,native,web}, game/ (overrides), tools/{lift,gen,check,web,analysis,query,oracle}. Every hand-written file <= 300 lines (d3d9.h exempt), a README per directory, submodule patches in third_party/patches/. Docs: docs/ARCHITECTURE.md.
+- Gates: `./init.sh lint` (clang-format, clang-tidy, ruff, shfmt, shellcheck, eslint, prettier) and `./init.sh structure` (repo.lint, repo.structure). Renderer API trimmed to what runtime/d3d8 calls (d3d9.h 988 -> 648 lines; caps/adapter/state-block/shader stubs gone).
+- Referee: tools/check/regress.sh (RT_DET runs, fresh user dir) — screenshots, audio, log signature and the guest state hash every 60 frames identical to master's binary.
+- Learned: the hash was only hermetic by luck. dlmalloc seeded its heap magic from time(0) (online's 289992c fix ported), and the arena must sit at a fixed address (host pointers in chunk headers). Runs started in different seconds never matched before.
+- Next: merge online's changes onto this layout when the user asks.

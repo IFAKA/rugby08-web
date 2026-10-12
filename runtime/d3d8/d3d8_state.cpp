@@ -111,10 +111,9 @@ HLE_D3D(IDirect3DDevice8, SetRenderState) {
     case 10:
     case 30:
     case 40:
-    case 164:          // LINEPATTERN, ZVISIBLE, EDGEANTIALIAS, PATCHSEGMENTS: no effect here
-        return D3D_OK_;
+    case 164: // LINEPATTERN, ZVISIBLE, EDGEANTIALIAS, PATCHSEGMENTS: no effect here
     case 43:
-    case 159:                            // numbers d3d9-webgl uses for other states (see below)
+    case 159: // numbers the renderer uses for other states (see below)
         return D3D_OK_;
     case 143: d->SetRenderState(D3DRS_NORMALIZENORMALS, v); return D3D_OK_;   // d3d9-webgl: 43
     case 154: d->SetRenderState(D3DRS_POINTSIZE, v); return D3D_OK_;          // d3d9-webgl: 159

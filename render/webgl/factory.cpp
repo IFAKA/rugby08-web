@@ -30,10 +30,8 @@ class D3D9 : public IDirect3D9 {
         }
         emscripten_webgl_make_context_current(g_webgl_context);
 
-        // [WASM] Enable S3TC extensions for compressed textures
-        if (emscripten_webgl_enable_extension(g_webgl_context, "WEBGL_compressed_texture_s3tc")) {
-        } else {
-        }
+        // DXT textures need S3TC (every desktop GPU and browser the game runs on has it)
+        emscripten_webgl_enable_extension(g_webgl_context, "WEBGL_compressed_texture_s3tc");
 
         // [WASM] Enable anisotropic filtering extension
         if (emscripten_webgl_enable_extension(g_webgl_context, "EXT_texture_filter_anisotropic")) {
@@ -69,92 +67,11 @@ class D3D9 : public IDirect3D9 {
         return D3D_OK;
     }
 
-    // Extended overload: specify which canvas element to render to.
-    // Falls back to the standard CreateDevice with g_canvas_selector set.
-    HRESULT CreateDevice(UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags,
-                         D3DPRESENT_PARAMETERS *pPresentationParameters, IDirect3DDevice9 **ppReturnedDeviceInterface,
-                         const char *canvasSelector) {
-        if (canvasSelector && canvasSelector[0]) { g_canvas_selector = canvasSelector; }
-        return CreateDevice(Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters,
-                            ppReturnedDeviceInterface);
-    }
-
-    virtual ULONG AddRef() override {
-        return 1; // Stub: no ref counting for D3D9 interface
-    }
+    virtual ULONG AddRef() override { return 1; }
 
     virtual ULONG Release() override {
         delete this;
         return 0;
-    }
-
-    virtual UINT GetAdapterCount() override {
-        return 1; // Single adapter for WebGL
-    }
-
-    virtual HRESULT GetAdapterIdentifier(UINT Adapter, DWORD Flags, D3DADAPTER_IDENTIFIER9 *pIdentifier) override {
-        if (!pIdentifier) return D3DERR_INVALIDCALL;
-        memset(pIdentifier, 0, sizeof(D3DADAPTER_IDENTIFIER9));
-        strncpy(pIdentifier->Driver, "emscripten_webgl", MAX_DEVICE_IDENTIFIER_STRING);
-        strncpy(pIdentifier->Description, "Emscripten WebGL Wrapper", MAX_DEVICE_IDENTIFIER_STRING);
-        return D3D_OK;
-    }
-
-    virtual UINT GetAdapterModeCount(UINT Adapter, D3DFORMAT Format) override { return 1; }
-
-    virtual HRESULT EnumAdapterModes(UINT Adapter, D3DFORMAT Format, UINT Mode, D3DDISPLAYMODE *pMode) override {
-        if (!pMode) return D3DERR_INVALIDCALL;
-        if (Mode >= 1) return D3DERR_INVALIDCALL;
-
-        int w, h;
-        emscripten_get_canvas_element_size(g_canvas_selector, &w, &h);
-        pMode->Width = w;
-        pMode->Height = h;
-        pMode->RefreshRate = 60;
-        pMode->Format = Format;
-        return D3D_OK;
-    }
-
-    virtual HRESULT GetAdapterDisplayMode(UINT Adapter, D3DDISPLAYMODE *pMode) override {
-        if (!pMode) return D3DERR_INVALIDCALL;
-        int w, h;
-        emscripten_get_canvas_element_size(g_canvas_selector, &w, &h);
-        pMode->Width = w;
-        pMode->Height = h;
-        pMode->RefreshRate = 60;
-        pMode->Format = D3DFMT_X8R8G8B8;
-        return D3D_OK;
-    }
-
-    virtual HRESULT CheckDeviceFormat(UINT Adapter, D3DDEVTYPE DeviceType, D3DFORMAT AdapterFormat, DWORD Usage,
-                                      D3DRESOURCETYPE RType, D3DFORMAT CheckFormat) override {
-        return D3D_OK;
-    }
-
-    virtual HRESULT CheckDepthStencilMatch(UINT Adapter, D3DDEVTYPE DeviceType, D3DFORMAT AdapterFormat,
-                                           D3DFORMAT RenderTargetFormat, D3DFORMAT DepthStencilFormat) override {
-        return D3D_OK;
-    }
-
-    virtual HRESULT GetDeviceCaps(UINT Adapter, D3DDEVTYPE DeviceType, D3DCAPS9 *pCaps) override {
-        // Shared implementation "lie"
-        if (!pCaps) return -1;
-        memset(pCaps, 0, sizeof(D3DCAPS9));
-#ifdef __EMSCRIPTEN__
-        pCaps->VertexShaderVersion = 0;
-        pCaps->PixelShaderVersion = 0;
-#else
-        pCaps->VertexShaderVersion = D3DVS_VERSION(2, 0);
-        pCaps->PixelShaderVersion = D3DPS_VERSION(2, 0);
-#endif
-        pCaps->DevCaps = D3DDEVCAPS_HWTRANSFORMANDLIGHT;
-        pCaps->MaxPrimitiveCount = 0xFFFFFFFF;
-        pCaps->NumSimultaneousRTs = 1;
-        pCaps->MaxStreams = 16;
-        pCaps->MaxUserClipPlanes = 1; // Emulated via fragment shader discard
-        pCaps->RasterCaps = D3DPRASTERCAPS_WFOG | D3DPRASTERCAPS_ZTEST;
-        pCaps->MaxVertexShaderConst = 0;
-        return D3D_OK;
     }
 };
 

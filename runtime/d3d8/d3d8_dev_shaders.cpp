@@ -12,28 +12,31 @@ extern "C" {
 // wired yet). Handles carry the high bit (FVF codes never set it here).
 static std::vector<Vs8 *> g_vs;
 
+// A TEXCOORDn element in declaration order: its FVF texture-coordinate size bits. false: out of order.
+static bool texcoord_bits(const Vs8Elem &e, uint32_t *ntex, uint32_t *texsize) {
+    static const uint8_t comps[] = { 1, 2, 3, 4, 4, 4, 2, 4 }; // D3DVSDT_FLOAT1..SHORT4
+    if (e.reg < 7 || e.reg > 14 || e.reg - 7u != *ntex) return false;
+    uint32_t c = e.type < 8 ? comps[e.type] : 2;
+    *texsize |= (c == 1 ? 3u : c == 3 ? 1u : c == 4 ? 2u : 0u) << (16 + 2 * *ntex);
+    (*ntex)++;
+    return true;
+}
+
 static uint32_t decl_to_fvf(const Vs8 *v, bool *ok) {
     uint32_t fvf = 0, ntex = 0, texsize = 0;
-    static const uint8_t comps[] = { 1, 2, 3, 4, 4, 4, 2, 4 };   // D3DVSDT_FLOAT1..SHORT4
     *ok = (v->streams & ~1u) == 0;
     uint32_t next = 0;
     for (const Vs8Elem &e : v->elems) {
-        if (e.offset != next) *ok = false;                         // SKIP breaks FVF order
+        if (e.offset != next) *ok = false; // SKIP breaks FVF order
         next = e.offset + (e.type < 8 ? (uint32_t)(e.type <= 3 ? 4 * (e.type + 1) : e.type == 7 ? 8 : 4) : 0);
         switch (e.reg) {
-        case 0: fvf |= e.type == 3 ? 0x004 : 0x002; break;         // POSITION: XYZ (XYZRHW if float4)
-        case 3: fvf |= 0x010; break;                                // NORMAL
-        case 4: fvf |= 0x020; break;                                // PSIZE
-        case 5: fvf |= 0x040; break;                                // DIFFUSE
-        case 6: fvf |= 0x080; break;                                // SPECULAR
+        case 0: fvf |= e.type == 3 ? 0x004 : 0x002; break; // POSITION: XYZ (XYZRHW if float4)
+        case 3: fvf |= 0x010; break;                       // NORMAL
+        case 4: fvf |= 0x020; break;                       // PSIZE
+        case 5: fvf |= 0x040; break;                       // DIFFUSE
+        case 6: fvf |= 0x080; break;                       // SPECULAR
         default:
-            if (e.reg >= 7 && e.reg <= 14 && e.reg - 7u == ntex) {   // TEXCOORDn in order
-                uint32_t c = e.type < 8 ? comps[e.type] : 2;
-                texsize |= (c == 1 ? 3u : c == 3 ? 1u : c == 4 ? 2u : 0u) << (16 + 2 * ntex);
-                ntex++;
-            } else {
-                *ok = false;
-            }
+            if (!texcoord_bits(e, &ntex, &texsize)) *ok = false;
         }
     }
     return fvf | ntex << 8 | texsize;

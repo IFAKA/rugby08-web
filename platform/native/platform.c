@@ -38,8 +38,13 @@ void rt_platform_init(int argc, char **argv) {
  * dereference faults there (FAULT in the log, with the lifted function) instead of reading zeros. */
 void *plat_guest_arena(uint32_t *size) {
     *size = 0x80000000u;
-    void *arena = mmap(NULL, 1ull << 32, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+    /* At a fixed address when it is free (the kernel takes the hint, else picks another place): the
+     * guest heap's allocator keeps host pointers in its chunk headers, so the guest state, and the
+     * deterministic-mode state hash, only repeat run to run when the arena does. */
+    void *hint = (void *)0x10000000000ull;   /* 1 TiB: far above the binary, its libraries and dyld's cache */
+    void *arena = mmap(hint, 1ull << 32, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
     if (arena == MAP_FAILED) rt_fatal("arena: mmap 4 GiB failed");
     mprotect(arena, 0x10000, PROT_NONE);
+    if (arena != hint) rt_log("arena: at %p (the fixed address was taken)", arena);
     return arena;
 }

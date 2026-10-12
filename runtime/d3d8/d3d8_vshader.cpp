@@ -148,6 +148,7 @@ D3D9WProgVS *vs8_gl(Vs8 *vs, int id) {
             for (int k = 0; k < (pd->uniforms[i].array_count ? pd->uniforms[i].array_count : 1); k++)
                 regs.push_back((unsigned char)(pd->uniforms[i].index + k));
     std::vector<D3D9WElem> el;
+    el.reserve(vs->elems.size());
     for (const Vs8Elem &e : vs->elems) el.push_back({ e.stream, e.reg, e.type, e.offset });
     vs->gl = d3d9w_progvs_create(pd->output, regs.data(), (int)regs.size(), el.data(), (int)el.size());
     rt_log("SetVertexShader #%d: GL program %s (%zu constants, %zu inputs)", id, vs->gl ? "linked" : "FAILED",

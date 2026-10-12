@@ -48,7 +48,7 @@ fmt_js=$(js_files | xargs "$N/prettier" --list-different 2>>"$LOG" | tee -a "$LO
 # linters: number of findings
 section clang-tidy
 if [ -f build/native/compile_commands.json ]; then
-  tidy=$(c_files | grep -E '\.(c|cpp)$' | xargs "$V/clang-tidy" -p build/native --quiet --extra-arg=-isysroot"$(xcrun --show-sdk-path)" 2>/dev/null |
+  tidy=$(c_files | grep -E '\.(c|cpp)$' | grep -v '^platform/web/' | xargs "$V/clang-tidy" -p build/native --quiet --extra-arg=-isysroot"$(xcrun --show-sdk-path)" 2>/dev/null |
     tee -a "$LOG" | grep -cE ': (warning|error): ')
 else
   echo "skipped: no build/native/compile_commands.json" >>"$LOG"

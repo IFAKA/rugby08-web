@@ -18,7 +18,9 @@ typedef struct {
 static void put(buf_t *b, const char *s, size_t n) {
     if (b->n + n + 1 > b->cap) {
         b->cap = (b->n + n + 1) * 2;
-        b->p = realloc(b->p, b->cap);
+        char *p = realloc(b->p, b->cap);
+        if (!p) abort();   /* a shader source: nothing to fall back to */
+        b->p = p;
     }
     memcpy(b->p + b->n, s, n);
     b->n += n;

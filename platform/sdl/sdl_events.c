@@ -12,7 +12,6 @@
 #define WM_SYSKEYDOWN_  0x0104
 #define WM_SYSKEYUP_    0x0105
 #define WM_MOUSEMOVE_   0x0200
-#define WM_LBUTTONDOWN_ 0x0201
 #define WM_MOUSEWHEEL_  0x020A
 
 static plat_msg_t g_pending[8];
@@ -56,92 +55,95 @@ static void rel_move(int dx, int dy) {
     else if (g_cy > h - 1) g_cy = h - 1;
 }
 
-void translate(const SDL_Event *e) {
-    if (rt_log_input) {
-        if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP)
-            rt_log("input: key %s %s (vk 0x%02X)", SDL_GetScancodeName(e->key.keysym.scancode),
-                   e->type == SDL_KEYDOWN ? "down" : "up", g_keys[e->key.keysym.scancode].vk);
-        else if (e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEBUTTONUP)
-            rt_log("input: mouse button %d %s at %d,%d", e->button.button,
-                   e->type == SDL_MOUSEBUTTONDOWN ? "down" : "up", e->button.x, e->button.y);
-        else if (e->type == SDL_WINDOWEVENT &&
-                 (e->window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e->window.event == SDL_WINDOWEVENT_FOCUS_LOST))
-            rt_log("input: window focus %s", e->window.event == SDL_WINDOWEVENT_FOCUS_GAINED ? "gained" : "lost");
+/* --log-input: the host events, as they arrive */
+static void log_event(const SDL_Event *e) {
+    if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP)
+        rt_log("input: key %s %s (vk 0x%02X)", SDL_GetScancodeName(e->key.keysym.scancode),
+               e->type == SDL_KEYDOWN ? "down" : "up", g_keys[e->key.keysym.scancode].vk);
+    else if (e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEBUTTONUP)
+        rt_log("input: mouse button %d %s at %d,%d", e->button.button, e->type == SDL_MOUSEBUTTONDOWN ? "down" : "up",
+               e->button.x, e->button.y);
+    else if (e->type == SDL_WINDOWEVENT &&
+             (e->window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e->window.event == SDL_WINDOWEVENT_FOCUS_LOST))
+        rt_log("input: window focus %s", e->window.event == SDL_WINDOWEVENT_FOCUS_GAINED ? "gained" : "lost");
+}
+
+static void window_event(const SDL_WindowEvent *w) {
+    switch (w->event) {
+    case SDL_WINDOWEVENT_CLOSE: push(WM_CLOSE_, 0, 0); break;
+    case SDL_WINDOWEVENT_FOCUS_GAINED:
+        rel_set(1);
+        push(WM_ACTIVATEAPP_, 1, 0);
+        push(WM_ACTIVATE_, 1, 0);
+        break;
+    case SDL_WINDOWEVENT_FOCUS_LOST:
+        rel_set(0);
+        push(WM_ACTIVATE_, 0, 0);
+        push(WM_ACTIVATEAPP_, 0, 0);
+        break;
+    case SDL_WINDOWEVENT_SIZE_CHANGED:
+        push(WM_SIZE_, 0, ((uint32_t)w->data2 << 16) | ((uint32_t)w->data1 & 0xFFFF));
+        break;
+    case SDL_WINDOWEVENT_MINIMIZED: push(WM_SIZE_, 1, 0); break;
+    case SDL_WINDOWEVENT_EXPOSED: push(WM_PAINT_, 0, 0); break;
     }
+}
+
+/* WM_KEY* / WM_SYSKEY* with the generic modifier codes; WM_CHAR comes from the game's TranslateMessage */
+static void key_event(const SDL_KeyboardEvent *k8) {
+    keymap_t k = g_keys[k8->keysym.scancode];
+    if (!k.vk) return;
+    int down = k8->type == SDL_KEYDOWN, alt = plat_vk_down(0x12) || k.vk == 0xA4 || k.vk == 0xA5;
+    g_vk_down[k.vk] = (uint8_t)down;
+    g_dik_down[(k.scan | (k.ext ? 0x80 : 0)) & 0xFF] = (uint8_t)down;
+    uint32_t vk = k.vk;
+    if (vk == 0xA0 || vk == 0xA1) vk = 0x10;
+    else if (vk == 0xA2 || vk == 0xA3) vk = 0x11;
+    else if (vk == 0xA4 || vk == 0xA5) vk = 0x12;
+    uint32_t lp = 1u | ((uint32_t)k.scan << 16) | ((uint32_t)k.ext << 24) | (alt ? 1u << 29 : 0);
+    if (!down) lp |= 3u << 30;
+    else if (k8->repeat) lp |= 1u << 30;
+    push(alt ? (down ? WM_SYSKEYDOWN_ : WM_SYSKEYUP_) : (down ? WM_KEYDOWN_ : WM_KEYUP_), vk, lp);
+}
+
+/* lParam of a mouse message: the captured in-window position, or the event's own */
+static uint32_t mouse_lparam(int x, int y) {
+    if (g_rel) return ((uint32_t)(g_cy & 0xFFFF) << 16) | (uint32_t)(g_cx & 0xFFFF);
+    return ((uint32_t)(y & 0xFFFF) << 16) | (uint32_t)(x & 0xFFFF);
+}
+
+static void motion_event(const SDL_MouseMotionEvent *m) {
+    g_mdx += m->xrel;
+    g_mdy += m->yrel;
+    if (!g_rel && plat_window_focused()) rel_set(1);
+    if (g_rel) rel_move(m->xrel, m->yrel);
+    push(WM_MOUSEMOVE_, mk_buttons(), mouse_lparam(m->x, m->y));
+}
+
+static void button_event(const SDL_MouseButtonEvent *bt) {
+    int b = bt->button, up = bt->type == SDL_MOUSEBUTTONUP;
+    uint32_t base = b == SDL_BUTTON_LEFT ? 0x201 : b == SDL_BUTTON_RIGHT ? 0x204 : b == SDL_BUTTON_MIDDLE ? 0x207 : 0;
+    uint8_t vk = b == SDL_BUTTON_LEFT ? 1 : b == SDL_BUTTON_RIGHT ? 2 : b == SDL_BUTTON_MIDDLE ? 4 : 0;
+    if (!base) return;
+    g_vk_down[vk] = (uint8_t)!up;
+    push(base + (uint32_t)up, mk_buttons(), mouse_lparam(bt->x, bt->y));
+}
+
+void translate(const SDL_Event *e) {
+    if (rt_log_input) log_event(e);
     switch (e->type) {
     case SDL_QUIT: push(WM_CLOSE_, 0, 0); break;
-    case SDL_WINDOWEVENT:
-        switch (e->window.event) {
-        case SDL_WINDOWEVENT_CLOSE: push(WM_CLOSE_, 0, 0); break;
-        case SDL_WINDOWEVENT_FOCUS_GAINED:
-            rel_set(1);
-            push(WM_ACTIVATEAPP_, 1, 0);
-            push(WM_ACTIVATE_, 1, 0);
-            break;
-        case SDL_WINDOWEVENT_FOCUS_LOST:
-            rel_set(0);
-            push(WM_ACTIVATE_, 0, 0);
-            push(WM_ACTIVATEAPP_, 0, 0);
-            break;
-        case SDL_WINDOWEVENT_SIZE_CHANGED:
-            push(WM_SIZE_, 0, ((uint32_t)e->window.data2 << 16) | ((uint32_t)e->window.data1 & 0xFFFF));
-            break;
-        case SDL_WINDOWEVENT_MINIMIZED: push(WM_SIZE_, 1, 0); break;
-        case SDL_WINDOWEVENT_EXPOSED: push(WM_PAINT_, 0, 0); break;
-        }
-        break;
+    case SDL_WINDOWEVENT: window_event(&e->window); break;
     case SDL_KEYDOWN:
-    case SDL_KEYUP: {
-        keymap_t k = g_keys[e->key.keysym.scancode];
-        if (!k.vk) break;
-        int down = e->type == SDL_KEYDOWN, alt = plat_vk_down(0x12) || k.vk == 0xA4 || k.vk == 0xA5;
-        g_vk_down[k.vk] = (uint8_t)down;
-        g_dik_down[(k.scan | (k.ext ? 0x80 : 0)) & 0xFF] = (uint8_t)down;
-        uint32_t vk = k.vk;               /* WM_KEY* carry the generic modifier codes */
-        if (vk == 0xA0 || vk == 0xA1) vk = 0x10;
-        else if (vk == 0xA2 || vk == 0xA3) vk = 0x11;
-        else if (vk == 0xA4 || vk == 0xA5) vk = 0x12;
-        uint32_t lp = 1u | ((uint32_t)k.scan << 16) | ((uint32_t)k.ext << 24) | (alt ? 1u << 29 : 0);
-        if (!down) lp |= 3u << 30;
-        else if (e->key.repeat) lp |= 1u << 30;
-        push(alt ? (down ? WM_SYSKEYDOWN_ : WM_SYSKEYUP_) : (down ? WM_KEYDOWN_ : WM_KEYUP_), vk, lp);
-        break;                            /* WM_CHAR: the game's TranslateMessage (user32.c) */
-    }
-    case SDL_MOUSEMOTION:
-        g_mdx += e->motion.xrel;
-        g_mdy += e->motion.yrel;
-        if (!g_rel && plat_window_focused()) rel_set(1);
-        if (g_rel) {
-            rel_move(e->motion.xrel, e->motion.yrel);
-            push(WM_MOUSEMOVE_, mk_buttons(), ((uint32_t)(g_cy & 0xFFFF) << 16) | (uint32_t)(g_cx & 0xFFFF));
-            break;
-        }
-        push(WM_MOUSEMOVE_, mk_buttons(), ((uint32_t)(e->motion.y & 0xFFFF) << 16) | (uint32_t)(e->motion.x & 0xFFFF));
-        break;
+    case SDL_KEYUP: key_event(&e->key); break;
+    case SDL_MOUSEMOTION: motion_event(&e->motion); break;
     case SDL_MOUSEBUTTONDOWN:
-    case SDL_MOUSEBUTTONUP: {
-        int b = e->button.button, up = e->type == SDL_MOUSEBUTTONUP;
-        uint32_t base = b == SDL_BUTTON_LEFT     ? 0x201
-                        : b == SDL_BUTTON_RIGHT  ? 0x204
-                        : b == SDL_BUTTON_MIDDLE ? 0x207
-                                                 : 0;
-        uint8_t vk = b == SDL_BUTTON_LEFT ? 1 : b == SDL_BUTTON_RIGHT ? 2 : b == SDL_BUTTON_MIDDLE ? 4 : 0;
-        if (!base) break;
-        g_vk_down[vk] = (uint8_t)!up;
-        if (g_rel) {
-            push(base + (uint32_t)up, mk_buttons(), ((uint32_t)(g_cy & 0xFFFF) << 16) | (uint32_t)(g_cx & 0xFFFF));
-            break;
-        }
-        push(base + (uint32_t)up, mk_buttons(),
-             ((uint32_t)(e->button.y & 0xFFFF) << 16) | (uint32_t)(e->button.x & 0xFFFF));
-        break;
-    }
+    case SDL_MOUSEBUTTONUP: button_event(&e->button); break;
     case SDL_MOUSEWHEEL:
         g_mdw += e->wheel.y * 120;
         push(WM_MOUSEWHEEL_, ((uint32_t)(uint16_t)(int16_t)(e->wheel.y * 120) << 16) | mk_buttons(), 0);
         break;
     }
-    (void)WM_LBUTTONDOWN_;
 }
 
 int plat_pending(void) { return g_npending > 0 || g_activate_pending; }

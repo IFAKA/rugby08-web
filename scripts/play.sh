@@ -9,15 +9,19 @@ MUTE_ENV=
 MENU_ARGS=
 for a in "$@"; do
   case "$a" in
-    --mute) MUTE_ENV=SDL_AUDIODRIVER=dummy;;
-    --menu) MENU_ARGS="--replay-live $PWD/tests/replays/skip_to_menu.txt";;   # skip intro + title, land on the main menu
-    *) set -- "$@" "$a";;
+    --mute) MUTE_ENV=SDL_AUDIODRIVER=dummy ;;
+    --menu) MENU_ARGS="--replay-live $PWD/tests/replays/skip_to_menu.txt" ;; # skip intro + title, land on the main menu
+    *) set -- "$@" "$a" ;;
   esac
   shift
 done
 # Always bring the build up to date (a no-op when nothing changed): the app bundle below is a copy,
 # and a stale copy reopened from Finder runs old code.
-if [ -d build/native ]; then cmake --build build/native -j >logs/play_build.log 2>&1 || { echo "play: build failed (logs/play_build.log)"; exit 1; }
+if [ -d build/native ]; then
+  cmake --build build/native -j >logs/play_build.log 2>&1 || {
+    echo "play: build failed (logs/play_build.log)"
+    exit 1
+  }
 else ./init.sh build-native || exit 1; fi
 
 # Launch through an app bundle so macOS gives the game a real application
@@ -26,8 +30,8 @@ APP=build/native/Rugby08.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" || exit 1
 cp build/native/rugby08 "$APP/Contents/MacOS/Rugby08" || exit 1
-printf 'APPL????' > "$APP/Contents/PkgInfo" || exit 1
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+printf 'APPL????' >"$APP/Contents/PkgInfo" || exit 1
+cat >"$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -58,9 +62,9 @@ PLIST
 
 ROOT=$PWD
 LOG=logs/play-$(date +%Y%m%d-%H%M%S).log
-mkdir -p logs && : > "$LOG" && ln -sf "$(basename "$LOG")" logs/play.log
+mkdir -p logs && : >"$LOG" && ln -sf "$(basename "$LOG")" logs/play.log
 exec open -n ${MUTE_ENV:+--env "$MUTE_ENV"} "$APP" --args \
-    --exe "$ROOT/Rugby08_unpacked.exe" \
-    --game-dir "$ROOT/Game Files" \
-    --user-dir "$ROOT/userdata" \
-    --log "$ROOT/$LOG" --log-input $MENU_ARGS "$@"
+  --exe "$ROOT/Rugby08_unpacked.exe" \
+  --game-dir "$ROOT/Game Files" \
+  --user-dir "$ROOT/userdata" \
+  --log "$ROOT/$LOG" --log-input $MENU_ARGS "$@"

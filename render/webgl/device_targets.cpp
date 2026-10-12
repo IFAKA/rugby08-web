@@ -43,16 +43,6 @@ HRESULT D3D9Device::SetRenderTarget(DWORD Index, IDirect3DSurface9 *pRenderTarge
     return D3D_OK;
 }
 
-HRESULT D3D9Device::GetDepthStencilSurface(IDirect3DSurface9 **ppZStencilSurface) {
-    if (ppZStencilSurface) {
-        *ppZStencilSurface = m_current_ds;
-        if (m_current_ds) {
-            m_current_ds->AddRef(); // Proper COM semantics: caller must Release
-        }
-    }
-    return D3D_OK;
-}
-
 HRESULT D3D9Device::SetDepthStencilSurface(IDirect3DSurface9 *pZStencilSurface) {
     // If backbuffer is active, we assume default DS. If FBO is active, we attach DS.
     m_current_ds = static_cast<D3D9Surface *>(pZStencilSurface);
@@ -66,57 +56,6 @@ HRESULT D3D9Device::SetDepthStencilSurface(IDirect3DSurface9 *pZStencilSurface) 
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
         }
     }
-    return D3D_OK;
-}
-
-HRESULT D3D9Device::StretchRect(IDirect3DSurface9 *pSourceSurface, const void *pSourceRect,
-                                IDirect3DSurface9 *pDestSurface, const void *pDestRect, D3DTEXTUREFILTERTYPE Filter) {
-    if (!pSourceSurface || !pDestSurface) return D3DERR_INVALIDCALL;
-
-    D3D9Surface *src = static_cast<D3D9Surface *>(pSourceSurface);
-    D3D9Surface *dst = static_cast<D3D9Surface *>(pDestSurface);
-
-    // Bind source to read framebuffer
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, src->m_is_backbuffer ? 0 : g_fbo);
-    if (!src->m_is_backbuffer) {
-        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, src->m_gl_object, 0);
-    }
-
-    // Bind dest to draw framebuffer
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst->m_is_backbuffer ? 0 : g_fbo);
-    if (!dst->m_is_backbuffer) {
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst->m_gl_object, 0);
-    }
-
-    // Validate FBO status before blit
-    if (glCheckFramebufferStatus(GL_READ_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE ||
-        glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        printf("[D3D9 Debug] StretchRect FAILED: Framebuffer incomplete (Read=%X Draw=%X)\n",
-               glCheckFramebufferStatus(GL_READ_FRAMEBUFFER), glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER));
-    }
-
-    // When FBO rendering uses Y-flip (u_fbo_flip_y), FBO textures store content
-    // in D3D9 convention (Y=0 at top) while backbuffer uses OpenGL convention
-    // (Y=0 at bottom). Flip Y when blitting between different conventions.
-    bool conventions_differ = (src->m_is_backbuffer != dst->m_is_backbuffer);
-    GLenum filter = (Filter == D3DTEXF_LINEAR) ? GL_LINEAR : GL_NEAREST;
-    if (conventions_differ) {
-        // Flip destination Y to compensate for convention mismatch
-        glBlitFramebuffer(0, 0, src->m_width, src->m_height, 0, dst->m_height, dst->m_width, 0, GL_COLOR_BUFFER_BIT,
-                          filter);
-    } else {
-        glBlitFramebuffer(0, 0, src->m_width, src->m_height, 0, 0, dst->m_width, dst->m_height, GL_COLOR_BUFFER_BIT,
-                          filter);
-    }
-
-    // Restore original RT binding
-    if (m_current_rt->m_is_backbuffer) {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    } else {
-        glBindFramebuffer(GL_FRAMEBUFFER, g_fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_current_rt->m_gl_object, 0);
-    }
-
     return D3D_OK;
 }
 
@@ -135,13 +74,6 @@ HRESULT D3D9Device::CreateDepthStencilSurface(UINT Width, UINT Height, D3DFORMAT
     return D3D_OK;
 }
 
-HRESULT D3D9Device::CreateOffscreenPlainSurface(UINT Width, UINT Height, D3DFORMAT Format, D3DPOOL Pool,
-                                                IDirect3DSurface9 **ppSurface, void *pSharedHandle) {
-    if (!ppSurface) return D3DERR_INVALIDCALL;
-    *ppSurface = new D3D9Surface(Width, Height, 0, false);
-    return D3D_OK;
-}
-
 HRESULT D3D9Device::SetViewport(const D3DVIEWPORT9 *pViewport) {
     if (!pViewport) return D3DERR_INVALIDCALL;
     g_viewport = *pViewport;
@@ -157,28 +89,5 @@ HRESULT D3D9Device::SetViewport(const D3DVIEWPORT9 *pViewport) {
     g_cached_viewport[3] = pViewport->Height;
 
     glDepthRangef(pViewport->MinZ, pViewport->MaxZ);
-    return D3D_OK;
-}
-
-HRESULT D3D9Device::GetViewport(D3DVIEWPORT9 *pViewport) {
-    if (!pViewport) return D3DERR_INVALIDCALL;
-    *pViewport = g_viewport;
-    return D3D_OK;
-}
-
-HRESULT D3D9Device::SetScissorRect(const RECT *pRect) {
-    if (!pRect) return D3DERR_INVALIDCALL;
-
-    if (!m_current_rt) return D3D_OK;
-
-    // WebGL Y is bottom-to-top: flip Y origin
-    int gl_y = m_current_rt->m_height - pRect->bottom;
-    int gl_w = pRect->right - pRect->left;
-    int gl_h = pRect->bottom - pRect->top;
-    glScissor(pRect->left, gl_y, gl_w, gl_h);
-    g_cached_scissor_box[0] = pRect->left;
-    g_cached_scissor_box[1] = gl_y;
-    g_cached_scissor_box[2] = gl_w;
-    g_cached_scissor_box[3] = gl_h;
     return D3D_OK;
 }

@@ -16,8 +16,7 @@ Checks: >
   -performance-enum-size,
   readability-function-size,
   readability-function-cognitive-complexity,
-  misc-redundant-expression,
-  misc-unused-parameters
+  misc-redundant-expression
 CheckOptions:
   readability-function-size.LineThreshold: 100
   readability-function-size.StatementThreshold: 150

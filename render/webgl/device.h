@@ -46,11 +46,6 @@ class D3D9Device : public IDirect3DDevice9 {
     float m_fog_end = 1.0f;
     D3DCOLOR m_fog_color = 0xFFFFFFFF;
 
-    // the warnings the D3D9 shader entry points print once
-    static bool s_pixel_shader_warning_shown;
-    static bool s_vertex_shader_warning_shown;
-    static bool s_vertex_shader_constant_warning_shown;
-
     // draw_setup.cpp
     void draw_begin(const char *path, unsigned count);
     void viewport_size(float *w, float *h) const;
@@ -58,6 +53,10 @@ class D3D9Device : public IDirect3DDevice9 {
     void draw_uniforms(float rhw_w, float rhw_h);
     void draw_attribs(const FvfLayout &l, GLsizei stride, size_t base, bool tex1);
     void draw_textures(int tex_count, bool unbind, Lightmap lightmap);
+
+    // device_state.cpp
+    bool set_output_state(D3DRENDERSTATETYPE State, DWORD Value);
+    void set_test_state(D3DRENDERSTATETYPE State, DWORD Value);
 
   public:
     DWORD m_render_states[256];
@@ -74,34 +73,15 @@ class D3D9Device : public IDirect3DDevice9 {
     virtual HRESULT Clear(DWORD Count, const void *pRects, DWORD Flags, D3DCOLOR Color, FLOAT Z,
                           DWORD Stencil) override;
     virtual HRESULT Reset(D3DPRESENT_PARAMETERS *pPresentationParameters) override;
-    virtual HRESULT TestCooperativeLevel() override;
-    virtual HRESULT GetDisplayMode(UINT iSwapChain, D3DDISPLAYMODE *pMode) override;
-    virtual HRESULT GetDeviceCaps(D3DCAPS9 *pCaps) override;
-    virtual UINT GetAvailableTextureMem() override;
-    virtual HRESULT ValidateDevice(DWORD *pNumPasses) override;
-    virtual HRESULT CreateQuery(D3DQUERYTYPE Type, IDirect3DQuery9 **ppQuery) override;
-    virtual HRESULT CreateStateBlock(D3DSTATEBLOCKTYPE Type, IDirect3DStateBlock9 **ppSB) override;
-    virtual void SetGammaRamp(UINT iSwapChain, DWORD Flags, const D3DGAMMARAMP *pRamp) override;
-    virtual void GetGammaRamp(UINT iSwapChain, D3DGAMMARAMP *pRamp) override;
-    virtual HRESULT GetRenderTargetData(IDirect3DSurface9 *pRenderTarget, IDirect3DSurface9 *pDestSurface) override;
-    virtual HRESULT GetFrontBufferData(UINT iSwapChain, IDirect3DSurface9 *pDestSurface) override;
 
     // device_targets.cpp
     virtual HRESULT GetRenderTarget(DWORD Index, IDirect3DSurface9 **ppRenderTarget) override;
     virtual HRESULT SetRenderTarget(DWORD Index, IDirect3DSurface9 *pRenderTarget) override;
-    virtual HRESULT GetDepthStencilSurface(IDirect3DSurface9 **ppZStencilSurface) override;
     virtual HRESULT SetDepthStencilSurface(IDirect3DSurface9 *pZStencilSurface) override;
-    virtual HRESULT StretchRect(IDirect3DSurface9 *pSourceSurface, const void *pSourceRect,
-                                IDirect3DSurface9 *pDestSurface, const void *pDestRect,
-                                D3DTEXTUREFILTERTYPE Filter) override;
     virtual HRESULT CreateDepthStencilSurface(UINT Width, UINT Height, D3DFORMAT Format,
                                               D3DMULTISAMPLE_TYPE MultiSample, DWORD MultisampleQuality, BOOL Discard,
                                               IDirect3DSurface9 **ppSurface, void *pSharedHandle) override;
-    virtual HRESULT CreateOffscreenPlainSurface(UINT Width, UINT Height, D3DFORMAT Format, D3DPOOL Pool,
-                                                IDirect3DSurface9 **ppSurface, void *pSharedHandle) override;
     virtual HRESULT SetViewport(const D3DVIEWPORT9 *pViewport) override;
-    virtual HRESULT GetViewport(D3DVIEWPORT9 *pViewport) override;
-    virtual HRESULT SetScissorRect(const RECT *pRect) override;
 
     // device_resources.cpp
     virtual HRESULT CreateTexture(UINT Width, UINT Height, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool,
@@ -118,32 +98,13 @@ class D3D9Device : public IDirect3DDevice9 {
 
     // device_state.cpp
     virtual HRESULT SetRenderState(D3DRENDERSTATETYPE State, DWORD Value) override;
-    virtual HRESULT GetRenderState(D3DRENDERSTATETYPE State, DWORD *pValue) override;
     virtual HRESULT SetTransform(D3DTRANSFORMSTATETYPE State, const D3DMATRIX *pMatrix) override;
-    virtual HRESULT GetTransform(D3DTRANSFORMSTATETYPE State, D3DMATRIX *pMatrix) override;
     virtual HRESULT SetClipPlane(DWORD Index, const float *pPlane) override;
-    virtual HRESULT GetClipPlane(DWORD Index, float *pPlane) override;
     virtual HRESULT SetLight(DWORD Index, const D3DLIGHT9 *pLight) override;
     virtual HRESULT LightEnable(DWORD Index, BOOL Enable) override;
-    virtual HRESULT GetLightEnable(DWORD Index, BOOL *pEnable) override;
-    virtual HRESULT GetLight(DWORD Index, D3DLIGHT9 *pLight) override;
     virtual HRESULT SetMaterial(const D3DMATERIAL9 *pMaterial) override;
     virtual HRESULT SetTextureStageState(DWORD Stage, D3DTEXTURESTAGESTATETYPE Type, DWORD Value) override;
     virtual HRESULT SetSamplerState(DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value) override;
-
-    // device_shaders.cpp
-    virtual HRESULT GetVertexShader(IDirect3DVertexShader9 **ppShader) override;
-    virtual HRESULT GetPixelShader(IDirect3DPixelShader9 **ppShader) override;
-    virtual HRESULT CreateVertexShader(const DWORD *pFunction, IDirect3DVertexShader9 **ppShader) override;
-    virtual HRESULT CreatePixelShader(const DWORD *pFunction, IDirect3DPixelShader9 **ppShader) override;
-    virtual HRESULT SetPixelShaderConstantF(UINT StartRegister, const float *pConstantData,
-                                            UINT Vector4fCount) override;
-    virtual HRESULT CreateVertexDeclaration(const void *pVertexElements, IDirect3DVertexDeclaration9 **ppDecl) override;
-    virtual HRESULT SetVertexDeclaration(void *pDecl) override;
-    virtual HRESULT SetVertexShader(void *pShader) override;
-    virtual HRESULT SetPixelShader(void *pShader) override;
-    virtual HRESULT SetVertexShaderConstantF(UINT StartRegister, const float *pConstantData,
-                                             UINT Vector4fCount) override;
 
     // draw.cpp
     virtual HRESULT DrawPrimitive(D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount) override;

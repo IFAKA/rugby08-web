@@ -63,7 +63,8 @@ static void frame_stats(double swap_ticks) {
             char cmd[256];
             snprintf(cmd, sizeof cmd, "sample %d 5 -file logs/sample-auto-%d.txt >/dev/null 2>&1 &", (int)getpid(),
                      taken);
-            if (system(cmd) == 0) rt_trace("perf: slow scene, sampling into logs/sample-auto-%d.txt", taken);
+            if (system(cmd) == 0) // NOLINT(bugprone-command-processor): our own fixed `sample` command
+                rt_trace("perf: slow scene, sampling into logs/sample-auto-%d.txt", taken);
             taken++;
             slow = -10;
         }

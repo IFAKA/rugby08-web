@@ -64,16 +64,16 @@ extern GLuint g_fbo;                                      // the FBO render targ
 // a_<name> -> g_<name>_location, u_<name> -> g_<name>_uniform. Every name the shaders declare (the
 // fixed-function ones in glsl/, the alpha test and fog that program_ps.cpp adds to pixel shaders).
 #define D3D9W_ATTRIBS(X) X(position) X(blendweight) X(normal) X(color) X(texcoord) X(texcoord1)
-#define D3D9W_UNIFORMS(X)                                                                                              \
-    X(blend)                                                                                                           \
-    X(mvp1) X(texture) X(texture_lm) X(use_texture) X(use_lightmap) X(mvp) X(world) X(clip_plane)                      \
-        X(clip_plane_enabled) X(fbo_flip_y) X(alpha_test_enabled) X(alpha_ref) X(texture_factor) X(lod_bias)           \
-            X(fog_enabled) X(fog_start) X(fog_end) X(fog_color) X(view_model) X(lighting_enabled) X(material_diffuse)  \
-                X(material_ambient) X(global_ambient) X(ts) X(material_emissive) X(material_specular) X(matsrc)        \
-                    X(specular_enabled) X(camera_pos) X(nlights) X(lpos) X(ldir) X(ldiff) X(lamb) X(lspec) X(latt)     \
-                        X(lspot) X(specular_add)
-#define D3D9W_DECL_A(n) extern GLint g_##n##_location;
-#define D3D9W_DECL_U(n) extern GLint g_##n##_uniform;
+// clang-format off
+#define D3D9W_UNIFORMS(X) \
+    X(blend) X(mvp1) X(texture) X(texture_lm) X(use_texture) X(use_lightmap) X(mvp) X(world) \
+    X(clip_plane) X(clip_plane_enabled) X(fbo_flip_y) X(alpha_test_enabled) X(alpha_ref) X(texture_factor) X(lod_bias) X(fog_enabled) \
+    X(fog_start) X(fog_end) X(fog_color) X(view_model) X(lighting_enabled) X(material_diffuse) X(material_ambient) X(global_ambient) \
+    X(ts) X(material_emissive) X(material_specular) X(matsrc) X(specular_enabled) X(camera_pos) X(nlights) X(lpos) \
+    X(ldir) X(ldiff) X(lamb) X(lspec) X(latt) X(lspot) X(specular_add)
+// clang-format on
+#define D3D9W_DECL_A(n)  extern GLint g_##n##_location;
+#define D3D9W_DECL_U(n)  extern GLint g_##n##_uniform;
 D3D9W_ATTRIBS(D3D9W_DECL_A)
 D3D9W_UNIFORMS(D3D9W_DECL_U)
 extern GLuint g_shader_program;                           // the fixed-function program

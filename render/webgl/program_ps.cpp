@@ -85,10 +85,23 @@ std::string progps_fragment_source(const char *glsl) {
     std::string init;
     for (int n = 0; n < 8; ++n) {
         std::string t = "ps_t" + std::to_string(n), io = "io_5_" + std::to_string(n);
-        std::string g = "vec4 " + t + " = " + io + ";";
+        std::string g = "vec4 ";
+        g += t;
+        g += " = ";
+        g += io;
+        g += ";";
         if (s.find(g) == std::string::npos) continue;
-        str_replace_all(s, g, "in highp vec4 " + io + ";\nvec4 " + t + ";");
-        init += "    " + t + " = " + io + ";\n";
+        std::string decl = "in highp vec4 ";
+        decl += io;
+        decl += ";\nvec4 ";
+        decl += t;
+        decl += ";";
+        str_replace_all(s, g, decl);
+        init += "    ";
+        init += t;
+        init += " = ";
+        init += io;
+        init += ";\n";
     }
     if (!init.empty()) {
         size_t mm = s.find("void main()");

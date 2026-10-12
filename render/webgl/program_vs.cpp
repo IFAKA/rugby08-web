@@ -29,8 +29,17 @@ std::string progvs_vertex_source(const char *glsl, const std::vector<D3D9WElem> 
     for (const D3D9WElem &e : elems) {
         if (e.type != 4) continue;                                    // D3DVSDT_D3DCOLOR
         std::string v = "vs_v" + std::to_string(e.reg);
-        str_replace_all(s, "in vec4 " + v + ";", "in vec4 " + v + "_bgra;\nvec4 " + v + ";");
-        prologue += "\t" + v + " = " + v + "_bgra.zyxw;\n";
+        std::string in = "in vec4 " + v, bgra = in;
+        in += ";";
+        bgra += "_bgra;\nvec4 ";
+        bgra += v;
+        bgra += ";";
+        str_replace_all(s, in, bgra);
+        prologue += "\t";
+        prologue += v;
+        prologue += " = ";
+        prologue += v;
+        prologue += "_bgra.zyxw;\n";
     }
     static const char *const outs[][2] = {
         { "io_10_0", "vec4(1.0)" }, { "io_10_1", "vec4(0.0)" }, { "io_5_0", "vec4(0.0)" }, { "io_5_1", "vec4(0.0)" }
