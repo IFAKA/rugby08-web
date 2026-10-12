@@ -11,7 +11,7 @@ uint32_t rt_heap_top(void);   /* heap.c */
 
 #define RUGBY_PTR      0x00A31988u   /* CRugby*, 0 outside a match */
 #define SETUP_VA       0x009B6830u   /* match setup (FUN_004215f0) */
-#define SETUP_SIZE     0x1910u
+#define SETUP_SIZE     0x1924u       /* FUN_005259C0 clears this much */
 #define SETUP_CLOCK    0x18F0u       /* float, game seconds */
 #define SETUP_SCORE    0x1908u       /* score event list head */
 #define SETUP_TEAM_ID0 0xBB8u     /* home team id; away at +0xC60 */
@@ -88,6 +88,11 @@ uint32_t ms_team_id(int t) { return rd32(SETUP_VA + SETUP_TEAM_ID0 + (t ? TEAM_B
 uint32_t ms_phase_vt(void) {
     uint32_t r = rugby(), st = r ? current_state(rd32(r + R_STATES)) : 0;
     return heap_obj(st, 4) ? rd32(st) : 0;
+}
+/* The state's id (state+8, FUN_0068C2C0): what CRugby's change-phase FUN_0062DA80 takes. -1: none. */
+int ms_phase_id(void) {
+    uint32_t r = rugby(), st = r ? current_state(rd32(r + R_STATES)) : 0;
+    return heap_obj(st, 12) ? (int)rd32(st + 8) : -1;
 }
 const char *ms_phase(void) {
     uint32_t vt = ms_phase_vt();
@@ -207,10 +212,18 @@ static void log_line(uint32_t frame) {
 void ms_frame(uint32_t frame) {
     ms_setup_frame(frame);
     ms_replay_frame(frame);
+    ms_measure_frame(frame);
     static int every = -1;
     if (every < 0) {
         const char *e = getenv("RT_MS_LOG");
         every = e ? atoi(e) : 0;
     }
     if (every > 0 && frame % (uint32_t)every == 0 && ms_active()) log_line(frame);
+}
+
+uint32_t ms_player_va(int t, int i) { return player(t, i); }
+uint32_t ms_team_va(int t) { return team(t); }
+uint32_t ms_ball_va(void) {
+    uint32_t r = rugby(), b = r ? rd32(r + R_BALL) : 0;
+    return heap_obj(b, 0x1DC) ? b : 0;
 }

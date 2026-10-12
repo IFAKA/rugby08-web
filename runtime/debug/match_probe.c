@@ -26,6 +26,9 @@ static const ms_class_t k_classes[] = {
     { "CDirector", 0x008D66D4 },
     { "COverlayItemClock", 0x008E18B8 },
     { "COverlayItemScoreBox", 0x008E1608 },
+    { "CameraManager", 0x008CCC94 },
+    { "Camera", 0x008CCCA4 },
+    { "LookAtCamera", 0x008CCC9C },
 };
 #define NCLASS (int)(sizeof k_classes / sizeof k_classes[0])
 

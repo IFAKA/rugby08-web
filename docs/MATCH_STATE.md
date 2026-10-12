@@ -65,7 +65,12 @@ likely the controlled one), ScrumHalfState 0x8EDAF0, OnGroundState 0x8EDA80, Seq
   Types: 0 try ("adding try", FUN_00616e20) 5 points; 1 conversion 2 points (the try + conversion took
   the HUD from 0-3 to 0-10); 2 and 3 the 3-point kicks (penalty, drop goal: FUN_00430b30 gives 1 or 2
   from the kick kind; the penalty at f17450 was type 3).
-  There is no stored score total: the HUD and the scorers list (FUN_00577e60) read this list.
+  The list feeds the scorers widget (FUN_00577e60) and the CScoreData message. The scoreboard reads the
+  team stats instead: [CRugbyTeam+0x34] -> 4 bytes {tries, conversions, penalties, drop goals}, score =
+  FUN_00632C60(stats) = 5a + 2b + 3c + 3d (COverlayItemScoreBox::vf1 -> FUN_0057ABF0; also crowd,
+  commentary, result and standings code, 83 callers). The game bumps them with the cdecl
+  FUN_00632D00 (try), D20 (conversion), D40 (drop goal), D60 (penalty) next to each FUN_005ce320 call.
+  A friend adds the host's events with both (runtime/core/match_puppet.c score()).
 - Per-player match stats in the team block's player records (100 bytes each, record 0 at block+0;
   CRugbyPlayer+0x10 points at its record): +0x48 u16 tries, +0x3E..+0x43 kick counters.
 
@@ -75,15 +80,31 @@ Two runs identical except for one Stadium Select choice differ, in static data, 
 - +0x0000..+0x18C0 both teams' blocks (rosters, player records), written when Team Select is confirmed;
   +0x18C0..+0x18CD per-team extras (FUN_004BFBA0). No heap pointers: equal across runs with different
   heaps, so the bytes can move between games.
+- The block is 0x1924 bytes (the menu's FUN_005259C0 clears that much). +0x191C kits: bits 0-1 home,
+  2-3 away, non-zero = the alternate kit (Team Select's kit control; read by the match loader
+  FUN_00402529 after launch). +0x1910..+0x1918 are written by match init.
 - +0x18D0.. conditions and wind (+0x18D8, +0x18DC, wind vector floats +0x18E0/+0x18E8), +0x18EC half
   length (index; 5 mins = 1, 10 mins = 2), +0x1902 stadium id (Murrayfield 29), +0x190C difficulty
   (Club 0, Pro 1): written by Stadium Select's commit FUN_004FCDD0 from its toggles.
 - Launch: FUN_004FCDD0 then calls FUN_004F3D10, as do the other modes' commits (7 callers): the step
   that starts loading the match. Hooked (tools/hooks.json "ms:launch", runtime/core/match_setup.c):
-  the host records +0..+0x1908 and +0x190C (MS_SETUP_BYTES); a friend's own setup is replaced there.
+  the host records +0..+0x1908, +0x190C and the kits +0x191C (MS_SETUP_BYTES); a friend's own setup is
+  replaced there.
   Verified: a friend that visited MY RUGBY and chose Portugal v Australia at Tbilisi plays the host's
   Scotland v New Zealand at Murrayfield; 1000 frames after launch its picture differs from the host's
   by 1.5 (mean per channel), its own match by 27 (tools/net/match_setup_check.sh).
+
+## Camera (match view)
+FUN_0073C080() (the CDirector, global 0x00A604F8) is 0 during the match: the view comes from the
+CameraManager (vtable 0x8CCC94; +0xD0 the embedded LookAtCamera: +0x48 eye, +0x58 target, +0x68 up,
++0x04 the view matrix; +0x84 the projection, perspective at +0x34; +0x1E4 the controller). Once per
+Present the controller's FUN_006E8260(manager, dt, camera, projection) computes 16 floats {eye xyz 1,
+target xyz 1, up xyz 1, fov, aspect, near, far} (cm, degrees; FUN_006E9180, then shake/zoom modifiers
+FUN_006EF020/040), applies them (FUN_00789BE0(camera, &eye, &target, &up); FUN_0075EC70(projection,
+aspect / 1.3333 * fov, aspect, near, far); FUN_0075F800(projection, camera+4)) and keeps them at
+controller+0x54. A friend re-applies the host's 16 floats after its own step
+(game/overrides/match/camera_update.c, runtime/core/match_camera.c). The 2D overlay camera
+(FUN_008267A0, 0x009FAE58) is separate.
 
 ## Controllers
 CRugbyTeam+0xC0..+0xCC CPlayerControl*[4] (one per human on that side, 0 = none).
@@ -136,6 +157,28 @@ stopped (instant replays, highlights). Found 2026-10-12 (snapshot during the f27
   always FUN_00404C90, FUN_006231F0, FUN_0062E900. A friend overrides this function (game/overrides)
   to run presentation and animation but take positions, channels and the ball from the host's frame.
 - Root of the replay system: BackendState* at 0x009B65EC, +0x233C PlayBackCommander, +4 manager.
+- The recorder is FUN_0045AB60 (thiscall on the manager): it clears frame B (or +0x30), then per live
+  player writes the actor position (FUN_004377F0 -> FUN_0042C2D0), the heading (FUN_004AC650, which
+  normalises it with the loop FUN_004AC5B0: a huge heading never leaves it) and the pose block
+  (FUN_0071A2A0(actor+4, &frame[k*0x80])). Frame B is uninitialised until the first record is written
+  (time 2e-44, headings 1e33): record only once the stream grew (match_replay.c).
+- Posing: FUN_004039B0(actor, channel, k), per actor per frame. When the commander plays a replay
+  (FUN_00457690) and k < 30, the actor (the live one: there are no separate replay bodies on screen) is
+  posed by a ReplayPoseSource{commander, rig, k} (ctor 0x487410, vf0 0x405020: bind pose then
+  FUN_0045B6D0 decoding block k of frame A, blended with B by +8); otherwise by its own PoseSource{rig,
+  flag} (ctor 0x477540, vf0 0x405510). Both are temporaries. The 30 HbsActor objects at manager+0x12A0
+  are not the live players' actors (CRugbyPlayer+0xD8, same class 0x008D7068, actor+4 the
+  HbsSequenceChannel 0x008D7144).
+- Phase: CRugby+0x9C AiStateMachine, +4 the current state; states are built once by the factory
+  (RugbyStateFactory, CRugby+0xA0, ctor FUN_0068CD70) and found by id (state+8: Free 7, Kickoff 8,
+  ...). FUN_0062DA80(id) (thiscall on CRugby) is the change every caller uses (referee, set pieces,
+  phase states): factory get, machine switch FUN_00610850, event 0x18 and listeners.
+- Friend (measured 2026-10-12 with tools/net/match_compare.py, a host recording and the friend's own
+  recorder): skipping CRugby::Update's logic, posing through the replay branch with the host frame as
+  frame A (game/overrides/match/pose_player.c, replay_playing.c), and placing the actors (vtable slot
+  0x1C heading, FUN_0070ED50 position) and the ball (FUN_0044B9E0 position, FUN_00620800 matrix) after
+  the presentation step, the friend's recorder writes the host's positions and headings exactly (0 cm,
+  0.0) and the ball exactly at every sample. The camera follows the phase (see above).
 
 ## Player motion is animation-driven
 No velocity is stored in CRugbyPlayer or any object it points at (per-frame position deltas correlate

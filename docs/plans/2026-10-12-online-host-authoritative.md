@@ -62,6 +62,16 @@ each friend's own game loads the same match and shows the host's state.
    poses (ReplayPoseSource) from frames A/B of the playback object. The friend stays in that mode and
    is fed the host's records: its simulation is suppressed by the game itself, the pictures come from
    the game's own playback code, and the wire format is the game's own compressed stream.
+   As built (PASS 2026-10-12, tools/net/match_puppet_check.sh): playback mode itself is not used
+   (replay camera, no HUD). The friend stays in its normal match and CRugby::Update's logic is skipped
+   (game/overrides/match/rugby_update.c); per host frame it takes positions, headings and the ball the
+   way UpdatePlayers does, the poses through the game's replay branch of FUN_004039B0 (host frame as
+   frame A), the host's camera (16 floats per frame, FUN_006E8260) and score events (team stats +
+   FUN_005CE320), and the kits come with the setup (+0x191C). Not replicated, by design or for later:
+   the match phase (FUN_0062DA80 needs the set-piece objects the skipped logic creates: phase-driven HUD
+   and the friend's own input UI belong to steps 4 and 6), the referee's pose, the friend's
+   controlled-player marker. Wire per frame: 32-byte header, 64-byte view, 0x118C-byte frame (step 4
+   compresses it with the game's delta coder).
 4. **on.match_net** — host takes friends' pads from the network as real controllers; host sends
    state (quantized, delta vs last ack, ~60 Hz) through the server. Check: two natives over the
    server, friend's pad moves its player on the host, friend's view follows within 6 frames.

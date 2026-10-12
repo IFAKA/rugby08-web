@@ -3,7 +3,12 @@
  * instant replays (docs/MATCH_STATE.md "Replay system"). Online play sends these records from the
  * host to its friends (on.match_puppet).
  *   RT_MS_REPLAY_CHECK=N: every N frames of a match, compare the recorder's current frame with the live
- *   players and ball ("ms: replay check" lines). */
+ *   players and ball ("ms: replay check" lines).
+ *   RT_MS_REC_OUT=FILE: the host's match as a file of records {u32 frame, f32 clock, u32 phase id,
+ *   u16 score home, u16 score away, u16 score events, then the latest one: u16 scorer, u32 type, u32 team,
+ *   f32 clock; the view (MS_CAMERA_BYTES, match_camera.c); frame B (0x118C bytes)} (96 + 0x118C bytes),
+ *   one per Present at which the recorder wrote a frame. */
+#include <stdio.h>
 #include "rt.h"
 #include "match_state.h"
 #include <math.h>
@@ -88,6 +93,48 @@ static void check(uint32_t frame_no) {
              (double)rdf(f + 0x116C), compared, (double)worst, (double)bd);
 }
 
+/* RT_MS_REC_OUT: one record per Present at which the recorder has written a new frame, i.e. its record
+   stream grew (frame B holds uninitialised memory until the first write: time 2e-44, headings 1e33). */
+static void record(uint32_t frame_no) {
+    static FILE *out;
+    static int tried;
+    static uint32_t last_end;
+    if (!tried) {
+        tried = 1;
+        const char *p = getenv("RT_MS_REC_OUT");
+        if (p && !(out = fopen(p, "wb"))) rt_log("ms: cannot write %s", p);
+    }
+    uint32_t f = out && ms_active() ? ms_replay_current() : 0, start, end;
+    if (!f || !ms_replay_stream(&start, &end) || end == start || end == last_end) return;
+    last_end = end;
+    ms_score_ev_t ev[64];
+    int nev = ms_score_events(ev, 64);
+    ms_score_ev_t last = nev ? ev[nev - 1] : (ms_score_ev_t){ 0, 0, 0, 0 };
+    struct {
+        uint32_t frame;
+        float clock;
+        uint32_t phase;
+        uint16_t home, away, nscore, scorer;   /* the score events so far, and the latest one: */
+        uint32_t type, team;
+        float when;
+    } h = { frame_no,
+            ms_clock(),
+            (uint32_t)ms_phase_id(),
+            (uint16_t)ms_score(0),
+            (uint16_t)ms_score(1),
+            (uint16_t)nev,
+            last.player_id,
+            last.type,
+            last.team_id,
+            last.clock };
+    uint8_t cam[MS_CAMERA_BYTES];
+    ms_camera_last(cam);
+    fwrite(&h, sizeof h, 1, out);
+    fwrite(cam, 1, sizeof cam, out);
+    fwrite(G2H(f), 1, FRAME_SIZE, out);
+    fflush(out);
+}
+
 void ms_replay_frame(uint32_t frame) {
     static int every = -1;
     if (every < 0) {
@@ -95,4 +142,5 @@ void ms_replay_frame(uint32_t frame) {
         every = e ? atoi(e) : 0;
     }
     if (every > 0 && frame % (uint32_t)every == 0 && ms_active()) check(frame);
+    record(frame);
 }

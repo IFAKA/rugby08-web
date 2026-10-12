@@ -84,9 +84,10 @@ static void hook_stick(const char *name) {
 static void hook_args(uint32_t va, const char *name) {
     uint32_t prev[6] = { 0 };   /* the functions entered just before (the caller is among them) */
     int np = rt_enter_since(rt_enter_mark() - 7, prev, 6);
-    rt_trace("%s (0x%08X) f%u ecx=%08X args %08X %08X %08X before %08X %08X %08X %08X %08X", name + 5, va,
-             rt_present_frame, g_ecx, rd32(g_esp + 4), rd32(g_esp + 8), rd32(g_esp + 12), np > 4 ? prev[np - 6 + 1] : 0,
-             np > 3 ? prev[np - 4] : 0, np > 2 ? prev[np - 3] : 0, np > 1 ? prev[np - 2] : 0, np > 0 ? prev[np - 1] : 0);
+    rt_trace("%s (0x%08X) f%u ecx=%08X ret %08X args %08X %08X %08X before %08X %08X %08X %08X %08X", name + 5, va,
+             rt_present_frame, g_ecx, rd32(g_esp), rd32(g_esp + 4), rd32(g_esp + 8), rd32(g_esp + 12),
+             np > 4 ? prev[np - 6 + 1] : 0, np > 3 ? prev[np - 4] : 0, np > 2 ? prev[np - 3] : 0,
+             np > 1 ? prev[np - 2] : 0, np > 0 ? prev[np - 1] : 0);
     {   // RT_ARGS_DUMP=N: also the first N dwords at ecx as floats (finding position/heading fields)
         static int n = -1;
         static uint32_t off;   // RT_ARGS_DUMP_OFF=hex: start the dump at ecx+off

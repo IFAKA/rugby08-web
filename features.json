@@ -465,7 +465,7 @@
       ],
       "desc": "Friend mode: local match simulation suppressed, host state applied every frame; a recorded host match plays back in another game within 1 cm for 3000 frames.",
       "check": "tools/net/match_puppet_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "on.match_net",

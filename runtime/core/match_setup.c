@@ -13,11 +13,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Bytes of the setup block that define the match: everything before the score list, and difficulty.
-   (The clock at +0x18F0 is 0 at launch; the score list head at +0x1908 belongs to the running match.) */
+/* Bytes of the setup block (0x1924 bytes: the menu's FUN_005259C0 clears that much) that define the
+   match: everything before the score list, difficulty, and the kits (+0x191C: bits 0-1 home, 2-3 away,
+   non-zero = alternate kit; read by the match loader FUN_00402529 after the launch step). (The clock at
+   +0x18F0 is 0 at launch; the score list head at +0x1908 belongs to the running match; +0x1910..+0x1918
+   are written by match init.) */
 static const struct {
     uint32_t off, len;
-} k_span[] = { { 0x0000u, 0x1908u }, { 0x190Cu, 0x4u } };
+} k_span[] = { { 0x0000u, 0x1908u }, { 0x190Cu, 0x4u }, { 0x191Cu, 0x1u } };
 #define NSPAN (sizeof k_span / sizeof *k_span)
 
 static uint8_t g_offer[MS_SETUP_BYTES];
