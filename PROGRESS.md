@@ -338,3 +338,9 @@ Next: `./init.sh next` shows what to fix.
 - Lifter speedups (any mode): `call` to a `jcc rel8; ret` leaf (MSVC /RTC _RTC_CheckEsp, 741 sites) lifted inline; MSVC 7.1 _ftol2 matched by bytes (5 copies, 204 sites) -> recomp_ftol2; RECOMP_ENTER fast path inline. Selftest compares recomp_ftol2 with the lifted body in all 4 rounding modes (836 cases, 0 wrong). tools/web_profile.py: headless Chrome CPU profile per lifted function.
 - This worktree now lifts into its own gen/recomp (was a symlink into ../rugby08; renamed to gen/recomp.main-link).
 - Checks after the change: native.video, native.menu, net.det_synctest, net.det_chaos, lift.crt_math PASS; net.*/web.* batch was still running at commit time. Next: menu transition dips (35 fps) and the "save roster?" dialog (18 fps) in det mode.
+
+## 2026-10-12 online: crashes, controls, decision for host-authoritative
+- Fixed browser crashes: split jump tables (MY RUGBY), unlifted CRT exp arms (scrum); checks web.split_check, web.crt_math, lift.crt_math (special args, misses).
+- Online lockstep improvements: host keyboard+mouse in the input stream, code-based Join, rAF pacing, cheaper desync hash.
+- Decision (user): online must be inside the game, everyone in their own game, shared matches, any device/network -> host-authoritative netcode. Plan: docs/plans/2026-10-12-online-host-authoritative.md, items on.* in features.json.
+- Next: on.match_map.
