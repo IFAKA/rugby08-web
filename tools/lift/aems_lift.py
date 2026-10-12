@@ -26,9 +26,12 @@ import sys
 
 root = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(root / "tools/lift"))
-import generate  # noqa: E402
-import jumptables
+# lift puts pcrecomp on sys.path, so it is imported first
+# isort: off
 import lift  # noqa: E402  (pcrecomp paths, lifter setup, carry_flags)
+import generate  # noqa: E402
+import jumptables  # noqa: E402
+# isort: on
 
 AEMS_CANON = 0x7E000000
 FUNC_TABLE = 0x9AF720

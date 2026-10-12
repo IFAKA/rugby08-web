@@ -17,9 +17,11 @@ printf 'LIBRARY user32.dll\nEXPORTS\nShowWindow@8\nPostMessageA@16\n' >"$OUT/use
     "$LLVM/llvm-dlltool" -m i386 -k -d "$OUT/user32.def" -l "$OUT/user32.lib" &&
     /usr/bin/clang -target i686-pc-windows-msvc -O2 -fno-stack-protector -fno-builtin -c \
       tools/oracle/d3d8proxy.c -o "$OUT/d3d8proxy.obj" &&
+    /usr/bin/clang -target i686-pc-windows-msvc -O2 -fno-stack-protector -fno-builtin -c \
+      tools/oracle/d3d8proxy_replay.c -o "$OUT/d3d8proxy_replay.obj" &&
     "$LLVM/lld" -flavor link /dll /noentry /nodefaultlib /machine:x86 \
       /export:Direct3DCreate8=_Direct3DCreate8@4 /out:"$OUT/d3d8.dll" \
-      "$OUT/d3d8proxy.obj" "$OUT/kernel32.lib" "$OUT/user32.lib" &&
+      "$OUT/d3d8proxy.obj" "$OUT/d3d8proxy_replay.obj" "$OUT/kernel32.lib" "$OUT/user32.lib" &&
     /usr/bin/clang -target i686-pc-windows-msvc -O2 -fno-stack-protector -fno-builtin -c \
       tools/oracle/dinputproxy.c -o "$OUT/dinputproxy.obj" &&
     "$LLVM/lld" -flavor link /dll /noentry /nodefaultlib /machine:x86 \

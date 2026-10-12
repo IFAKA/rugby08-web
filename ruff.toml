@@ -14,5 +14,5 @@ max-statements = 80
 max-branches = 25
 [lint.per-file-ignores]
 # closures that read the loop variable are called within the same iteration (a Unicorn hook, a re.sub callback)
-"tools/lift/difftest.py" = ["B023"]
+"tools/lift/dt_ref.py" = ["B023"]
 "tools/lift/split_big.py" = ["B023"]
