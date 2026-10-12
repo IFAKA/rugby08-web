@@ -491,7 +491,7 @@
       "deps": [
         "on.match_flow"
       ],
-      "desc": "The automated browser tests are reliable: the game works in a real browser, only the hidden test browser froze (software rendering, several games, muted). First the test browser on the real GPU; if it still freezes, find and fix the root cause (slow machines, phones). Pass: two pages at once, through the menus into a match, 10 minutes without a freeze.",
+      "desc": "The game keeps running when its tab is not visible (it stops today: requestAnimationFrame pacing, user-observed), so the host switching tabs never stops a party's match; the automated browser tests (background pages) become reliable. Pass: a background tab keeps running; two pages, menus into a match, 10 minutes, no freeze.",
       "check": "/opt/homebrew/bin/python3 tools/net/web_soak.py",
       "passes": false
     },

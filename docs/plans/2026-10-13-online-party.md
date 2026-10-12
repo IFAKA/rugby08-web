@@ -95,13 +95,18 @@ direct (one hop, no TCP head-of-line), then host input delay (equal feel), then 
   hold the last frame); real 80-minute full time and half time untested (only quits).
 
 ## Steps (features.json `pt.*`, in order; each with an automated browser check)
-1. **pt.freeze**: make the automated browser tests reliable. The game works in a real browser (the user's
-   Brave reaches the menus and plays); only the hidden test browser froze (software rendering, several
-   games at once, muted). First run the test browser on the Mac's real GPU (Chrome's new headless mode
-   with GPU/ANGLE Metal instead of SwiftShader): if the freeze disappears, it was the test setup. If it
-   still freezes, it is a real game problem on slow machines (phones): find the root cause and fix it.
-   Pass: two pages at once, through the menus into a match, 10 minutes, no freeze. Unblocks every
-   browser check.
+1. **pt.freeze**: the game keeps running when its tab is not visible, and the automated browser tests
+   are reliable. Evidence (the user, 2026-10-13): the game stops the moment its tab is not in view
+   (Cmd-Tab, another tab) and resumes when it is focused again. Cause (to confirm first):
+   platform/web/platform.c js_frame_wait paces frames with requestAnimationFrame, which browsers stop
+   for hidden tabs (and their timers are throttled to ~1/s or less); the hidden test browser treats its
+   pages as background, which is the "freeze" the checks saw. In a party this would stop the match for
+   everyone when the host switches tabs. Fix: pace from something browsers do not pause in the
+   background (a worker: the audio pacer thread already runs there), keep running and skip only the
+   drawing while hidden. Also check the audio idea (a muted test browser's audio "running" but not
+   draining). Pass: a game in a background tab keeps running (frames and match time advance); two pages
+   at once, through the menus into a match, 10 minutes without a freeze; in a party the host's tab in
+   the background does not stop the match. Unblocks every browser check.
 2. **pt.research** → docs/PARTY_RESEARCH.md: (a) every game mode: several controllers or not, the screens
    players act on, how its matches start/end, between-match screens; (b) adding a real item to the main
    menu and building screens in the game's front-end system/style (FE screens vtable 0x0090F838, action
