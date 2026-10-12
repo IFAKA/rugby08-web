@@ -82,6 +82,25 @@
           last = { t: t, n: n };
         }, 500);
       })();
+      // Esc: while the mouse is captured (pointer lock) the browser keeps Esc to release it and the page
+      // never sees the key. Esc is a game key (skips the intro movie, pauses a match), so a release
+      // the user made with Esc (page focused, not released by the game itself) is handed to the game
+      // as an Esc tap; the next click captures the mouse again.
+      (() => {
+        var pageExit = false, lastEsc = -1e9, exit = document.exitPointerLock.bind(document);
+        document.exitPointerLock = () => { pageExit = true; return exit(); };
+        addEventListener('keydown', (e) => { if (e.code === 'Escape' && e.isTrusted) lastEsc = performance.now(); }, true);
+        var key = (type) => dispatchEvent(new KeyboardEvent(type, { key: 'Escape', code: 'Escape', bubbles: true }));
+        document.addEventListener('pointerlockchange', () => {
+          if (document.pointerLockElement) { pageExit = false; return; }
+          var byPage = pageExit; pageExit = false;
+          if (byPage || !document.hasFocus() || document.visibilityState !== 'visible') return;
+          setTimeout(() => {   // the browser delivered the key itself (some do): nothing to add
+            if (performance.now() - lastEsc < 300 || !document.getElementById('panel').hidden) return;
+            key('keydown'); setTimeout(() => key('keyup'), 100);   // held a few frames: the game polls once a frame
+          }, 50);
+        });
+      })();
       var $ = (id) => document.getElementById(id);
       var q = new URLSearchParams(location.search);
       var LOG = q.has('log');

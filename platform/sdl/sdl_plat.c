@@ -680,7 +680,7 @@ void plat_local_pad(rt_pad_t *p) {
         SDL_SCANCODE_E, SDL_SCANCODE_A, SDL_SCANCODE_D, SDL_SCANCODE_LSHIFT, SDL_SCANCODE_SPACE, SDL_SCANCODE_RSHIFT,
         SDL_SCANCODE_LCTRL, SDL_SCANCODE_ESCAPE, SDL_SCANCODE_LALT, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_UP,
         SDL_SCANCODE_DOWN, SDL_SCANCODE_KP_4, SDL_SCANCODE_KP_6, SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_2 };
-    if (!g_desk_on) for (size_t i = 0; i < sizeof used / sizeof *used; i++) k[used[i]] = (Uint8)js_key_held(web_code(used[i]));
+    for (size_t i = 0; i < sizeof used / sizeof *used; i++) k[used[i]] = (Uint8)js_key_held(web_code(used[i]));
     int focused = 1;   /* (js_key_held: only while the page has focus) */
 #else
     const Uint8 *k = SDL_GetKeyboardState(NULL);
@@ -699,7 +699,10 @@ void plat_local_pad(rt_pad_t *p) {
         for (size_t i = 0; i < sizeof kb / sizeof *kb; i++) any |= k[kb[i].sc];
         if (any && !said++) rt_log("input: pad keys held (focused %d, host keyboard %d)", focused, g_desk_on);
     }
-    if (focused && !g_desk_on) {   /* the host's keyboard is the game's keyboard (desk) */
+    /* The host's keyboard is also the game's keyboard (desk), but in a session that device comes
+       after the 4 pads and the game only reads controllers 1-4 (menus, movie skip, Team Select):
+       it plays controller 1 through this pad, like a friend's keyboard. */
+    if (focused) {
         for (size_t i = 0; i < sizeof kb / sizeof *kb; i++) if (k[kb[i].sc]) q.buttons |= kb[i].bit;
         q.lx = (int16_t)(k[SDL_SCANCODE_LEFT] ? -32768 : k[SDL_SCANCODE_RIGHT] ? 32767 : 0);
         q.ly = (int16_t)(k[SDL_SCANCODE_UP] ? -32768 : k[SDL_SCANCODE_DOWN] ? 32767 : 0);

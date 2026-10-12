@@ -344,3 +344,9 @@ Next: `./init.sh next` shows what to fix.
 - Online lockstep improvements: host keyboard+mouse in the input stream, code-based Join, rAF pacing, cheaper desync hash.
 - Decision (user): online must be inside the game, everyone in their own game, shared matches, any device/network -> host-authoritative netcode. Plan: docs/plans/2026-10-12-online-host-authoritative.md, items on.* in features.json.
 - Next: on.match_map.
+
+## 2026-10-12 — online: host keyboard did nothing in menus / intro (fixed, user-verified in Brave)
+- Root cause: in a session DirectInput lists the 4 virtual pads before the keyboard (rt_pads_first), so the keyboard is controller 5; the game only reads controllers 1-4 (FUN_0081A5A0(i, 4): movie skip loop sub_006BD870, menus, Team Select). The mouse is read separately, so it kept working.
+- Fix: the host's keyboard also drives player 1's virtual pad (plat_local_pad, same mapping as friends: Enter/S accept, Esc Start, arrows), and still feeds the game's keyboard device. Replays are unaffected (automated runs skip plat_local_pad).
+- shell.html: an Esc that releases pointer lock (the browser keeps the key) is handed to the game as an Esc tap.
+- Verified: headless Chrome, Enter during inenpc.vp6 -> title screen. Found by native det RT_COVERAGE/RT_PROBE diff vs web (?env=RT_COVERAGE=a-b:/dev/stdout prints coverage to the console).
