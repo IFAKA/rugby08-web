@@ -36,7 +36,7 @@ static void presentation(uint32_t rugby, uint32_t dt) {
 GAME_OVERRIDE(sub_0062ED50) {
     uint32_t self = g_ecx, dt = GAME_ARG(0);
     ms_measure_update_begin();
-    if (ms_puppet_skip_update()) {   /* a friend's game (RT_MS_PUPPET_SKIP while this is an experiment) */
+    if (ms_puppet_skip_update()) {   /* a friend's game: the host plays the match */
         ms_puppet_after_update(self);   /* the host frame of this update */
         presentation(self, dt);
         ms_puppet_place(self);   /* players and ball where the host had them, after their own steps */
@@ -44,6 +44,5 @@ GAME_OVERRIDE(sub_0062ED50) {
         GAME_RETURN(0, 4);
     }
     sub_0062ED50_lifted();   /* returns past the argument (ret 4) */
-    ms_puppet_after_update(self);
     ms_measure_update_end();
 }

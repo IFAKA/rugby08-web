@@ -4,12 +4,10 @@
  * host to its friends (on.match_puppet).
  *   RT_MS_REPLAY_CHECK=N: every N frames of a match, compare the recorder's current frame with the live
  *   players and ball ("ms: replay check" lines).
- *   RT_MS_REC_OUT=FILE: the host's match as a file of records {u32 frame, f32 clock, u32 phase id,
- *   u16 score home, u16 score away, u16 score events, then the latest one: u16 scorer, u32 type, u32 team,
- *   f32 clock; the view (MS_CAMERA_BYTES, match_camera.c); frame B (0x118C bytes)} (96 + 0x118C bytes),
- *   one per Present at which the recorder wrote a frame. */
+ *   RT_MS_REC_OUT / RT_MS_STREAM_OUT: the host's frames as files (record()), also sent to friends. */
 #include <stdio.h>
 #include "rt.h"
+#include "plat.h"
 #include "match_state.h"
 #include <math.h>
 #include <stdlib.h>
@@ -93,18 +91,40 @@ static void check(uint32_t frame_no) {
              (double)rdf(f + 0x116C), compared, (double)worst, (double)bd);
 }
 
-/* RT_MS_REC_OUT: one record per Present at which the recorder has written a new frame, i.e. its record
-   stream grew (frame B holds uninitialised memory until the first write: time 2e-44, headings 1e33). */
+/* The newest record ends at the stream's end and repeats its u16 length just before it (docs/MATCH_STATE.md
+   "Replay system"): its start, or 0 if the stream does not look like that. */
+static uint32_t newest_record(uint32_t end, uint32_t *len) {
+    *len = rd16(end - 2);
+    if (*len < 8 || rd16(end - *len) != *len) {
+        rt_log("ms: stream record at %08X has no consistent length (%u)", end, *len);
+        return *len = 0;
+    }
+    return end - *len;
+}
+
+static FILE *open_env(const char *name) {
+    const char *p = getenv(name);
+    FILE *f = p ? fopen(p, "wb") : NULL;
+    if (p && !f) rt_log("ms: cannot write %s", p);
+    return f;
+}
+
+/* At each Present at which the recorder wrote a frame (its record stream grew; frame B holds
+   uninitialised memory until the first write: time 2e-44, headings 1e33): the 96-byte head {u32 frame,
+   f32 clock, u32 phase id, u16 score home, away, score events, the latest one: u16 scorer, u32 type,
+   u32 team, f32 clock; the view (MS_CAMERA_BYTES, match_camera.c)} and the frame go to
+   RT_MS_REC_OUT=FILE (head then frame B, 96 + 0x118C bytes each) and to a host's friends (net_ha.c);
+   RT_MS_STREAM_OUT=FILE gets the game's own record of the frame {u32 frame, u16 length, the record}. */
 static void record(uint32_t frame_no) {
-    static FILE *out;
+    static FILE *out, *stream;
     static int tried;
     static uint32_t last_end;
     if (!tried) {
         tried = 1;
-        const char *p = getenv("RT_MS_REC_OUT");
-        if (p && !(out = fopen(p, "wb"))) rt_log("ms: cannot write %s", p);
+        out = open_env("RT_MS_REC_OUT");
+        stream = open_env("RT_MS_STREAM_OUT");
     }
-    uint32_t f = out && ms_active() ? ms_replay_current() : 0, start, end;
+    uint32_t f = (out || rt_net_ha == 1) && ms_active() ? ms_replay_current() : 0, start, end;
     if (!f || !ms_replay_stream(&start, &end) || end == start || end == last_end) return;
     last_end = end;
     ms_score_ev_t ev[64];
@@ -127,12 +147,23 @@ static void record(uint32_t frame_no) {
             last.type,
             last.team_id,
             last.clock };
-    uint8_t cam[MS_CAMERA_BYTES];
-    ms_camera_last(cam);
-    fwrite(&h, sizeof h, 1, out);
-    fwrite(cam, 1, sizeof cam, out);
-    fwrite(G2H(f), 1, FRAME_SIZE, out);
-    fflush(out);
+    uint8_t head[96];
+    memcpy(head, &h, sizeof h);
+    ms_camera_last(head + sizeof h);
+    uint32_t len, rec = newest_record(end, &len);
+    if (out) {
+        fwrite(head, 1, sizeof head, out);
+        fwrite(G2H(f), 1, FRAME_SIZE, out);
+        fflush(out);
+    }
+    if (stream) {
+        uint16_t l16 = (uint16_t)len;
+        fwrite(&frame_no, 4, 1, stream);
+        fwrite(&l16, 2, 1, stream);
+        if (len) fwrite(G2H(rec), 1, len, stream);
+        fflush(stream);
+    }
+    net_ha_frame_out(frame_no, head, f, rec, len);
 }
 
 void ms_replay_frame(uint32_t frame) {

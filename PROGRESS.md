@@ -384,3 +384,9 @@ Next: `./init.sh next` shows what to fix.
 - Tooling: tools/query/callgraph.py (static call graph from gen/recomp), RT_MS_POS lines + tools/net/match_compare.py (host vs friend by match time, incl. the friend's own recorder vs host frame), RT_MS_SHOT_T screenshots at match times, args: hooks print ret.
 - Bugs found by measurement: recorder wrote an uninitialised frame B (headings 1e33 -> FUN_004AC5B0 angle loop hang); presentation tail passed dt to the getters; phase replay by id crashes (set-piece objects missing) -> not replicated.
 - Check tools/net/match_puppet_check.sh: 16599 frames within 1 cm (players, ball), score 0-10 as host, picture diff 5.9 vs 32.4 (control). on.match_map / on.match_setup re-run: ok. Next: on.match_net (friends' pads to the host, host frames to friends over the server).
+
+## 2026-10-12 — on.match_net PASS (branch online-ha)
+- runtime/core/net_ha.c (--net-mode ha): host sends 'S' setup at launch and per recorded frame 'F' (96-byte head + raw key or the game's own replay record); friend sends 'P' pad every Present and 'K' for a key; friends' pads are host controllers 2..4. server/: relays S/F/K/P without logging, keeps last setup + key for newcomers (Go tests).
+- The game's replay records decode in another game (RT_MS_STREAM_CHECK: pose blocks and ball identical over 3310 frames from one key; positions quantised to 1/52.5 m, headings to degrees): ~377 B/frame instead of 4.6 KB raw.
+- Learned: once a friend plays, the host's match takes another course (a human side's scrum waits for its input), so test inputs on the friend are triggered by the host's phase (runtime/debug/net_ha_press.c), not by frame.
+- Check tools/net/match_net_check.sh: 3799 friend frames = host frame shown within 3 cm, latency p95 0.9 frames, friend's pad moved its away player 18.8 m on the host (0.0 m before). Next: on.match_flow.

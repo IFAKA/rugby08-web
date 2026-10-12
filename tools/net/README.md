@@ -6,4 +6,5 @@ Each prints one summary line; details in `logs/`. `net_test.sh` runs two native 
 per-player camera. `match_*_check.sh` are the host-authoritative items (`on.*` in features.json, plan in
 docs/plans/2026-10-12-online-host-authoritative.md). `match_compare.py HOST.out FRIEND.out` lines two
 games' `ms: pos` lines (RT_MS_POS, runtime/core/match_measure.c) up by match time and reports where they
-first differ, including what a friend's own recorder wrote against the host frame.
+first differ, including what a friend's own recorder wrote against the host frame. `match_net_check.sh`
+runs a host and a friend in host-authoritative mode over a local relay (`--net-mode ha`).

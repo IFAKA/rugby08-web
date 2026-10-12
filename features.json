@@ -474,7 +474,7 @@
       ],
       "desc": "Host-authoritative over the server: friends' pads drive their players on the host, host state reaches friends within 6 frames.",
       "check": "tools/net/match_net_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "on.match_flow",

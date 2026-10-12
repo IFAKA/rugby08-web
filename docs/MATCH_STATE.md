@@ -131,6 +131,9 @@ stopped (instant replays, highlights). Found 2026-10-12 (snapshot during the f27
   ones within 0.8 cm and the ball exactly, at every sample (RT_MS_REPLAY_CHECK, 13500..19800); only
   cutscenes (recording paused, players staged or parked) differ. Slot k = team (k / 15), player k % 15.
   Positions are in 1/52.5 m units (52.5 = 1 / 0.01905: three quarters of an inch), the ball in metres.
+- The records are portable and lossy: another game decodes a host's records with its own decoder
+  (identical pose blocks and ball over 3310 frames from one raw key, RT_MS_STREAM_CHECK); positions come
+  out in whole 1/52.5 m units (up to 2.7 cm off), headings in whole degrees. ~377 bytes per frame.
 - The stream becomes a ring (the oldest records are dropped), so decoding must start from a known frame. Decoding: thiscall
   FUN_00458620(ecx = manager+0x3C, the Huffman tree; frame, record, add=1): frame += record's deltas
   (add=0 subtracts, for rewinding). Record: +0 u16 length to the next record, +2 u16 offset of the

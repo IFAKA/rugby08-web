@@ -3,6 +3,7 @@
 #ifndef RT_DEBUG_H
 #define RT_DEBUG_H
 #include "rt.h"
+#include "plat.h"
 
 void rt_probe_enter(uint32_t va);      /* probes.c: RT_PROBE / RT_PROBE_DUMP at a function entry */
 void rt_dump_at(uint32_t frame);       /* probes.c: RT_DUMP memory ranges at a presented frame */
@@ -12,5 +13,7 @@ void rt_selftest_crt(void);            /* selftest_crt.c: RT_SELFTEST_CRT, then 
 extern "C"
 #endif
     void ms_probe_frame(uint32_t frame);   /* match_probe.c: RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP at a Present */
+void ms_stream_check_frame(void);      /* match_stream_check.c: RT_MS_STREAM_CHECK */
+void net_ha_test_press(rt_pad_t *local, int host_phase);   /* net_ha_press.c: RT_NET_HA_PRESS */
 
 #endif

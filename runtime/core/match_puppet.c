@@ -1,9 +1,11 @@
 /* match_puppet.c -- a friend's game showing the host's match (on.match_puppet). The host's frames are
- * the game's own replay frames (match_replay.c); here they go into the friend's live players and ball
- * after each CRugby::Update (game/overrides/match/rugby_update.c).
- *   RT_MS_PUPPET_IN=FILE  play a host recording (RT_MS_REC_OUT) as if it came from the network:
- *                         at each update the host frame with this game's match time (CRugby+0x58). */
+ * the game's own replay frames with a head (score, view: match_replay.c record()). In a friend's game
+ * CRugby::Update skips the match logic (game/overrides/match/rugby_update.c) and each update shows the
+ * next host frame: clock, score, view, then players, poses and ball.
+ * Source: the network (net_ha.c, a host-authoritative friend: the newest frame received) or
+ *   RT_MS_PUPPET_IN=FILE  a host recording (RT_MS_REC_OUT), one frame per update. */
 #include "rt.h"
+#include "plat.h"
 #include "match_state.h"
 #include <math.h>
 #include <stdio.h>
@@ -53,16 +55,21 @@ static const uint8_t *frame_for(float t) {
     return g_nrec ? frame_at(i) : NULL;
 }
 
-/* Experiment switch: skip the friend's whole CRugby::Update (what still moves on screen without it). */
-int ms_puppet_skip_update(void) {
-    static int skip = -1;
-    if (skip < 0) skip = getenv("RT_MS_PUPPET_SKIP") != NULL;
-    return skip && ms_puppet_on() && ms_active();
-}
-
 int ms_puppet_on(void) {
     load();
-    return g_nrec > 0;
+    return g_nrec > 0 || rt_net_ha == 2;
+}
+/* A friend's match: CRugby::Update's logic does not run. */
+int ms_puppet_skip_update(void) { return ms_puppet_on() && ms_active(); }
+
+/* The next host record (head, then frame), or NULL before the first. */
+static const uint8_t *next_record(void) {
+    if (rt_net_ha == 2) {
+        int fresh;
+        return net_ha_newest(&fresh);
+    }
+    static size_t n;
+    return g_nrec ? g_rec + (n < g_nrec ? n++ : g_nrec - 1) * (REC_HEAD + FRAME_SIZE) : NULL;
 }
 
 /* As the game's replay drives its replay actors (FUN_0045A560): heading through the actor's vtable slot
@@ -131,9 +138,9 @@ static uint32_t tcall(uint32_t va, uint32_t ecx, uint32_t arg) {   /* thiscall, 
    "pup" field of the RT_MS_POS line (match_measure.c). */
 int ms_puppet_check(char *out, int size) {
     uint32_t b = ms_replay_current();
-    if (!g_nrec || !b) return 0;
-    const uint8_t *mine = G2H(b), *h = frame_for(fat(mine, 0x116C));
-    if (!h) return 0;
+    if (!ms_puppet_on() || !b || !g_hostbuf) return 0;
+    const uint8_t *mine = G2H(b), *h = g_nrec ? frame_for(fat(mine, 0x116C)) : G2H(g_hostbuf);
+    if (!h || fat(mine, 0x116C) != fat(h, 0x116C)) return 0;   /* the same moment only */
     float worst = 0, hd = 0;
     int blocks = 0;
     for (int k = 0; k < MS_TEAMS * MS_PLAYERS; k++) {
@@ -195,25 +202,17 @@ static void score(const uint8_t *h) {
              ms_score(0), ms_score(1));
 }
 
+/* Before the friend's presentation step: the host's clock, score, view and match time; the frame goes
+   where the replay code reads it (g_hostbuf), players and ball follow after the step (ms_puppet_place). */
 void ms_puppet_after_update(uint32_t rugby) {
-    if (!ms_puppet_on() || !ms_active()) return;
-    float t = 0;
-    uint32_t u = rd32(rugby + 0x58);
-    memcpy(&t, &u, 4);
-    if (ms_puppet_skip_update()) {   /* no local time: one host frame per update, and the host's clock */
-        static size_t n;
-        const uint8_t *h = g_rec + (n < g_nrec ? n++ : g_nrec - 1) * (REC_HEAD + FRAME_SIZE);
-        float clock;
-        memcpy(&clock, h + 4, 4);
-        wrf(ms_setup_va() + 0x18F0, clock);
-        score(h);
-        ms_camera_host(h + 32);
-        t = fat(h + REC_HEAD, 0x116C);
-        wrf(rugby + 0x58, t);
-    }
-    const uint8_t *f = frame_for(t);
-    if (!f) return;
-    if (!ms_puppet_skip_update()) apply_actors(f);
+    const uint8_t *h = ms_puppet_skip_update() ? next_record() : NULL;
+    if (!h) return;   /* nothing from the host yet: the match holds */
+    float clock;
+    memcpy(&clock, h + 4, 4);
+    wrf(ms_setup_va() + 0x18F0, clock);
+    score(h);
+    ms_camera_host(h + 32);
+    wrf(rugby + 0x58, fat(h + REC_HEAD, 0x116C));
     if (!g_hostbuf) g_hostbuf = gcalloc(FRAME_SIZE);
-    if (g_hostbuf) memcpy(G2H(g_hostbuf), f, FRAME_SIZE);
+    if (g_hostbuf) memcpy(G2H(g_hostbuf), h + REC_HEAD, FRAME_SIZE);
 }

@@ -24,8 +24,7 @@ run host tests/replays/match_play.txt 30000 RT_MS_SETUP_OUT="$D/host.setup" RT_M
   echo "match_puppet_check: FAIL (the host recorded no match: $(tail -1 $D/host.out | cut -c1-100))"
   exit 1
 }
-run friend tests/replays/friend_my_rugby.txt 32300 RT_MS_SETUP_IN="$D/host.setup" RT_MS_PUPPET_IN="$D/host.rec" \
-  RT_MS_PUPPET_SKIP=1 &
+run friend tests/replays/friend_my_rugby.txt 32300 RT_MS_SETUP_IN="$D/host.setup" RT_MS_PUPPET_IN="$D/host.rec" &
 run control tests/replays/friend_my_rugby.txt 32300 RT_MS_SETUP_IN="$D/host.setup" &
 wait
 .venv/bin/python -I tools/net/match_puppet_eval.py "$D" "$T"

@@ -6,11 +6,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* --net URL --net-room CODE [--net-name NAME] [--net-delay D]: join the room (the first to join creates
+/* --net URL --net-room CODE [--net-name NAME] [--net-delay D] [--net-mode ha]: join the room (the first to join creates
  * it and plays from frame 0; later ones catch up). Returns 1 if a session started. */
 int rt_net_cfg_delay;   /* --net-delay D (0: the default) */
 int rt_net_start(int argc, char **argv) {
     const char *url = NULL, *room = NULL, *name = "player";
+    int ha = 0;   /* --net-mode ha: host-authoritative (net_ha.c) instead of lockstep */
     for (int i = 1; i + 1 < argc; i++) {
         int s, c;   /* --net-session SLOT,CREATOR: the web page already joined the room */
         if (!strcmp(argv[i], "--net-session") && sscanf(argv[i + 1], "%d,%d", &s, &c) == 2) return rt_net_begin(s, c);
@@ -18,6 +19,7 @@ int rt_net_start(int argc, char **argv) {
         else if (!strcmp(argv[i], "--net-room")) room = argv[++i];
         else if (!strcmp(argv[i], "--net-name")) name = argv[++i];
         else if (!strcmp(argv[i], "--net-delay")) rt_net_cfg_delay = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--net-mode")) ha = !strcmp(argv[++i], "ha");
     }
     if (!url || !room) return 0;
     if (net_tx_open(url)) rt_fatal("netplay: cannot connect to %s", url);
@@ -32,7 +34,7 @@ int rt_net_start(int argc, char **argv) {
         const char *p;
         if (strstr(buf, "\"t\":\"error\"")) rt_fatal("netplay: %s", buf);
         if (strstr(buf, "\"t\":\"joined\"") && (p = strstr(buf, "\"slot\":")))
-            return rt_net_begin(atoi(p + 7), strstr(buf, "\"creator\":true") != NULL);
+            return (ha ? rt_net_begin_ha : rt_net_begin)(atoi(p + 7), strstr(buf, "\"creator\":true") != NULL);
     }
     rt_fatal("netplay: lobby failed");
     return 0;

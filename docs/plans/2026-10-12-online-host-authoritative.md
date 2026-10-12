@@ -75,6 +75,14 @@ each friend's own game loads the same match and shows the host's state.
 4. **on.match_net** — host takes friends' pads from the network as real controllers; host sends
    state (quantized, delta vs last ack, ~60 Hz) through the server. Check: two natives over the
    server, friend's pad moves its player on the host, friend's view follows within 6 frames.
+   As built (PASS 2026-10-12, tools/net/match_net_check.sh, runtime/core/net_ha.c, `--net-mode ha`):
+   messages 'S' setup, 'F' frame (96-byte head + a raw key or the game's own replay record, ~380 bytes,
+   ~165 kbit/s), 'K' key request, 'P' pad, relayed and not logged by server/ (it keeps the last setup and
+   key for newcomers). Keys at start, on request and every 600 frames. Friends' pads are the host's
+   controllers 2..4 (Team Select picks their side). Precision is the game's replay coder (1/52.5 m,
+   whole degrees). Measured locally: latency median 0.5, p95 0.9 frames. To do in later steps: a friend
+   who joins mid-match waits for a key (no catch-up needed); the match course depends on friends'
+   input (a human side's scrum waits for it).
 5. **on.match_flow** — party flow: host start → friends' games enter Team Select/match; pause by
    anyone pauses all and the pauser drives the menu; full time → everyone back in own menus.
    Check: two natives run the whole flow twice in one party.

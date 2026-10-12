@@ -21,6 +21,12 @@
 // grants from the room's authority are logged and relayed in one order to everyone else; the server
 // adds 'D' when a player leaves (after that player's last input), sends 'W' (a newcomer waits) to the
 // authority and 'R' to a player that becomes the authority when the previous one leaves.
+//
+// Host-mode messages (on.match_net: one game, the host's, plays the match; friends show it), framed
+// {u8 type, u8 slot, u32 frame, u16 len, len bytes} and relayed to everyone else but never logged:
+// 'S' the match setup (host, at launch; the room keeps the latest), 'F' a match frame (host; payload
+// byte 0 = 0 is a key frame, the room keeps the latest), 'K' a key request and 'P' a pad (friends). A
+// newcomer gets the room's log, then the kept setup, then the kept key frame.
 package main
 
 import (
@@ -71,6 +77,8 @@ type room struct {
 	from    [maxPlayers]int64 // slot plays from this frame (-1: not granted)
 	last    [maxPlayers]int64 // last input frame received from the slot
 	pending [maxPlayers]bool  // waiting for a grant
+	setup   []byte            // host mode: the latest 'S' message, for newcomers
+	key     []byte            // host mode: the latest key 'F' message, for newcomers
 }
 
 var (
@@ -93,9 +101,17 @@ func msgLen(b []byte) int {
 		return 6
 	case 'W', 'R':
 		return 2
+	case 'S', 'F', 'K', 'P':
+		if len(b) < haHeader {
+			return haHeader
+		}
+		return haHeader + int(binary.LittleEndian.Uint16(b[6:]))
 	}
 	return 0
 }
+
+// haHeader: the header of the host-mode messages ('S', 'F', 'K', 'P'): type, slot, u32 frame, u16 len.
+const haHeader = 8
 
 // ---- WebSocket (RFC 6455), server side ---------------------------------------------------------
 
@@ -294,6 +310,24 @@ func frameMsg(t byte, slot int, frame int64) []byte {
 	return m
 }
 
+// pass queues a host-mode message for every player but skip, without logging it.
+func (r *room) pass(m []byte, skip int) {
+	for k, p := range r.slots {
+		if p != nil && k != skip {
+			p.enqueue(2, m)
+		}
+	}
+}
+
+// dumpHA queues the room's kept setup and key frame for a newcomer (after its log).
+func (r *room) dumpHA(c *client) {
+	for _, m := range [][]byte{r.setup, r.key} {
+		if m != nil {
+			c.enqueue(2, m)
+		}
+	}
+}
+
 // dump queues the room's log for a newcomer, in chunks of whole messages.
 func (r *room) dump(c *client) {
 	for p := 0; p < len(r.log); {
@@ -399,6 +433,7 @@ func (c *client) handle(req request) {
 		c.send(map[string]any{"t": "joined", "room": r.code, "slot": slot, "creator": creator})
 		if !creator {
 			r.dump(c)
+			r.dumpHA(c)
 			r.pending[slot] = true
 			if a := r.slots[r.auth]; a != nil && r.auth != slot {
 				a.enqueue(2, []byte{'W', byte(slot)})
@@ -469,6 +504,16 @@ func (c *client) game(b []byte) {
 			if r.pending[k] {
 				r.pending[k], r.from[k] = false, f
 			}
+		case 'S', 'F', 'K', 'P':
+			if k != c.slot {
+				continue
+			}
+			if m[0] == 'S' {
+				r.setup = m
+			} else if m[0] == 'F' && len(m) > haHeader && m[haHeader] == 0 {
+				r.key = m
+			}
+			r.pass(m, c.slot)
 		}
 	}
 }

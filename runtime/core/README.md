@@ -6,6 +6,10 @@
 - `mem.c` guest arena + PE loader · `heap.c` guest heap (dlmalloc mspace) · `thread.c` per-thread CPU state.
 - `det.c` deterministic mode (`RT_DET=1`: virtual clock, guest scheduler) · `det_hash.c` its state hash · `pads.c` virtual pads.
 - Online: `netplay.c` (+`netplay_int.h`) lockstep messages, roster and session · `net_frame.c` the per-frame step ·
-  `net_join.c` joining a room from the command line · `match_state.c` the live match in guest memory (docs/MATCH_STATE.md).
+  `net_join.c` joining a room from the command line · `net_ha.c` host-authoritative play (`--net-mode ha`: friends'
+  pads to the host, the host's frames to friends) · `match_state.c` the live match in guest memory (docs/MATCH_STATE.md) ·
+  `match_setup.c` the match definition at launch · `match_replay.c` the game's replay frames and records (what a host
+  sends) · `match_puppet.c` a friend's game showing the host's frames · `match_camera.c` the match view ·
+  `match_measure.c` RT_MS_POS / RT_MS_SHOT_T numbers for tools/net/match_compare.py.
 - `interp.c` (+`interp_int.h`) Unicorn fallback for guest code without a lifted body.
 - `log.c` `rt_log`/`rt_trace`/`rt_fatal` · `trace.c` function-entry ring and crash dump · `aems.c` sound-bank code lookup · `png.c` PNG writer.

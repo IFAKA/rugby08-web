@@ -88,6 +88,11 @@ void ms_measure_update_begin(void); /* around CRugby::Update: its host CPU time 
 void ms_measure_update_end(void);
 void ms_measure_frame(uint32_t frame); /* ms_frame calls it */
 
+/* net_ha.c: the match over the network (host-authoritative) */
+void net_ha_setup(const uint8_t *setup);    /* host, at the launch */
+void net_ha_frame_out(uint32_t frame_no, const uint8_t *head, uint32_t frame, uint32_t rec, uint32_t rec_len);
+const uint8_t *net_ha_newest(int *fresh);   /* friend: newest host head (96) + frame, or NULL */
+
 void ms_frame(uint32_t frame); /* Present hook: RT_MS_LOG=N trace line every N frames */
 
 #ifdef __cplusplus

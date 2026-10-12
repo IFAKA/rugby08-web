@@ -80,10 +80,11 @@ void ms_launch(void) {
     g_launch_frame = (long)rt_present_frame;
     rt_trace("ms: launch setup %016llX (own %016llX) teams %u v %u stadium %u frame %ld", (unsigned long long)h,
              (unsigned long long)own, ms_team_id(0), ms_team_id(1), rd16(ms_setup_va() + 0x1902), g_launch_frame);
+    uint8_t b[MS_SETUP_BYTES];
+    ms_setup_capture(b);
+    net_ha_setup(b);   /* a host sends it to its friends */
     const char *out = getenv("RT_MS_SETUP_OUT");
     if (out) {
-        uint8_t b[MS_SETUP_BYTES];
-        ms_setup_capture(b);
         FILE *f = fopen(out, "wb");
         if (!f || fwrite(b, 1, sizeof b, f) != sizeof b) rt_log("ms: cannot write the setup to %s", out);
         if (f) fclose(f);
