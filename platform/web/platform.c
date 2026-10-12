@@ -16,11 +16,12 @@ void rt_platform_init(int argc, char **argv) {
    ms <= 0), come back at once through a MessageChannel: emscripten_sleep(0) is a setTimeout, which
    browsers stretch to 4 ms when nested, twice a frame before. A hidden tab gets no animation
    frames: a timer keeps its game (and its friends' netplay) running. */
+// clang-format off
 EM_ASYNC_JS(void, js_frame_wait, (double ms), {
     if (!Module.rtYield) {
         const ch = new MessageChannel(), q = [];
-        ch.port1.onmessage = () = > q.shift()();
-        Module.rtYield = () = > new Promise(r = > {
+        ch.port1.onmessage = () => q.shift()();
+        Module.rtYield = () => new Promise(r => {
                                   q.push(r);
                                   ch.port2.postMessage(0);
                               });
@@ -31,11 +32,12 @@ EM_ASYNC_JS(void, js_frame_wait, (double ms), {
     }
     const due = performance.now() + ms;   /* (emscripten_get_now counts from another origin with threads) */
     if (document.hidden) {
-        await new Promise(r = > setTimeout(r, due - performance.now()));
+        await new Promise(r => setTimeout(r, due - performance.now()));
         return;
     }
-    while (performance.now() < due - 4) await new Promise(r = > requestAnimationFrame(r));
+    while (performance.now() < due - 4) await new Promise(r => requestAnimationFrame(r));
 });
+// clang-format on
 void plat_frame_yield(void) { js_frame_wait(0); }
 
 /* The browser presents the canvas when control returns to it: count the frame for the page's fps
