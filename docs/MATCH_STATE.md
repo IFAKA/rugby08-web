@@ -106,6 +106,17 @@ stopped (instant replays, highlights). Found 2026-10-12 (snapshot during the f27
   FUN_0045B1F0 picks frames A/B/single, FUN_00459C00 advances playback by dt (decodes records),
   FUN_00458620 / FUN_004589AA Huffman delta decoders (1100 ints per frame), FUN_00457A40 / FUN_00457C40
   frame <-> packed ints (cm and radians as ints). Highlights save these records to disk.
+- Recording only appends compressed records at the stream's cursor (frames A/B stay at whatever was
+  last played back: 49.7 s while the live match was at 16200). Decoding: thiscall
+  FUN_00458620(ecx = manager+0x3C, the Huffman tree; frame, record, add=1): frame += record's deltas
+  (add=0 subtracts, for rewinding). Record: +0 u16 length to the next record, +2 u16 offset of the
+  Huffman bits, raw bytes from +8, the length repeated before the next record (walk backwards).
+- Who builds poses: live players through PoseSource<HbsActor> (ctor 0x477540), ~30 per frame from the
+  recorder (behind protector trampolines at 0x45C330); in playback through ReplayPoseSource (ctor
+  0x487410) from 0x455540, the pose coming from frame A/B's 128-byte blocks via FUN_0045B6D0 ->
+  FUN_0071AC50(out, blockA, blockB, t, team). Render players (StaticPlayer@PlayerManager x31) only
+  hold transforms (position in cm at +0x74).
+- Presentation in playback (pause menu > Replay): replay camera and a control bar, no score/clock.
 
 ## Player motion is animation-driven
 No velocity is stored in CRugbyPlayer or any object it points at (per-frame position deltas correlate
