@@ -104,7 +104,7 @@ direct (one hop, no TCP head-of-line), then host input delay (equal feel), then 
    everyone when the host switches tabs. Fix: pace from something browsers do not pause in the
    background (a worker: the audio pacer thread already runs there), keep running and skip only the
    drawing while hidden. Also check the audio idea (a muted test browser's audio "running" but not
-   draining). Pass: a game in a background tab keeps running (frames and match time advance); two pages
+   draining) with silent outputs only (the user's request: never audible). Pass: a game in a background tab keeps running (frames and match time advance); two pages
    at once, through the menus into a match, 10 minutes without a freeze; in a party the host's tab in
    the background does not stop the match. Unblocks every browser check.
 2. **pt.research** → docs/PARTY_RESEARCH.md: (a) every game mode: several controllers or not, the screens
@@ -136,7 +136,8 @@ direct (one hop, no TCP head-of-line), then host input delay (equal feel), then 
 - Session protocol of CLAUDE.md (krn context, PROGRESS.md, first failing feature, check, commit).
 - Browser-only verification for the product: host and friends in headless Chrome (Playwright, system
   Python /opt/homebrew/bin/python3, tools/net/web_player.py as a base). Native runs only as test tools.
-- Test runs never block the user (hidden, muted). The user plays build/native in ../rugby08 (play.sh):
+- Test runs never block the user (hidden) and are ALWAYS silent: native SDL_AUDIODRIVER=dummy, browsers
+  --mute-audio or a silent fake audio device; never audible output, also for audio experiments. The user plays build/native in ../rugby08 (play.sh):
   never touch that worktree's build.
 - Relays in checks pick a free port and fail if they cannot start (stray relays from other worktrees
   hold 8098 and 18097: never kill processes this session did not start).
