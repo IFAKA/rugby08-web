@@ -205,6 +205,7 @@ static void log_line(uint32_t frame) {
 }
 
 void ms_frame(uint32_t frame) {
+    ms_setup_frame(frame);
     static int every = -1;
     if (every < 0) {
         const char *e = getenv("RT_MS_LOG");

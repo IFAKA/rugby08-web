@@ -2,6 +2,7 @@
  * (checks grep for it); prefixes select a probe: args:, list:, ctl:, stick: (controller fields at their
  * offsets in the game's objects), shadow: (runtime/debug/shadow.c). */
 #include "debug.h"
+#include "match_state.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -113,5 +114,6 @@ void rt_hook_enter(uint32_t va, const char *name) {
     else if (!strncmp(name, "shadow:", 7)) rt_shadow_enter(va, name + 7);
     else if (!strncmp(name, "stick:", 6)) hook_stick(name);
     else if (!strncmp(name, "args:", 5)) hook_args(va, name);
+    else if (!strcmp(name, "ms:launch")) ms_launch();   /* runtime/core/match_setup.c */
     else rt_trace("%s entered (0x%08X)", name, va);
 }

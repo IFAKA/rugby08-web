@@ -69,6 +69,22 @@ likely the controlled one), ScrumHalfState 0x8EDAF0, OnGroundState 0x8EDA80, Seq
 - Per-player match stats in the team block's player records (100 bytes each, record 0 at block+0;
   CRugbyPlayer+0x10 points at its record): +0x48 u16 tries, +0x3E..+0x43 kick counters.
 
+## Match setup: everything that defines a match (on.match_setup)
+Two runs identical except for one Stadium Select choice differ, in static data, only in these bytes
+(the rest is menu and heap noise, equal in every variant):
+- +0x0000..+0x18C0 both teams' blocks (rosters, player records), written when Team Select is confirmed;
+  +0x18C0..+0x18CD per-team extras (FUN_004BFBA0). No heap pointers: equal across runs with different
+  heaps, so the bytes can move between games.
+- +0x18D0.. conditions and wind (+0x18D8, +0x18DC, wind vector floats +0x18E0/+0x18E8), +0x18EC half
+  length (index; 5 mins = 1, 10 mins = 2), +0x1902 stadium id (Murrayfield 29), +0x190C difficulty
+  (Club 0, Pro 1): written by Stadium Select's commit FUN_004FCDD0 from its toggles.
+- Launch: FUN_004FCDD0 then calls FUN_004F3D10, as do the other modes' commits (7 callers): the step
+  that starts loading the match. Hooked (tools/hooks.json "ms:launch", runtime/core/match_setup.c):
+  the host records +0..+0x1908 and +0x190C (MS_SETUP_BYTES); a friend's own setup is replaced there.
+  Verified: a friend that visited MY RUGBY and chose Portugal v Australia at Tbilisi plays the host's
+  Scotland v New Zealand at Murrayfield; 1000 frames after launch its picture differs from the host's
+  by 1.5 (mean per channel), its own match by 27 (tools/net/match_setup_check.sh).
+
 ## Controllers
 CRugbyTeam+0xC0..+0xCC CPlayerControl*[4] (one per human on that side, 0 = none).
 CPlayerControl (vtable 0x008EE9D8): +0xC team, +0x10 controlled CRugbyPlayer* (0 at set pieces),
@@ -83,8 +99,7 @@ PlayerStateMachine, +0xF8 MoveGroupInstance, +0x19C CannedSequenceInstance, +0x1
 0.9167 per frame (55/60): animation time. To do: the instance's sequence id and how the game picks it.
 
 ## Still to find
-RNG, animation id per player, which pad index each PhysicalInputBlock is, the setup bytes that make a
-match (teams, stadium, settings: on.match_setup).
+RNG, animation id per player, which pad index each PhysicalInputBlock is.
 
 ## Probes (runtime/debug/match_probe.c)
 RT_MS_SCAN=F,... objects by vtable + image refs; RT_MS_DUMP=A-B/S with RT_MS_DUMP_EXTRA=VA:SIZE,... and

@@ -456,7 +456,7 @@
       ],
       "desc": "The host's match setup applied on a friend whose own game took another menu route: both reach kickoff with identical setup bytes, same teams and stadium.",
       "check": "tools/net/match_setup_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "on.match_puppet",

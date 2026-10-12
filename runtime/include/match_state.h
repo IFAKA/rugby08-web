@@ -45,6 +45,15 @@ int ms_controlled(int team, int slot, int *index);  /* human slot 0..3 of a team
 uint32_t ms_setup_va(void);               /* the match setup block (static, image) */
 uint32_t ms_setup_size(void);
 
+/* match_setup.c: the bytes that define a match (rosters, kits, conditions, half length, stadium,
+   difficulty), recorded and replaced at the launch step (hook "ms:launch"). */
+#define MS_SETUP_BYTES (0x1908 + 4)
+int ms_setup_capture(uint8_t *out);       /* MS_SETUP_BYTES into out; returns the count */
+void ms_setup_offer(const uint8_t *in);   /* the next launch plays this setup instead of its own */
+uint64_t ms_setup_hash(void);
+void ms_launch(void);                     /* hook: FUN_004F3D10 entry */
+void ms_setup_frame(uint32_t frame);      /* RT_MS_AFTER_LAUNCH (ms_frame calls it) */
+
 void ms_frame(uint32_t frame);            /* Present hook: RT_MS_LOG=N trace line every N frames */
 
 #ifdef __cplusplus

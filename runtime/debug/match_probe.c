@@ -71,11 +71,35 @@ static void dump_obj(FILE *f, uint32_t frame, uint32_t va, uint32_t size) {
     fwrite(h, 4, 3, f);
     fwrite(G2H(va), 1, size, f);
 }
+static const char *ms_dir(void) {   /* RT_MS_DIR: where dump.bin and snap_F.bin go (default logs/ms) */
+    const char *d = getenv("RT_MS_DIR");
+    return d && *d ? d : "logs/ms";
+}
+
+static void dump_extra(FILE *f, uint32_t frame) {
+    /* RT_MS_DUMP_EXTRA=VA:SIZE[,VA:SIZE...]: more ranges in the same records */
+    for (const char *e = getenv("RT_MS_DUMP_EXTRA"); e && *e; e = strchr(e, ',') ? strchr(e, ',') + 1 : "") {
+        uint32_t va = (uint32_t)strtoul(e, NULL, 16),
+                 n = strchr(e, ':') ? (uint32_t)strtoul(strchr(e, ':') + 1, NULL, 16) : 4;
+        uint32_t h[3] = { frame, va, n };
+        fwrite(h, 4, 3, f);
+        fwrite(G2H(va), 1, n, f);
+    }
+}
+
 static void dump(uint32_t frame) {
     static FILE *f;
     uint32_t rugby = rd32(MS_RUGBY_PTR);
-    if (!rugby) return;
-    if (!f && !(f = fopen("logs/ms/dump.bin", "wb"))) return;
+    if (!f) {
+        char path[512];
+        snprintf(path, sizeof path, "%s/dump.bin", ms_dir());
+        if (!(f = fopen(path, "wb"))) return;
+    }
+    dump_extra(f, frame);   /* any frame: menus too */
+    if (!rugby) {
+        fflush(f);
+        return;
+    }
     dump_obj(f, frame, rugby, 0x100);
     dump_obj(f, frame, rd32(rugby + 0x98), 0x1DC);
     for (int t = 0; t < 2; t++) {
@@ -93,26 +117,19 @@ static void dump(uint32_t frame) {
             }
         }
     }
-    /* RT_MS_DUMP_EXTRA=VA:SIZE[,VA:SIZE...]: more ranges in the same records */
-    for (const char *e = getenv("RT_MS_DUMP_EXTRA"); e && *e; e = strchr(e, ',') ? strchr(e, ',') + 1 : "") {
-        uint32_t va = (uint32_t)strtoul(e, NULL, 16),
-                 n = strchr(e, ':') ? (uint32_t)strtoul(strchr(e, ':') + 1, NULL, 16) : 4;
-        uint32_t h[3] = { frame, va, n };
-        fwrite(h, 4, 3, f);
-        fwrite(G2H(va), 1, n, f);
-    }
     fflush(f);
 }
 
 /* RT_MS_SNAP=F[,F...]: image and heap at those frames -> logs/ms/snap_F.bin
  * ({u32 va, u32 size, bytes} for [image), then [heap)). */
 static void snap(uint32_t frame) {
-    char path[64];
-    snprintf(path, sizeof path, "logs/ms/snap_%u.bin", frame);
+    char path[512];
+    snprintf(path, sizeof path, "%s/snap_%u.bin", ms_dir(), frame);
     FILE *f = fopen(path, "wb");
     if (!f) return;
     uint32_t r[2][2] = { { RT_IMAGE_BASE, RT_IMAGE_END }, { RT_HEAP_LO, rt_heap_top() } };
-    for (int i = 0; i < 2; i++) {
+    int nr = getenv("RT_MS_SNAP_IMAGE") ? 1 : 2;   /* RT_MS_SNAP_IMAGE=1: the image only (17 MB, not ~1 GB) */
+    for (int i = 0; i < nr; i++) {
         uint32_t h[2] = { r[i][0], r[i][1] - r[i][0] };
         fwrite(h, 4, 2, f);
         fwrite(G2H(r[i][0]), 1, h[1], f);

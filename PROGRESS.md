@@ -372,3 +372,9 @@ Next: `./init.sh next` shows what to fix.
 - runtime/core/match_state.c + include/match_state.h: ms_active/phase/clock/player/ball/score/controlled, RT_MS_LOG=N trace line; probes moved to runtime/debug/match_probe.c (RT_MS_SCAN/DUMP/SNAP).
 - Verified on screenshots of the same run: HUD clock = decoded clock (01:47 at f14400, 29:28 at f29400), score 0-3 -> 0-10 matches, phases Free = open play, Formation = rucks/mauls/scrums, LineOut, GoalKick, Kickoff, Empty = cutscenes. Open-play clock 8.8 s per 60 frames (81/81). Points table settled: try 5, type 1 conversion 2, types 2/3 three.
 - Check tools/net/match_state_check.sh (eval match_state_eval.py) PASS. Next: on.match_setup (setup bytes; two natives by different menu routes reach kickoff with identical setup).
+
+## 2026-10-12 — on.match_setup PASS (branch online-ha)
+- The whole match definition is the setup block (0x9B6830): rosters (+0..+0x18C0, written at Team Select confirm), extras, conditions/wind, half length +0x18EC, stadium +0x1902, difficulty +0x190C (Stadium Select commit FUN_004FCDD0). Found by single-setting diff runs (half length, difficulty) in det mode.
+- Launch step FUN_004F3D10 (called by every mode's commit) hooked via tools/hooks.json "ms:launch" -> runtime/core/match_setup.c: records the setup (RT_MS_SETUP_OUT), replaces a friend's (RT_MS_SETUP_IN, later the network), RT_MS_AFTER_LAUNCH=K:PNG.
+- Check tools/net/match_setup_check.sh: friend route tests/replays/friend_my_rugby.txt (MY RUGBY first, Portugal v Australia, Tbilisi) plays the host's match: setup/teams/stadium equal, picture diff 1.5 vs 27.0 for its own match.
+- Learned: menus use W (Triangle) for Back; Esc/Backspace do nothing there. Next: on.match_puppet (friend applies host state every frame, local simulation suppressed).
