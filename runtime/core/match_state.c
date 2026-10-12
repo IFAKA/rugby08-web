@@ -64,7 +64,15 @@ static void dump(uint32_t frame) {
         uint32_t team = rd32(rugby + 0x68 + 4 * (uint32_t)t);
         if (!team) continue;
         dump_obj(f, frame, team, 0x1A4);
-        for (uint32_t i = 0; i < rd8(team + 0x128) && i < 15; i++) dump_obj(f, frame, rd32(team + 0xD4 + 4 * i), 0x240);
+        for (uint32_t i = 0; i < rd8(team + 0x128) && i < 15; i++) {
+            uint32_t pl = rd32(team + 0xD4 + 4 * i);
+            dump_obj(f, frame, pl, 0x240);
+            /* RT_MS_DUMP_SUB=OFF:SIZE[,...]: also the objects the player points at (player+OFF) */
+            for (const char *e = getenv("RT_MS_DUMP_SUB"); e && *e; e = strchr(e, ',') ? strchr(e, ',') + 1 : "") {
+                uint32_t off = (uint32_t)strtoul(e, NULL, 16), n = strchr(e, ':') ? (uint32_t)strtoul(strchr(e, ':') + 1, NULL, 16) : 0x40;
+                if (off + 4 <= 0x240) dump_obj(f, frame, rd32(pl + off), n);
+            }
+        }
     }
     /* RT_MS_DUMP_EXTRA=VA:SIZE[,VA:SIZE...]: more ranges in the same records */
     for (const char *e = getenv("RT_MS_DUMP_EXTRA"); e && *e; e = strchr(e, ',') ? strchr(e, ',') + 1 : "") {

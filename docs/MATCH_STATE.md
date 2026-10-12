@@ -56,5 +56,17 @@ CRugbyTeam+0xC0..+0xCC CPlayerControl*[4] (one per human on that side, 0 = none)
 CPlayerControl (vtable 0x008EE9D8): +0xC team, +0x10 controlled CRugbyPlayer* (0 at set pieces),
 +0x14 current set-piece object (CRugbyRuck / CRugbyLineOut), +0x1C PhysicalInputBlock* (its pad).
 
+## Player motion is animation-driven
+No velocity is stored in CRugbyPlayer or any object it points at (per-frame position deltas correlate
+with no field, r < 0.7, 22k samples): FIFAANIM root motion moves the players. So the state to replicate
+per player is position, heading and the animation, not a velocity. Player sub-objects: +0xBC
+PlayerStateMachine, +0xF8 MoveGroupInstance, +0x19C CannedSequenceInstance, +0x180..+0x188 MoveGroup*
+(the moves available), +0xDC HbsSequenceChannel. Player +0x21C and the instance's +0x28 advance
+0.9167 per frame (55/60): animation time. To do: the instance's sequence id and how the game picks it.
+
 ## Still to find
-RNG, animation state per player, player velocity, which pad index each PhysicalInputBlock is.
+RNG, animation id per player, which pad index each PhysicalInputBlock is, points of score types 1/2.
+
+## Probes (runtime/core/match_state.c)
+RT_MS_SCAN=F,... objects by vtable + image refs; RT_MS_DUMP=A-B/S with RT_MS_DUMP_EXTRA=VA:SIZE,... and
+RT_MS_DUMP_SUB=PLAYEROFF:SIZE,... -> logs/ms/dump.bin; RT_MS_SNAP=F,... whole image+heap -> logs/ms/snap_F.bin.
