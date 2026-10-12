@@ -31,6 +31,11 @@ each friend's own game loads the same match and shows the host's state.
   `tools/rtti.sh`, wasm function names (`--profiling-funcs`).
 - The from-boot lockstep (`runtime/core/netplay.c`, det.c, `net.*` checks) stays until on.match_flow
   passes, then its join/roster path is retired (det.c stays for replays/tests).
+- det_hash() covers dlmalloc metadata, which holds HOST pointers: the hash depends on where the host
+  mmaps the guest arena (measured on tidy: only --log/--user-dir path lengths differed -> different
+  hash at frame 60, identical pixels). tidy pins the native arena (platform.c plat_guest_arena, hint
+  0x10000000000). on.* checks therefore compare decoded match state (match_state.c), never heap
+  hashes across processes or machines.
 
 ## Steps (each = one features.json item; finish its check before the next)
 1. **on.match_map** — find the match in guest memory. Deliverable: `docs/MATCH_STATE.md` +
