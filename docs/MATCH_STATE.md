@@ -38,5 +38,23 @@ positions, +0x3C stamina-like (84..100). To do: velocity, animation id/time, rol
 +0x114 holder CRugbyPlayer* (0 when loose/in flight; within 0.6 m of the ball 95% of frames),
 +0x118 last holder, +0x11C previous holder.
 
+## Clock and score (in the match setup, 0x009B6830)
+- setup+0x18F0 float: match clock in game seconds (HUD mm:ss; 447.3 = 07:27 at f17000). The clock HUD
+  reads this offset (FUN_0058a680).
+- setup+0xBB8 home team id, setup+0x1818 away team id (team block +0xBB8 each; NZ = 13 in the runs).
+- setup+0x1908: score events, singly linked list of 0x14-byte nodes {u16 scorer player id, u32 type,
+  u32 team id, float clock, next}. Added by FUN_005ce320(setup, team id, player id, type, time, notify)
+  (FUN_005ce32a appends and posts a CScoreData message 0xA7); freed by FUN_005ce520.
+  Types: 0 try ("adding try", FUN_00616e20), 1 and 2 the two place-kick results of FUN_00430b30, 3 the
+  3-point kick seen at f17450 (HUD 0-3). Points of 1/2 still to confirm from a conversion.
+  There is no stored score total: the HUD and the scorers list (FUN_00577e60) read this list.
+- Per-player match stats in the team block's player records (100 bytes each, record 0 at block+0;
+  CRugbyPlayer+0x10 points at its record): +0x48 u16 tries, +0x3E..+0x43 kick counters.
+
+## Controllers
+CRugbyTeam+0xC0..+0xCC CPlayerControl*[4] (one per human on that side, 0 = none).
+CPlayerControl (vtable 0x008EE9D8): +0xC team, +0x10 controlled CRugbyPlayer* (0 at set pieces),
++0x14 current set-piece object (CRugbyRuck / CRugbyLineOut), +0x1C PhysicalInputBlock* (its pad).
+
 ## Still to find
-Score, match clock (HUD shows mm:ss), controlled player per pad, RNG, animation state per player.
+RNG, animation state per player, player velocity, which pad index each PhysicalInputBlock is.
