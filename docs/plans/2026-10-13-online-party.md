@@ -130,3 +130,16 @@ direct (one hop, no TCP head-of-line), then host input delay (equal feel), then 
 - Relays in checks pick a free port and fail if they cannot start (stray relays from other worktrees
   hold 8098 and 18097: never kill processes this session did not start).
 - Measure everything (trace lines, compare tools, screenshots); root causes, no workarounds.
+
+## Token rules (same quality, fewer tokens)
+- **One step per chat.** Each step ends with its check, a commit and a PROGRESS.md note; then start a new
+  chat (or /compact) and resume from the plan + PROGRESS.md + features.json.
+- **Forks only for long, truly parallel work** (a slow bisect, a separate build). A fork copies the whole
+  conversation: never fork for something a few greps answer. For read-only searches prefer a fresh
+  Explore agent (it does not inherit the chat).
+- **Narrow queries.** tools/query/callgraph.py first; tools/query/fn.sh with --max and rg filters; never
+  print more than ~50 lines of generated code or logs; grep logs for the lines that matter.
+- **Iterate small, verify once.** Short targeted runs (a few thousand frames, one screenshot, one trace
+  line) while developing; the full check once at the end of the step. Long checks in the background,
+  polled rarely (sleep ~10 minutes, not every minute).
+- **Short messages.** Status = results and decisions only.
