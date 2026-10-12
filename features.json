@@ -419,7 +419,7 @@
       ],
       "desc": "Drop-in in real browser pages, as players use it: the game boots straight in, the host's code comes from its Online panel, a friend opens their own game and types the code into the Join box 20 s later, catches up, gets the \"You're in\" toast, its keys reach its controller, hashes stay equal, and the host plays on after the friend leaves.",
       "check": "timeout 1200 /opt/homebrew/bin/python3 tools/net/net_dropin.py   # system Python: Playwright",
-      "passes": true
+      "passes": false
     },
     {
       "id": "web.split_check",
@@ -492,7 +492,7 @@
       ],
       "desc": "Online screens drawn inside the game (Host code, Join by typing the code, party badge, leave), keyboard/mouse/pad; no HTML panel; native and browser.",
       "check": "tools/net/ingame_ui_check.sh",
-      "passes": true
+      "passes": false
     },
     {
       "id": "on.cross_platform",
