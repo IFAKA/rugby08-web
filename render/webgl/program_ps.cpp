@@ -2,25 +2,6 @@
 #include "internal.h"
 
 // ---- pixel shaders --------------------------------------------------------------------------
-// Sampler state for a pixel shader's texture (the device's ApplySamplerStates is a member defined
-// later): D3DTADDRESS_* -> GL wrap, D3DTEXF_* -> GL filters (mipmaps only when the texture has them).
-void progps_sampler(int st) {
-    auto wrap = [](DWORD m) -> GLint {
-        return (m == 2 || m == 5) ? GL_MIRRORED_REPEAT : (m == 3 || m == 4) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
-    };
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap(g_sampler_states[st][D3DSAMP_ADDRESSU]));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap(g_sampler_states[st][D3DSAMP_ADDRESSV]));
-    bool point_mag = g_sampler_states[st][D3DSAMP_MAGFILTER] == D3DTEXF_POINT;
-    bool point_min = g_sampler_states[st][D3DSAMP_MINFILTER] == D3DTEXF_POINT;
-    DWORD mip = g_sampler_states[st][D3DSAMP_MIPFILTER];
-    bool has_mips = g_mipmapped_textures.count(g_texture_stages[st]) != 0;
-    GLint minf = !has_mips || mip == 0 ? (point_min ? GL_NEAREST : GL_LINEAR)
-               : mip == D3DTEXF_POINT ? (point_min ? GL_NEAREST_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_NEAREST)
-                                      : (point_min ? GL_NEAREST_MIPMAP_LINEAR : GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, point_mag ? GL_NEAREST : GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minf);
-}
-
 D3D9WProgPS* g_progps_active = nullptr;
 const float (*g_progps_consts)[4] = nullptr;
 

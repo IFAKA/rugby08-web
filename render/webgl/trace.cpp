@@ -85,3 +85,25 @@ void D3D9Device::trace_draw(const char* path, unsigned count) {
            (unsigned)m_render_states[20], (unsigned)m_render_states[7], (unsigned)m_render_states[14],
            (unsigned)m_render_states[15], (unsigned)m_render_states[24], (unsigned)m_render_states[22], (int)m_fbo_rendering);
 }
+
+// D3D9W_TRACE_BLEND=1: the state of the first skinned (XYZBn) indexed draws.
+void D3D9Device::trace_blend(GLsizei stride) {
+    if (fvf_blend_weights(g_current_fvf) > 0 && getenv("D3D9W_TRACE_BLEND")) {   // skinned-draw state, a few times
+        static int n;
+        if (n++ < 6)
+            printf("trace-blend: fvf 0x%X stride %d light %u vblend %u mat d(%.2f %.2f %.2f %.2f) a(%.2f %.2f %.2f) "
+                   "L0 on %d type %d d(%.2f %.2f %.2f) dir(%.2f %.2f %.2f) amb 0x%08X op %u a1 %u a2 %u aop %u tex %u tc %d "
+                   "s1op %u colorvertex %u dms %u\n",
+                   (unsigned)g_current_fvf, (int)stride, (unsigned)m_render_states[D3DRS_LIGHTING],
+                   (unsigned)m_render_states[D3DRS_VERTEXBLEND], g_material.Diffuse.r, g_material.Diffuse.g,
+                   g_material.Diffuse.b, g_material.Diffuse.a, g_material.Ambient.r, g_material.Ambient.g,
+                   g_material.Ambient.b, (int)g_light_enabled[0], (int)g_lights[0].Type, g_lights[0].Diffuse.r,
+                   g_lights[0].Diffuse.g, g_lights[0].Diffuse.b, g_lights[0].Direction.x, g_lights[0].Direction.y,
+                   g_lights[0].Direction.z, (unsigned)m_render_states[D3DRS_AMBIENT],
+                   (unsigned)g_texture_stage_states[0][D3DTSS_COLOROP], (unsigned)g_texture_stage_states[0][D3DTSS_COLORARG1],
+                   (unsigned)g_texture_stage_states[0][D3DTSS_COLORARG2], (unsigned)g_texture_stage_states[0][D3DTSS_ALPHAOP],
+                   (unsigned)g_texture_stages[0], (int)((g_current_fvf >> 8) & 0xF),
+                   (unsigned)g_texture_stage_states[1][D3DTSS_COLOROP], (unsigned)m_render_states[141],
+                   (unsigned)m_render_states[145]);
+    }
+}

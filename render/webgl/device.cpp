@@ -14,35 +14,19 @@ D3D9Device::D3D9Device() : m_current_index_buffer(0), m_current_ib_format(D3DFMT
 
     if (g_fbo == 0) glGenFramebuffers(1, &g_fbo);
 
-    m_scissor_rect = {0, 0, (LONG)g_logical_width, (LONG)g_logical_height};
-
     // Backbuffer surface matches the app's backbuffer resolution
     m_backbuffer_surface = new D3D9Surface(g_logical_width, g_logical_height, 0, false, true);
     m_current_rt = m_backbuffer_surface;
     m_current_ds = nullptr; // Default DS is implicit in WebGL context
-    
-    // Initialize matrices to identity
+
     matrix_identity(&m_world);
     matrix_identity(&m_world1);
     matrix_identity(&m_view);
     matrix_identity(&m_projection);
-    for (int i = 0; i < 8; i++) {
-        matrix_identity(&g_texture_matrices[i]);
-        // Default sampler states
-        g_sampler_states[i][D3DSAMP_ADDRESSU] = D3DTADDRESS_WRAP;
-        g_sampler_states[i][D3DSAMP_ADDRESSV] = D3DTADDRESS_WRAP;
-        g_sampler_states[i][D3DSAMP_MAGFILTER] = D3DTEXF_LINEAR;
-        g_sampler_states[i][D3DSAMP_MINFILTER] = D3DTEXF_LINEAR;
-        g_sampler_states[i][D3DSAMP_MIPFILTER] = D3DTEXF_NONE; // D3D9 default: no mip filtering
-
-        // Default texture stage states (D3D9 defaults)
-        if (i == 0) {
-            g_texture_stage_states[i][D3DTSS_COLOROP] = D3DTOP_MODULATE;
-            g_texture_stage_states[i][D3DTSS_ALPHAOP] = D3DTOP_SELECTARG1;
-        } else {
-            g_texture_stage_states[i][D3DTSS_COLOROP] = D3DTOP_DISABLE;
-            g_texture_stage_states[i][D3DTSS_ALPHAOP] = D3DTOP_DISABLE;
-        }
+    reset_sampler_states();
+    for (int i = 0; i < 8; i++) {   // D3D9's texture stage defaults
+        g_texture_stage_states[i][D3DTSS_COLOROP] = i == 0 ? D3DTOP_MODULATE : D3DTOP_DISABLE;
+        g_texture_stage_states[i][D3DTSS_ALPHAOP] = i == 0 ? D3DTOP_SELECTARG1 : D3DTOP_DISABLE;
         g_texture_stage_states[i][D3DTSS_COLORARG1] = D3DTA_TEXTURE;
         g_texture_stage_states[i][D3DTSS_COLORARG2] = D3DTA_CURRENT;
         g_texture_stage_states[i][D3DTSS_ALPHAARG1] = D3DTA_TEXTURE;
@@ -187,7 +171,6 @@ HRESULT D3D9Device::Reset(D3DPRESENT_PARAMETERS* pPresentationParameters) {
     if (m_backbuffer_surface) { m_backbuffer_surface->m_width = (UINT)w; m_backbuffer_surface->m_height = (UINT)h; }
     m_current_rt = m_backbuffer_surface;
     g_viewport.X = 0; g_viewport.Y = 0; g_viewport.Width = (DWORD)w; g_viewport.Height = (DWORD)h;
-    m_scissor_rect = {0, 0, (LONG)w, (LONG)h};
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, w, h);
     return D3D_OK;

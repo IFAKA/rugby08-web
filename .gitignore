@@ -16,6 +16,6 @@
 .DS_Store
 __pycache__/
 /.venv
-third_party/wine-specs/
+/third_party/wine-specs
 /userdata
 node_modules/

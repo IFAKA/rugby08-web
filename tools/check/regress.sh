@@ -5,7 +5,9 @@
 #   tools/check/regress.sh capture DIR [--full]    record scenarios into DIR
 #   tools/check/regress.sh compare BASE DIR         images/audio/log signature within tolerance
 # Scenarios: intro (300 frames), menu (skip_to_menu replay, 4600 frames), audio (900 frames);
-# --full adds match (tutorial_match replay to frame 17000, 14 shots of the 3D match).
+# --full adds match (play_now_match replay to frame 21100: 10 shots, team select to the 3D match).
+# The guest wall clock is pinned (RT_FIXED_EPOCH): the game seeds rand() from time(), and the menu
+# slideshow and match setup otherwise differ run to run.
 cd "$(dirname "$0")/../.." || exit 1
 mkdir -p logs
 LOG=logs/regress.log
@@ -16,10 +18,11 @@ shift
 run() { # name, timeout, rugby08 args...
   local name=$1 tmo=$2
   shift 2
-  SDL_AUDIODRIVER=dummy timeout "$tmo" "$BIN" --log "$OUT/$name.log" "$@" >"$OUT/$name.out" 2>&1
+  RT_FIXED_EPOCH=1199145600 SDL_AUDIODRIVER=dummy timeout "$tmo" "$BIN" --log "$OUT/$name.log" "$@" >"$OUT/$name.out" 2>&1
   echo "$name exit $?" >>"$OUT/status.txt"
   # signature: what must not change -- missing imports/methods, faults, dispatch misses
-  grep -ohE 'UNIMPL [A-Za-z0-9_!:.() ]+|FAULT|FATAL|CPU fault|unresolved VA 0x[0-9A-F]+' "$OUT/$name.log" "$OUT/$name.out" |
+  grep -ohE 'UNIMPL [A-Za-z0-9_!:.() ]+|FAULT|FATAL|CPU fault|unresolved VA 0x[0-9A-F]+|[Cc]ompil[a-z]* failed|link failed|GL program failed' \
+    "$OUT/$name.log" "$OUT/$name.out" |
     sort -u >"$OUT/$name.sig"
 }
 
@@ -35,11 +38,11 @@ case "$cmd" in
     run menu 300 --frames 4600 --replay tests/replays/skip_to_menu.txt --screenshot "$OUT/menu.png"
     run audio 120 --frames 900 --audio-capture "$OUT/audio.wav"
     if [ "$full" = --full ]; then
-      rm -rf logs/film
-      mkdir -p logs/film
-      run match 900 --frames 17000 --replay tests/replays/tutorial_match.txt
+      rm -rf logs/match
+      mkdir -p logs/match
+      run match 1200 --frames 21100 --replay tests/replays/play_now_match.txt
       mkdir -p "$OUT/match"
-      cp logs/film/*.png "$OUT/match/" 2>/dev/null
+      cp logs/match/*.png "$OUT/match/" 2>/dev/null
     fi
     echo "regress: captured $(find "$OUT" -name '*.png' | wc -l | tr -d ' ') images into $OUT ($(tr '\n' ' ' <"$OUT/status.txt"))"
     ;;

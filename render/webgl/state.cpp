@@ -27,9 +27,6 @@ size_t g_up_vbo_size = 0;  // Track VBO size for persistent buffer optimization
 size_t g_up_ibo_size = 0;  // Track IBO size for persistent buffer optimization
 
 GLuint& g_cached_texture = g_last_bound_texture_id;
-GLuint g_cached_program = 0xFFFFFFFF;  // Last used shader program
-DWORD g_cached_fvf = 0xFFFFFFFF;       // Last FVF
-bool g_cached_vertex_attribs[4] = {false};  // pos, color, tex0, tex1
 
 // Viewport and Scissor state caching (to avoid glGet* calls)
 GLint g_cached_viewport[4] = {0, 0, 0, 0};  // Overwritten by first SetViewport
@@ -41,13 +38,9 @@ D3DVIEWPORT9 g_viewport;
 int g_logical_width = 0;    // App's backbuffer resolution (set from D3DPRESENT_PARAMETERS)
 int g_logical_height = 0;
 
-// Texture matrices
-D3DMATRIX g_texture_matrices[8];
 // Sampler states [Sampler][Type]
 DWORD g_sampler_states[8][14]; // Up to D3DSAMP_DMAPOFFSET
 
-// Transform matrices (for GetTransform)
-D3DMATRIX g_transform_world;
 
 // Check for OpenGL errors (silent in release builds)
 void CheckGLError(const char* label) {
@@ -59,8 +52,7 @@ void CheckGLError(const char* label) {
 }
 
 
-D3DMATRIX g_transform_view;
-D3DMATRIX g_transform_projection;
+D3DMATRIX g_transform_view;   // the camera position for specular lighting
 
 bool g_render_state_specular = false;   // D3DRS_SPECULARENABLE: add the specular colour after the stages
 GLuint g_stream_vb[16];          // SetStreamSource: every stream (the fixed-function paths use stream 0)

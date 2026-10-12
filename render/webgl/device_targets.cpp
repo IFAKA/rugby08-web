@@ -167,7 +167,6 @@ HRESULT D3D9Device::GetViewport(D3DVIEWPORT9* pViewport) {
 
 HRESULT D3D9Device::SetScissorRect(const RECT* pRect) {
     if (!pRect) return D3DERR_INVALIDCALL;
-    m_scissor_rect = *pRect;
     
     if (!m_current_rt) return D3D_OK;
 

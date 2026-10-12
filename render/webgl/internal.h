@@ -43,50 +43,36 @@ extern D3DMATERIAL9 g_material;
 extern GLuint g_up_vbo, g_up_ibo;                         // draw-from-pointer (UP) buffers
 extern size_t g_up_vbo_size, g_up_ibo_size;
 extern GLuint& g_cached_texture;                          // = g_last_bound_texture_id
-extern GLuint g_cached_program;
-extern DWORD g_cached_fvf;
-extern bool g_cached_vertex_attribs[4];
 extern GLint g_cached_viewport[4];
 extern GLboolean g_cached_scissor_test;
 extern GLint g_cached_scissor_box[4];
 extern DWORD g_texture_stage_states[8][33];
 extern D3DVIEWPORT9 g_viewport;
 extern int g_logical_width, g_logical_height;             // the app's back buffer size
-extern D3DMATRIX g_texture_matrices[8];
 extern DWORD g_sampler_states[8][14];
-extern D3DMATRIX g_transform_world, g_transform_view, g_transform_projection;
+extern D3DMATRIX g_transform_view;                        // the camera, for specular lighting
 extern bool g_render_state_specular;                      // D3DRS_SPECULARENABLE
 extern GLuint g_stream_vb[16];                            // SetStreamSource, every stream
 extern GLsizei g_stream_stride[16];
 extern GLuint g_fbo;                                      // the FBO render targets attach to
 
 // ---- locations.cpp: one global per attribute/uniform name, swapped in per GL program --------------
-extern GLuint g_shader_program;
-extern GLint g_position_location, g_blendweight_location, g_blend_uniform, g_mvp1_uniform;
-extern GLint g_diffuse_from_vertex_uniform, g_ambient_from_vertex_uniform, g_light0_type_uniform,
-    g_light0_direction_uniform, g_light1_type_uniform, g_light1_direction_uniform, g_light2_type_uniform,
-    g_light2_direction_uniform;
-extern GLint g_color_location, g_texcoord_location, g_texcoord1_location;
-extern GLint g_texture_uniform, g_texture_lm_uniform, g_use_texture_uniform, g_use_lightmap_uniform;
-extern GLint g_mvp_uniform, g_tex_matrix_uniform, g_use_tex_matrix_uniform;
-extern GLint g_clip_plane_uniform, g_clip_plane_enabled_uniform, g_fbo_flip_y_uniform;
-extern GLint g_stage0_colorop_uniform, g_stage0_colorarg1_uniform, g_stage0_colorarg2_uniform,
-    g_stage0_alphaop_uniform, g_stage0_alphaarg1_uniform, g_stage0_alphaarg2_uniform, g_stage1_op_uniform;
-extern GLint g_ts_uniform;
-extern GLint g_material_emissive_uniform, g_material_specular_uniform, g_matsrc_uniform, g_specular_enabled_uniform,
-    g_camera_pos_uniform, g_nlights_uniform, g_lpos_uniform, g_ldir_uniform, g_ldiff_uniform, g_lamb_uniform,
-    g_lspec_uniform, g_latt_uniform, g_lspot_uniform, g_specular_add_uniform;
-extern GLint g_alpha_test_enabled_uniform, g_alpha_ref_uniform, g_texture_factor_uniform, g_lod_bias_uniform;
-extern GLint g_fog_enabled_uniform, g_fog_start_uniform, g_fog_end_uniform, g_fog_color_uniform, g_view_model_uniform;
-extern GLint g_normal_location, g_world_uniform, g_lighting_enabled_uniform, g_material_diffuse_uniform,
-    g_material_ambient_uniform, g_global_ambient_uniform;
-extern GLint g_light0_enabled_uniform, g_light0_position_uniform, g_light0_diffuse_uniform, g_light0_ambient_uniform,
-    g_light0_attenuation_uniform, g_light0_range_uniform;
-extern GLint g_light1_enabled_uniform, g_light1_position_uniform, g_light1_diffuse_uniform, g_light1_ambient_uniform,
-    g_light1_attenuation_uniform, g_light1_range_uniform;
-extern GLint g_light2_enabled_uniform, g_light2_position_uniform, g_light2_diffuse_uniform, g_light2_ambient_uniform,
-    g_light2_attenuation_uniform, g_light2_range_uniform;
-extern std::vector<GLint> g_ff_locs;                      // the fixed-function program's locations
+// a_<name> -> g_<name>_location, u_<name> -> g_<name>_uniform. Every name the shaders declare (the
+// fixed-function ones in glsl/, the alpha test and fog that program_ps.cpp adds to pixel shaders).
+#define D3D9W_ATTRIBS(X) X(position) X(blendweight) X(normal) X(color) X(texcoord) X(texcoord1)
+#define D3D9W_UNIFORMS(X)                                                                                         \
+    X(blend) X(mvp1) X(texture) X(texture_lm) X(use_texture) X(use_lightmap) X(mvp) X(world) X(clip_plane)       \
+    X(clip_plane_enabled) X(fbo_flip_y) X(alpha_test_enabled) X(alpha_ref) X(texture_factor) X(lod_bias)         \
+    X(fog_enabled) X(fog_start) X(fog_end) X(fog_color) X(view_model) X(lighting_enabled) X(material_diffuse)    \
+    X(material_ambient) X(global_ambient) X(ts) X(material_emissive) X(material_specular) X(matsrc)               \
+    X(specular_enabled) X(camera_pos) X(nlights) X(lpos) X(ldir) X(ldiff) X(lamb) X(lspec) X(latt) X(lspot)      \
+    X(specular_add)
+#define D3D9W_DECL_A(n) extern GLint g_##n##_location;
+#define D3D9W_DECL_U(n) extern GLint g_##n##_uniform;
+D3D9W_ATTRIBS(D3D9W_DECL_A)
+D3D9W_UNIFORMS(D3D9W_DECL_U)
+extern GLuint g_shader_program;                           // the fixed-function program
+extern std::vector<GLint> g_ff_locs;                      // its locations
 void loc_query(GLuint p, std::vector<GLint>& v);
 void loc_apply(const std::vector<GLint>& v);
 
@@ -122,9 +108,9 @@ void use_draw_program();                                  // program_ff.cpp
 void ff_blend_attrib(size_t base, GLsizei stride);       // program_vs.cpp
 void progvs_attribs(size_t base, GLsizei stride, bool fbo, int base_vertex);
 D3D9WLinked* progps_link(D3D9WProgVS* vsp, D3D9WProgPS* psp);   // program_ps.cpp
-void progps_sampler(int st);
 void SetFFPLightingUniforms(const D3DMATRIX* world, const DWORD* render_states, bool vertex_color);   // lighting.cpp
-void ApplySamplerStates(DWORD Sampler);                   // sampler.cpp
+void apply_sampler_states(DWORD st, bool aniso);           // sampler.cpp
+void reset_sampler_states();                              // program_ff.cpp
 void EnsureUPBuffers();                                   // buffers.cpp
 
 // ---- trace.cpp ---------------------------------------------------------------------------------

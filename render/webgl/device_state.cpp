@@ -186,7 +186,6 @@ HRESULT D3D9Device::SetTransform(D3DTRANSFORMSTATETYPE State, const D3DMATRIX* p
     switch (State) {
         case D3DTS_WORLD: 
             m_world = *pMatrix;
-            g_transform_world = *pMatrix;
             break;
         case D3DTS_VIEW: 
             m_view = *pMatrix;
@@ -197,12 +196,10 @@ HRESULT D3D9Device::SetTransform(D3DTRANSFORMSTATETYPE State, const D3DMATRIX* p
             break;
         case D3DTS_PROJECTION: 
             m_projection = *pMatrix;
-            g_transform_projection = *pMatrix;
             break;
         case D3DTS_TEXTURE0: case D3DTS_TEXTURE1: case D3DTS_TEXTURE2: case D3DTS_TEXTURE3:
         case D3DTS_TEXTURE4: case D3DTS_TEXTURE5: case D3DTS_TEXTURE6: case D3DTS_TEXTURE7:
-            g_texture_matrices[State - D3DTS_TEXTURE0] = *pMatrix;
-            break;
+            break;   // texture transforms: not applied (no D3DTSS_TEXTURETRANSFORMFLAGS support)
         default: return -1;
     }
     return D3D_OK;

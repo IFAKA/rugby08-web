@@ -172,23 +172,4 @@ extern "C" IDirect3D9* WINAPI Direct3DCreate9(UINT SDKVersion) {
     return new D3D9();
 }
 
-extern "C" void D3D9_RegisterTextureName(IDirect3DTexture9*, const char*) {}
-
-// Accessor functions for external modules (e.g. text rendering bridge)
-extern "C" {
-    void D3D9_GetTextureInfo(IDirect3DTexture9* pTex, unsigned int* gl_id, unsigned int* w, unsigned int* h) {
-        if (!pTex) return;
-        D3D9Texture* tex = (D3D9Texture*)pTex;
-        if (gl_id) *gl_id = tex->m_texture;
-        if (w) *w = tex->m_width;
-        if (h) *h = tex->m_height;
-    }
-
-    void D3D9_InvalidateTextureCache() {
-        g_last_bound_texture_id = 0xFFFFFFFF;
-        g_last_bound_lightmap_id = 0xFFFFFFFF;
-        g_cached_texture = 0xFFFFFFFF;
-    }
-}
-
 extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t) { return t ? static_cast<D3D9Texture *>(t)->GetGLTexture() : 0; }

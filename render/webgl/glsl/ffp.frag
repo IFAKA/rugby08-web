@@ -11,13 +11,6 @@
     uniform sampler2D u_texture_lm;
     uniform bool u_use_texture;
     uniform bool u_use_lightmap;
-    uniform int u_stage0_colorop;
-    uniform int u_stage0_colorarg1;
-    uniform int u_stage0_colorarg2;
-    uniform int u_stage0_alphaop;
-    uniform int u_stage0_alphaarg1;
-    uniform int u_stage0_alphaarg2;
-    uniform int u_stage1_op;
     uniform int u_ts[18];      // stages 0-2: COLOROP, COLORARG1, COLORARG2, ALPHAOP, ALPHAARG1, ALPHAARG2
     uniform bool u_alpha_test_enabled;
     uniform float u_alpha_ref;
@@ -30,24 +23,6 @@
     uniform float u_fog_end;
     uniform vec3 u_fog_color;
     varying float v_eye_depth;
-
-    // Helper function to select texture argument source
-    vec4 selectTextureArg(int arg) {
-        // D3DTA_DIFFUSE = 0, D3DTA_CURRENT = 1, D3DTA_TEXTURE = 2, D3DTA_TFACTOR = 3
-        // Note: In GLSL ES 2.0, we can't use bitwise operations, but D3DTA values are already 0-6
-        if (arg == 0) return v_color; // D3DTA_DIFFUSE
-        if (arg == 1) return v_color; // D3DTA_CURRENT (for stage 0, same as DIFFUSE)
-        if (arg == 2) { // D3DTA_TEXTURE
-            // Only sample texture if it's actually being used
-            if (u_use_texture) {
-                return texture2D(u_texture, v_texcoord, u_lod_bias);
-            } else {
-                return vec4(1.0);
-            }
-        }
-        if (arg == 3) return u_texture_factor; // D3DTA_TFACTOR
-        return vec4(1.0); // Default
-    }
 
     // D3DTA_*: DIFFUSE 0, CURRENT 1, TEXTURE 2, TFACTOR 3, SPECULAR 4, TEMP 5; | COMPLEMENT 0x10,
     // | ALPHAREPLICATE 0x20 (complement first). No bitwise ops in GLSL ES 1.0: div/mod arithmetic.
