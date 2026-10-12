@@ -30,6 +30,18 @@ int  plat_gl_create(void);                                   /* 0 = ok */
 void plat_gl_size(int *w, int *h);                           /* drawable size in pixels */
 void plat_gl_set_size(int w, int h);                         /* resize the window to w x h */
 void plat_gl_swap(void);
+/* Netplay keyboard and mouse ("desk"): the host's real key and mouse events travel with its input
+ * and every instance injects them at the same frame, like replay input (deterministic). */
+typedef struct { uint8_t type, a; int16_t x, y; } plat_desk_ev_t;   /* 6 bytes on the wire */
+enum { PLAT_DESK_KEY = 1, PLAT_DESK_MOVE, PLAT_DESK_BUTTON, PLAT_DESK_WHEEL };
+/* KEY: a = down, x = SDL scancode. MOVE: x, y = relative motion. BUTTON: a = down, x = 1 left,
+ * 2 middle, 3 right. WHEEL: y = notches. */
+void plat_desk_capture(int on);                             /* record this machine's events */
+int plat_desk_take(plat_desk_ev_t *out, int max);           /* recorded events, oldest first */
+void plat_desk_apply(const plat_desk_ev_t *ev);             /* inject one into the guest */
+#ifdef __EMSCRIPTEN__
+void plat_frame_yield(void);   /* hand control to the browser and come back at once (JSPI) */
+#endif
 void plat_set_gamma(const uint16_t *ramp);                   /* 3 x 256 WORDs (R, G, B), D3DGAMMARAMP layout */
 
 /* Next pending event as a WM_* message (hwnd filled in by user32). 1 = got one, 0 = none.

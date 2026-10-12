@@ -106,6 +106,7 @@ uint8_t plat_vk_down(uint32_t vk) {
    SetCursorPos every frame, which pinned the desktop pointer during checks. They keep a virtual
    cursor in screen coordinates instead; replay clicks set it. */
 static int g_vcur_x, g_vcur_y;
+static int g_desk_on;                 /* netplay: this machine's keyboard and mouse go to every game (desk) */
 static int g_rel, g_cx, g_cy;   /* captured-pointer mode and in-window position */
 
 /* ---- window --------------------------------------------------------------------------------- */
@@ -301,21 +302,40 @@ static void frame_stats(double swap_ticks) {
 }
 
 #ifdef __EMSCRIPTEN__
-/* Deterministic mode (netplay) counts game time in frames, so frames must come at 60 per second of
-   wall time: wait for this frame's slot (the browser itself does not pace the loop). Normal play
-   measures real time between frames and needs no pacing. */
-static void web_det_pace(void) {
+/* The browser shows a frame only once the guest gives control back (JSPI suspends it here) and
+   resumes it for the next one. ms > 0: time left to this frame's 60 Hz slot. Ahead of
+   it, wait for the display's next refresh at or near the slot (requestAnimationFrame: the frame is
+   drawn and composited in step with the screen, at 60 Hz on 120 Hz screens too). Behind it (or
+   ms <= 0), come back at once through a MessageChannel: emscripten_sleep(0) is a setTimeout, which
+   browsers stretch to 4 ms when nested, twice a frame before. A hidden tab gets no animation
+   frames: a timer keeps its game (and its friends' lockstep) running. */
+EM_ASYNC_JS(void, js_frame_wait, (double ms), {
+    if (!Module.rtYield) {
+        const ch = new MessageChannel(), q = [];
+        ch.port1.onmessage = () => q.shift()();
+        Module.rtYield = () => new Promise(r => { q.push(r); ch.port2.postMessage(0); });
+    }
+    if (ms < 1) { await Module.rtYield(); return; }
+    const due = performance.now() + ms;   /* (emscripten_get_now counts from another origin with threads) */
+    if (document.hidden) { await new Promise(r => setTimeout(r, due - performance.now())); return; }
+    while (performance.now() < due - 4) await new Promise(r => requestAnimationFrame(r));
+});
+void plat_frame_yield(void) { js_frame_wait(0); }
+
+/* 60 frames per second of wall time. Deterministic mode (netplay) counts game time in frames, so
+   it needs exactly that; normal play measures real time and gets the same cap natively. */
+static void web_pace(void) {
     static double next;
     double now = emscripten_get_now(), period = 1000.0 / 60.0;
     if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
     next += period;
-    if (next - now >= 1.0) emscripten_sleep((unsigned)(next - now));
+    js_frame_wait(next - now);
 }
 #endif
 
 void plat_gl_swap(void) {
 #ifdef __EMSCRIPTEN__
-    if (det_on()) web_det_pace();
+    web_pace();
 #else
     double s0 = (double)SDL_GetPerformanceCounter();
     if (g_win && g_gl) SDL_GL_SwapWindow(g_win);
@@ -372,6 +392,9 @@ static uint32_t mk_buttons(void) {
     if (b & SDL_BUTTON_LMASK) mk |= 0x01;
     if (b & SDL_BUTTON_RMASK) mk |= 0x02;
     if (b & SDL_BUTTON_MMASK) mk |= 0x10;
+    if (g_replay_buttons & 1) mk |= 0x01;   /* injected (replay, netplay) */
+    if (g_replay_buttons & 2) mk |= 0x02;
+    if (g_replay_buttons & 4) mk |= 0x10;
     if (plat_vk_down(0x10)) mk |= 0x04;
     if (plat_vk_down(0x11)) mk |= 0x08;
     return mk;
@@ -379,8 +402,9 @@ static uint32_t mk_buttons(void) {
 
 /* Interactive play captures the pointer (SDL relative mode) and tracks the in-window position from
    the deltas, so the pointer can never stall at a window edge while the game cursor still has room. */
+static int g_desk_applying;           /* inside plat_desk_apply: the event is the same on every machine */
 static void rel_set(int on) {
-    if (virtual_cursor() || !g_win || on == g_rel) return;
+    if (g_desk_applying || (virtual_cursor() && !g_desk_on) || !g_win || on == g_rel) return;   /* netplay host: its real pointer */
     if (on) { int x, y; SDL_GetMouseState(&x, &y); g_cx = x; g_cy = y; }
     SDL_SetRelativeMouseMode(on ? SDL_TRUE : SDL_FALSE);
     g_rel = on;
@@ -393,26 +417,7 @@ static void rel_move(int dx, int dy) {
     if (g_cy < 0) g_cy = 0; else if (g_cy > h - 1) g_cy = h - 1;
 }
 
-/* Host-only keys (never sent to the game or to other players): C cycles this player's camera. */
-void rt_pov_cycle(void);
-const char *rt_pov_name(void);
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-EM_JS(void, js_toast, (const char *s), { if (Module.rugbyToast) Module.rugbyToast(UTF8ToString(s)); });
-#endif
-static void host_key(const SDL_Event *e) {
-    if (e->type != SDL_KEYDOWN || e->key.repeat || e->key.keysym.scancode != SDL_SCANCODE_C) return;
-    rt_pov_cycle();
-    char t[96]; snprintf(t, sizeof t, "Camera: %s (C to change)", rt_pov_name());
-#ifdef __EMSCRIPTEN__
-    js_toast(t);
-#else
-    if (g_win) { char w[128]; snprintf(w, sizeof w, "Rugby 08 - %s", t); SDL_SetWindowTitle(g_win, w); }
-#endif
-}
-
 static void translate(const SDL_Event *e) {
-    host_key(e);
     if (rt_log_input) {
         if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP)
             rt_log("input: key %s %s (vk 0x%02X)", SDL_GetScancodeName(e->key.keysym.scancode),
@@ -475,6 +480,109 @@ static void translate(const SDL_Event *e) {
     (void)WM_LBUTTONDOWN_;
 }
 
+
+/* ---- netplay keyboard and mouse (plat.h plat_desk_*) -------------------------------------------- */
+/* The host records its real events instead of handing them to its own game; netplay sends them with
+   its input and every instance (the host's too) injects them at the same frame through translate(),
+   as the replay does. Positions are window coordinates (the game sizes the window: equal everywhere)
+   and the host window's real position never enters, so the guest sees the same cursor everywhere. */
+static plat_desk_ev_t g_desk[512];
+static int g_desk_n;
+static uint8_t g_desk_down[SDL_NUM_SCANCODES], g_desk_btn;   /* recorded as held: released on focus loss */
+void plat_desk_capture(int on) { g_desk_on = on; }
+static void desk_put(uint8_t type, uint8_t a, int x, int y) {
+    if (type == PLAT_DESK_MOVE && g_desk_n && g_desk[g_desk_n - 1].type == PLAT_DESK_MOVE) {   /* one move per run */
+        plat_desk_ev_t *m = &g_desk[g_desk_n - 1];
+        int nx = m->x + x, ny = m->y + y;
+        if (nx >= -32768 && nx <= 32767 && ny >= -32768 && ny <= 32767) { m->x = (int16_t)nx; m->y = (int16_t)ny; return; }
+    }
+    if (g_desk_n < (int)(sizeof g_desk / sizeof *g_desk)) g_desk[g_desk_n++] = (plat_desk_ev_t){ type, a, (int16_t)x, (int16_t)y };
+}
+static void desk_record(const SDL_Event *e) {
+    if (!g_desk_on) return;
+    if (e->type == SDL_WINDOWEVENT && e->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {   /* nothing stays held */
+        for (int i = 0; i < SDL_NUM_SCANCODES; i++) if (g_desk_down[i]) { g_desk_down[i] = 0; desk_put(PLAT_DESK_KEY, 0, i, 0); }
+        for (int b = 1; b <= 3; b++) if (g_desk_btn & (1 << b)) desk_put(PLAT_DESK_BUTTON, 0, b, 0);
+        g_desk_btn = 0;
+        rel_set(0);
+        return;
+    }
+    switch (e->type) {
+    case SDL_KEYDOWN: case SDL_KEYUP: {
+        int sc = e->key.keysym.scancode, down = e->type == SDL_KEYDOWN;
+        if (e->key.repeat || sc <= 0 || sc >= SDL_NUM_SCANCODES || g_desk_down[sc] == down) break;
+        g_desk_down[sc] = (uint8_t)down;
+        desk_put(PLAT_DESK_KEY, (uint8_t)down, sc, 0);
+        break;
+    }
+    case SDL_MOUSEMOTION: desk_put(PLAT_DESK_MOVE, 0, e->motion.xrel, e->motion.yrel); break;
+    case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: {
+        int b = e->button.button, down = e->type == SDL_MOUSEBUTTONDOWN;
+        if (b < 1 || b > 3) break;
+        if (down && !g_rel) rel_set(1);   /* capture the pointer, as in normal play (the browser: on this click) */
+        desk_put(PLAT_DESK_BUTTON, (uint8_t)down, b, 0);
+        g_desk_btn = (uint8_t)(down ? g_desk_btn | (1 << b) : g_desk_btn & ~(1 << b));
+        break;
+    }
+    case SDL_MOUSEWHEEL: desk_put(PLAT_DESK_WHEEL, 0, 0, e->wheel.y); break;
+    }
+}
+int plat_desk_take(plat_desk_ev_t *out, int max) {
+    if (g_inited) { SDL_Event e; while (SDL_PollEvent(&e)) desk_record(&e); }
+    int n = g_desk_n < max ? g_desk_n : max;
+    memcpy(out, g_desk, (size_t)n * sizeof *out);
+    memmove(g_desk, g_desk + n, (size_t)(g_desk_n - n) * sizeof *g_desk);
+    g_desk_n -= n;
+    return n;
+}
+void plat_desk_apply(const plat_desk_ev_t *d) {
+    SDL_Event e;
+    memset(&e, 0, sizeof e);
+    Uint32 wid = g_win ? SDL_GetWindowID(g_win) : 0;
+    int ox, oy, ow, oh;   /* the window as the guest knows it (det mode: what it asked for) */
+    plat_window_rect(&ox, &oy, &ow, &oh);
+    switch (d->type) {
+    case PLAT_DESK_KEY:
+        if (d->x <= 0 || d->x >= SDL_NUM_SCANCODES) return;
+        e.type = d->a ? SDL_KEYDOWN : SDL_KEYUP;
+        e.key.state = d->a ? SDL_PRESSED : SDL_RELEASED;
+        e.key.windowID = wid;
+        e.key.keysym.scancode = (SDL_Scancode)d->x;
+        break;
+    case PLAT_DESK_MOVE: {   /* relative, like the mouse the game reads (DirectInput deltas); the cursor stays in the window */
+        int cx = g_vcur_x - ox + d->x, cy = g_vcur_y - oy + d->y;
+        cx = cx < 0 ? 0 : cx > ow - 1 ? ow - 1 : cx; cy = cy < 0 ? 0 : cy > oh - 1 ? oh - 1 : cy;
+        g_vcur_x = ox + cx; g_vcur_y = oy + cy;   /* screen coordinates (GetCursorPos) */
+        e.type = SDL_MOUSEMOTION;
+        e.motion.windowID = wid;
+        e.motion.x = cx; e.motion.y = cy; e.motion.xrel = d->x; e.motion.yrel = d->y;
+        break;
+    }
+    case PLAT_DESK_BUTTON: {
+        uint8_t bit = d->x == 1 ? 1 : d->x == 3 ? 2 : d->x == 2 ? 4 : 0;
+        if (!bit) return;
+        g_replay_buttons = (uint8_t)(d->a ? g_replay_buttons | bit : g_replay_buttons & ~bit);
+        e.type = d->a ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+        e.button.windowID = wid;
+        e.button.button = (Uint8)d->x;
+        e.button.state = d->a ? SDL_PRESSED : SDL_RELEASED;
+        e.button.clicks = 1;
+        e.button.x = g_vcur_x - ox; e.button.y = g_vcur_y - oy;
+        break;
+    }
+    case PLAT_DESK_WHEEL:
+        e.type = SDL_MOUSEWHEEL;
+        e.wheel.windowID = wid;
+        e.wheel.y = d->y;
+        break;
+    default: return;
+    }
+    int rel = g_rel;   /* the host's own pointer capture and focus must not change what its game sees */
+    g_rel = 0; g_desk_applying = 1;
+    if (g_inited) translate(&e);
+    g_rel = rel; g_desk_applying = 0;
+}
+
 int plat_pending(void) { return g_npending > 0 || g_activate_pending; }
 
 int plat_poll(plat_msg_t *m, int wait_ms) {
@@ -483,7 +591,7 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
     if (g_activate_pending) { g_activate_pending = 0; push(WM_ACTIVATEAPP_, 1, 0); push(WM_ACTIVATE_, 1, 0); }
     if (det_on()) {   /* deterministic mode: the host window's own events never reach the guest; only
                          what the replay/netplay pushed at Present and the initial activation do */
-        while (SDL_PollEvent(&e)) host_key(&e);
+        while (SDL_PollEvent(&e)) desk_record(&e);
         if (!g_npending) return 0;
         *m = g_pending[0];
         memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);
@@ -508,13 +616,53 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
 /* Keyboard layout = the game's own keyboard map (docs/CONTROLS.md): S Cross, Q Square, W Triangle,
  * E Circle, A L1, D R1, Left Shift L2, Space / Right Shift R2, Left Ctrl or Esc Start, Left Alt
  * Select, Return Cross, Backspace Triangle; arrows left stick, numpad 8/2/4/6 right stick. */
+#ifdef __EMSCRIPTEN__
+/* The browser: this player's held keys straight from the page (KeyboardEvent.code), not SDL's key
+   state, which a page that got focus before SDL registered its handlers never updated (a friend's
+   keys did not reach its controller in 4 of 5 drop-in runs). Cleared when the page loses focus. */
+EM_JS(int, js_key_held, (const char *code), {
+    if (!Module.rtKeys) {
+        const k = Module.rtKeys = new Set();
+        addEventListener('keydown', e => k.add(e.code), true);
+        addEventListener('keyup', e => k.delete(e.code), true);
+        addEventListener('blur', () => k.clear());
+    }
+    return document.hasFocus() && Module.rtKeys.has(UTF8ToString(code)) ? 1 : 0;
+});
+static const char *web_code(SDL_Scancode sc) {
+    switch (sc) {
+    case SDL_SCANCODE_S: return "KeyS"; case SDL_SCANCODE_RETURN: return "Enter"; case SDL_SCANCODE_Q: return "KeyQ";
+    case SDL_SCANCODE_W: return "KeyW"; case SDL_SCANCODE_BACKSPACE: return "Backspace"; case SDL_SCANCODE_E: return "KeyE";
+    case SDL_SCANCODE_A: return "KeyA"; case SDL_SCANCODE_D: return "KeyD"; case SDL_SCANCODE_LSHIFT: return "ShiftLeft";
+    case SDL_SCANCODE_SPACE: return "Space"; case SDL_SCANCODE_RSHIFT: return "ShiftRight"; case SDL_SCANCODE_LCTRL: return "ControlLeft";
+    case SDL_SCANCODE_ESCAPE: return "Escape"; case SDL_SCANCODE_LALT: return "AltLeft";
+    case SDL_SCANCODE_LEFT: return "ArrowLeft"; case SDL_SCANCODE_RIGHT: return "ArrowRight";
+    case SDL_SCANCODE_UP: return "ArrowUp"; case SDL_SCANCODE_DOWN: return "ArrowDown";
+    case SDL_SCANCODE_KP_4: return "Numpad4"; case SDL_SCANCODE_KP_6: return "Numpad6";
+    case SDL_SCANCODE_KP_8: return "Numpad8"; case SDL_SCANCODE_KP_2: return "Numpad2";
+    default: return "";
+    }
+}
+#endif
+
 void plat_local_pad(rt_pad_t *p) {
     if (automated_run() || !g_inited) return;   /* automated runs: the replay is the input */
     static SDL_GameController *gc;
     if (gc && !SDL_GameControllerGetAttached(gc)) { SDL_GameControllerClose(gc); gc = NULL; }
     if (!gc) for (int i = 0; i < SDL_NumJoysticks() && !gc; i++) if (SDL_IsGameController(i)) gc = SDL_GameControllerOpen(i);
     rt_pad_t q = { 0 };
+#ifdef __EMSCRIPTEN__
+    Uint8 k[SDL_NUM_SCANCODES] = { 0 };
+    static const SDL_Scancode used[] = { SDL_SCANCODE_S, SDL_SCANCODE_RETURN, SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_BACKSPACE,
+        SDL_SCANCODE_E, SDL_SCANCODE_A, SDL_SCANCODE_D, SDL_SCANCODE_LSHIFT, SDL_SCANCODE_SPACE, SDL_SCANCODE_RSHIFT,
+        SDL_SCANCODE_LCTRL, SDL_SCANCODE_ESCAPE, SDL_SCANCODE_LALT, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_UP,
+        SDL_SCANCODE_DOWN, SDL_SCANCODE_KP_4, SDL_SCANCODE_KP_6, SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_2 };
+    if (!g_desk_on) for (size_t i = 0; i < sizeof used / sizeof *used; i++) k[used[i]] = (Uint8)js_key_held(web_code(used[i]));
+    int focused = 1;   /* (js_key_held: only while the page has focus) */
+#else
     const Uint8 *k = SDL_GetKeyboardState(NULL);
+    int focused = plat_window_focused();
+#endif
     static const struct { SDL_Scancode sc; uint16_t bit; } kb[] = {
         { SDL_SCANCODE_S, RT_PAD_CROSS }, { SDL_SCANCODE_RETURN, RT_PAD_CROSS }, { SDL_SCANCODE_Q, RT_PAD_SQUARE },
         { SDL_SCANCODE_W, RT_PAD_TRIANGLE }, { SDL_SCANCODE_BACKSPACE, RT_PAD_TRIANGLE }, { SDL_SCANCODE_E, RT_PAD_CIRCLE },
@@ -522,7 +670,13 @@ void plat_local_pad(rt_pad_t *p) {
         { SDL_SCANCODE_SPACE, RT_PAD_R2 }, { SDL_SCANCODE_RSHIFT, RT_PAD_R2 }, { SDL_SCANCODE_LCTRL, RT_PAD_START },
         { SDL_SCANCODE_ESCAPE, RT_PAD_START }, { SDL_SCANCODE_LALT, RT_PAD_SELECT },
     };
-    if (plat_window_focused()) {
+    if (rt_log_input) {   /* why a held key does not reach the pad */
+        static int said;
+        int any = 0;
+        for (size_t i = 0; i < sizeof kb / sizeof *kb; i++) any |= k[kb[i].sc];
+        if (any && !said++) rt_log("input: pad keys held (focused %d, host keyboard %d)", focused, g_desk_on);
+    }
+    if (focused && !g_desk_on) {   /* the host's keyboard is the game's keyboard (desk) */
         for (size_t i = 0; i < sizeof kb / sizeof *kb; i++) if (k[kb[i].sc]) q.buttons |= kb[i].bit;
         q.lx = (int16_t)(k[SDL_SCANCODE_LEFT] ? -32768 : k[SDL_SCANCODE_RIGHT] ? 32767 : 0);
         q.ly = (int16_t)(k[SDL_SCANCODE_UP] ? -32768 : k[SDL_SCANCODE_DOWN] ? 32767 : 0);

@@ -78,10 +78,15 @@ var (
 	rooms   = map[string]*room{}
 )
 
-func msgLen(t byte) int {
-	switch t {
+// msgLen: the length of the message at the start of b (0: unknown type; more than len(b): incomplete).
+// 'I' is 19 bytes plus 6 per keyboard/mouse event (its byte 18 counts them).
+func msgLen(b []byte) int {
+	switch b[0] {
 	case 'I':
-		return 18
+		if len(b) < 19 {
+			return 19
+		}
+		return 19 + 6*int(b[18])
 	case 'H':
 		return 14
 	case 'A', 'D':
@@ -294,7 +299,7 @@ func (r *room) dump(c *client) {
 	for p := 0; p < len(r.log); {
 		q := p
 		for q < len(r.log) && q-p < 1800 {
-			n := msgLen(r.log[q])
+			n := msgLen(r.log[q:])
 			if n == 0 {
 				q = len(r.log)
 				break
@@ -432,7 +437,7 @@ func (c *client) game(b []byte) {
 		return
 	}
 	for len(b) > 0 {
-		n := msgLen(b[0])
+		n := msgLen(b)
 		if n == 0 || n > len(b) {
 			return
 		}

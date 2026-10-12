@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Drop-in online play in real browser pages (Playwright, headless Chrome), the way players use it:
-page 1 opens the game (no lobby: it boots straight in and its room is open), the invite link is read
-from its Friends panel, and page 2 opens that link JOIN_AFTER seconds later. Pass: page 2 catches up
-and says "You're in", a key pressed on page 2 reaches its pad, both pages keep equal state hashes,
-and page 1 plays on after page 2 closes. One summary line; console logs in logs/net_dropin{1,2}.log."""
+page 1 opens the game (it boots straight in) and its code is read from its Online panel; page 2
+opens its own game, and JOIN_AFTER seconds later types that code into its Online panel and presses
+Join. Pass: page 2 catches up and says "You're in", a key pressed on page 2 reaches its pad, both
+pages keep equal state hashes, and page 1 plays on after page 2 closes. One summary line; console
+logs in logs/net_dropin{1,2}.log."""
 import os, re, subprocess, sys, time
 from playwright.sync_api import sync_playwright
 
@@ -37,11 +38,13 @@ try:
         if not wait(lambda: has(0, "session started as player 1"), 120): fail("page 1 did not start its game")
         a.wait_for_selector("#friends-btn:not([hidden])", timeout=30000)
         a.click("#friends-btn")
-        link = a.input_value("#invite")
-        if "?room=" not in link: fail(f"no invite link ({link!r})")
+        code = a.inner_text("#code").strip()
+        if not re.fullmatch(r"[A-Z0-9]{4,8}", code): fail(f"no game code in the Online panel ({code!r})")
         a.click("#friends-btn")
+        b = open_page(f"http://127.0.0.1:{port}/index.html?log")   # the friend's own game
+        b.wait_for_selector("#friends-btn:not([hidden])", timeout=120000)
         a.wait_for_timeout(int(join_after * 1000))
-        b = open_page(link + "&log")
+        b.click("#friends-btn"); b.fill("#join-code", code.lower()); b.click("#join-btn")
         if not wait(lambda: has(1, r"caught up at frame \d+"), 600): fail("page 2 did not catch up")
         jm = re.search(r"player 2 joins at frame (\d+)", "\n".join(logs[1])); joined_at = int(jm.group(1)) if jm else -1
         try: b.wait_for_selector("#toast:not([hidden])", timeout=5000); toast = b.inner_text("#toast")
@@ -50,7 +53,7 @@ try:
         b.locator("canvas").focus()
         b.keyboard.down("s"); b.wait_for_timeout(400); b.keyboard.up("s")
         if not wait(lambda: has(1, r"local input frame \d+ buttons 0001"), 60): fail("page 2's key did not reach its pad")
-        def hashes(i): return [l for l in logs[i] if l.startswith("netplay: frame ")]
+        def hashes(i): return list(dict.fromkeys(l for l in logs[i] if l.startswith("netplay: frame ")))   # each line is printed twice (stdout, stderr)
         n0 = len(hashes(0))
         if not wait(lambda: len(hashes(0)) >= n0 + 3 and len(hashes(1)) >= len(hashes(0)), 300): fail("hashes stopped")
         h0, h1 = hashes(0), hashes(1)

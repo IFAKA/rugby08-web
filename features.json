@@ -375,7 +375,7 @@
       "deps": [
         "net.web_lockstep"
       ],
-      "desc": "Online in real browser pages: keyboard presses on one page (Playwright) reach that player's pad and both pages keep equal state hashes.",
+      "desc": "Live input in real browser pages: the host's (controller 1's) real mouse clicks and keys are the game's own keyboard and mouse and reach the game on both pages at the same frame (original controls, Esc pause); a friend's keyboard is its controller; state hashes stay equal.",
       "check": "timeout 600 /opt/homebrew/bin/python3 tools/net_live_input.py   # system Python: Playwright is not in .venv",
       "passes": true
     },
@@ -403,7 +403,7 @@
         "net.dropin",
         "net.live_input"
       ],
-      "desc": "Drop-in in real browser pages, as players use it: the game boots straight in, the invite link comes from the in-game Friends panel, a friend opens it 20 s later, catches up, gets the \"You are in\" toast, its keys reach its pad, hashes stay equal, and the host plays on after the friend leaves.",
+      "desc": "Drop-in in real browser pages, as players use it: the game boots straight in, the host's code comes from its Online panel, a friend opens their own game and types the code into the Join box 20 s later, catches up, gets the \"You're in\" toast, its keys reach its controller, hashes stay equal, and the host plays on after the friend leaves.",
       "check": "timeout 1200 /opt/homebrew/bin/python3 tools/net_dropin.py   # system Python: Playwright",
       "passes": true
     },

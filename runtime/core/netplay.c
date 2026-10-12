@@ -19,7 +19,8 @@
  * its game from the log. Lost connection: the game carries on offline (it is a complete game).
  *
  * Wire format (little-endian; the server relays and logs binary messages, possibly several per frame):
- *   'I' slot u32 frame rt_pad_t   18 bytes  input        'H' slot u32 frame u64   14  state hash
+ *   'I' slot u32 frame rt_pad_t n ev[n]   19 + 6n  input  'H' slot u32 frame u64   14  state hash
+ *       (ev: the keyboard and mouse events of the host, controller 1: plat_desk_ev_t, applied by all)
  *   'A' slot u32 frame             6        slot joins   'D' slot u32 frame        6  slot leaves
  *   'W' slot                       2        (server -> authority) slot wants to join
  *   'R' slot                       2        (server -> new authority) you grant joins now
@@ -33,13 +34,16 @@
 int rt_net;                           /* a netplay session is running */
 int rt_ff;                            /* fast-forward (catching up): no drawing, no sound */
 static int g_slot, g_auth, g_delay = 4, g_offline;
+#define DESK_SLOT 0                   /* the game's keyboard and mouse belong to controller 1's player */
 static rt_pad_t g_local;              /* this player's pad (devices, or replay "pad 0" events) */
 
 #define RING 1024
 #define AHEAD 600                     /* read no message for a frame this far ahead (ring room) */
-typedef struct { uint32_t frame; uint8_t have; rt_pad_t pad; } slot_in_t;
+#define NDESK 24                      /* keyboard and mouse events per input message (more wait a frame) */
+typedef struct { uint32_t frame; uint8_t have, nd; rt_pad_t pad; plat_desk_ev_t d[NDESK]; } slot_in_t;
 static slot_in_t g_in[RING][RT_MAX_PADS];
 #define NET_HASH_EVERY 120
+#define NET_HASH_CYCLE 600   /* frames to hash the whole state once (det_hash_step) */
 #define HRING 16
 static uint64_t g_hash[HRING][RT_MAX_PADS];
 static uint32_t g_hash_frame[HRING][RT_MAX_PADS];
@@ -61,9 +65,11 @@ int rt_net_slot(void) { return g_slot; }
 static void put32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
 static uint32_t get32(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 
-static void store_input(int slot, uint32_t frame, const rt_pad_t *pad) {
+static void store_input(int slot, uint32_t frame, const rt_pad_t *pad, int nd, const plat_desk_ev_t *d) {
     slot_in_t *s = &g_in[frame % RING][slot];
     s->frame = frame; s->have = 1; s->pad = *pad;
+    s->nd = (uint8_t)(nd < NDESK ? nd : NDESK);
+    memcpy(s->d, d, s->nd * sizeof *d);
 }
 static int have_input(int slot, uint32_t frame) { slot_in_t *s = &g_in[frame % RING][slot]; return s->have && s->frame == frame; }
 
@@ -91,7 +97,13 @@ static void handle(const uint8_t *m) {
     if (k < 0) return;
     uint32_t f = m[0] == 'W' || m[0] == 'R' ? 0 : get32(m + 2);
     switch (m[0]) {
-    case 'I': { rt_pad_t p; memcpy(&p, m + 6, sizeof p); store_input(k, f, &p); if (f > g_max_seen) g_max_seen = f; break; }
+    case 'I': { rt_pad_t p; plat_desk_ev_t d[NDESK]; int nd = m[18] < NDESK ? m[18] : NDESK;
+                memcpy(&p, m + 6, sizeof p);
+                for (int i = 0; i < nd; i++) {
+                    const uint8_t *e = m + 19 + 6 * i;
+                    d[i] = (plat_desk_ev_t){ e[0], e[1], (int16_t)(e[2] | e[3] << 8), (int16_t)(e[4] | e[5] << 8) };
+                }
+                store_input(k, f, &p, nd, d); if (f > g_max_seen) g_max_seen = f; break; }
     case 'H': { uint64_t h = 0; for (int i = 7; i >= 0; i--) h = h << 8 | m[6 + i];
                 g_hash[(f / NET_HASH_EVERY) % HRING][k] = h; g_hash_frame[(f / NET_HASH_EVERY) % HRING][k] = f; break; }
     case 'A': add_event(k, f, 1); if (k == g_slot) { g_my_from = f; g_next_send = f; } break;
@@ -103,14 +115,23 @@ static void handle(const uint8_t *m) {
     }
 }
 
-static int msg_len(uint8_t t) { return t == 'I' ? 18 : t == 'H' ? 14 : t == 'A' || t == 'D' ? 6 : t == 'W' || t == 'R' ? 2 : 0; }
+/* Length of the message at m (0: unknown type); avail bytes are there (an 'I' needs 19 to know). */
+static int msg_len(const uint8_t *m, int avail) {
+    switch (m[0]) {
+    case 'I': return avail < 19 ? 19 : 19 + 6 * m[18];
+    case 'H': return 14;
+    case 'A': case 'D': return 6;
+    case 'W': case 'R': return 2;
+    }
+    return 0;
+}
 
 /* Handle buffered messages in order; 0 = stopped at one for a frame too far ahead (kept for later). */
 static int consume(void) {
     int p = 0, ok = 1;
     while (p < g_rx_n) {
         const uint8_t *m = g_rx + p;
-        int len = msg_len(m[0]);
+        int len = msg_len(m, g_rx_n - p);
         if (!len) { rt_trace("netplay: bad message type %02X", m[0]); p = g_rx_n; break; }
         if (p + len > g_rx_n) break;
         if ((m[0] == 'I' || m[0] == 'H') && get32(m + 2) >= g_frame + AHEAD) { ok = 0; break; }
@@ -163,10 +184,19 @@ static void net_frame(uint32_t frame) {
     pump(0);
     if (g_my_from >= 0 && !g_offline) {   /* my input for every frame up to frame + delay, each once */
         for (int64_t f = g_next_send; f <= (int64_t)frame + g_delay; f++) {
-            uint8_t m[18] = { 'I', (uint8_t)g_slot };
+            plat_desk_ev_t d[NDESK];   /* the host's keyboard and mouse since the last message */
+            int nd = g_slot == DESK_SLOT ? plat_desk_take(d, NDESK) : 0;
+            uint8_t m[19 + 6 * NDESK] = { 'I', (uint8_t)g_slot };
             put32(m + 2, (uint32_t)f); memcpy(m + 6, &g_local, sizeof g_local);
-            store_input(g_slot, (uint32_t)f, &g_local);
-            net_tx_send(m, sizeof m, 0);
+            m[18] = (uint8_t)nd;
+            for (int i = 0; i < nd; i++) {
+                uint8_t *e = m + 19 + 6 * i;
+                e[0] = d[i].type; e[1] = d[i].a;
+                e[2] = (uint8_t)d[i].x; e[3] = (uint8_t)((uint16_t)d[i].x >> 8);
+                e[4] = (uint8_t)d[i].y; e[5] = (uint8_t)((uint16_t)d[i].y >> 8);
+            }
+            store_input(g_slot, (uint32_t)f, &g_local, nd, d);
+            net_tx_send(m, 19 + 6 * nd, 0);
             g_next_send = f + 1;
         }
     }
@@ -181,7 +211,7 @@ static void net_frame(uint32_t frame) {
             handle((const uint8_t[6]){ 'A', (uint8_t)k, (uint8_t)j, (uint8_t)(j >> 8), (uint8_t)(j >> 16), (uint8_t)(j >> 24) });
         }
     uint64_t h;
-    if (det_hash_step(frame, NET_HASH_EVERY, &h)) {   /* frames frame-119..frame, one slice each */
+    if (det_hash_step(frame, NET_HASH_CYCLE, NET_HASH_EVERY, &h)) {   /* frames frame-119..frame, one slice each */
         uint32_t k = (frame / NET_HASH_EVERY) % HRING;
         g_hash[k][g_slot] = h; g_hash_frame[k][g_slot] = frame;
         if (g_my_from >= 0 && frame >= g_my_from && !g_offline) {
@@ -207,6 +237,14 @@ static void net_frame(uint32_t frame) {
     for (int k = 0; k < RT_MAX_PADS; k++)
         rt_pads[k] = !g_offline && g_active[k] && have_input(k, frame) ? g_in[frame % RING][k].pad : zero;
     if (g_offline) rt_pads[g_slot] = g_local;
+    /* the host's keyboard and mouse, at the frame they were sent for (offline: as they come) */
+    if (!g_offline && g_active[DESK_SLOT] && have_input(DESK_SLOT, frame)) {
+        const slot_in_t *s = &g_in[frame % RING][DESK_SLOT];
+        for (int i = 0; i < s->nd; i++) plat_desk_apply(&s->d[i]);
+    } else if (g_offline && g_slot == DESK_SLOT) {
+        plat_desk_ev_t d[NDESK];
+        for (int i = 0, n = plat_desk_take(d, NDESK); i < n; i++) plat_desk_apply(&d[i]);
+    }
     {   static int tr = -1;   /* RT_NET_TRACE=1: the inputs applied at every frame (debugging a desync) */
         if (tr < 0) tr = getenv("RT_NET_TRACE") != NULL;
         if (tr) { uint32_t c = 0; const uint8_t *b = (const uint8_t *)rt_pads;
@@ -264,6 +302,7 @@ int rt_net_begin(int slot, int creator) {
     add_event(0, 0, 1);   /* the room's creator plays from the first frame */
     if (creator) { g_my_from = 0; g_next_send = 0; }
     rt_ff = !creator;
+    plat_desk_capture(slot == DESK_SLOT);   /* the host plays with the game's own keyboard and mouse */
     det_on_frame(net_frame);
     rt_trace("netplay: session started as player %d%s", slot + 1, creator ? " (created the room)" : ", catching up");
     return 1;

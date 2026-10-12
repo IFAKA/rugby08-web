@@ -198,7 +198,8 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
 #endif
     if (!rt_ff) plat_gl_swap();   // catching up (netplay): frames are not shown, nor paced
 #ifdef __EMSCRIPTEN__
-    if (!rt_ff || s->frame % 16 == 0) emscripten_sleep(0);   // JSPI: hand the frame to the browser (present, input, timers), then resume
+    if (!rt_ff) EM_ASM(Module.rtFrames = (Module.rtFrames | 0) + 1);   // shown frames, read by the shell's fps counter
+    if (rt_ff && s->frame % 16 == 0) plat_frame_yield();   // catching up: let the page breathe (input, network); a shown frame yielded in plat_gl_swap
     {   // perf: game work per frame (resume to Present) vs time handed to the browser, every 600 frames
         static double last, work, worst, wait; static int n;
         double t1 = emscripten_get_now();
