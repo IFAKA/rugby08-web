@@ -2,8 +2,8 @@
  * the game as if playing alone). Every game runs the same match from everyone's inputs; the camera is the
  * one thing each game runs its own way:
  *   settings  the camera options (options 0xA33320 +0x230..+0x257: style, height, zoom, presets) are this
- *             player's. The menus are shared: a change made there with another player's controller is
- *             undone in this game, one made with this player's own controller is kept (ls_sender).
+ *             player's: a change made on CHANGE CAMERA by the player who paused is kept in that player's
+ *             game only (own_camera_options).
  *   camera    the CameraManager runs on them in every game; what it keeps is left out of the state hash
  *             (det_hash_skip). Measured: the match never reads the camera, positions stay equal with
  *             different styles (2 min, 698 samples) -- except for one thing:
@@ -41,7 +41,12 @@ static int on(void) {
 }
 int own_camera_on(void) { return on(); }
 
-/* Changes to the camera options since the last look: kept if this player's controller made them. */
+/* A screen where a player picks camera settings: in a match the pause menu's CHANGE CAMERA (0x2C). */
+static int camera_screen(int id) { return id == 0x2C; }
+
+/* Changes to the camera options since the last look. Made on a camera settings screen they are the acting
+   player's own choice (only the pauser acts there: ls_roles.c): kept in that player's game, undone in the
+   others. Any other change is the game's own (a profile loaded, a match set up): every game takes it. */
 void own_camera_options(void) {
     if (!on()) return;
     uint8_t *o = (uint8_t *)G2H(OPTIONS + O_CAM_LO);
@@ -50,8 +55,9 @@ void own_camera_options(void) {
         det_hash_skip(SKIP_OPTS, OPTIONS + O_CAM_LO, OPTIONS + O_CAM_HI);
     }
     if (!memcmp(o, g_seen, sizeof g_seen)) return;
-    int actor = ls_roles_actor();   /* (in a pause the pauser, in the menus the host: only they act) */
-    if ((actor >= 0 ? actor : ls_sender()) == rt_net_slot()) memcpy(g_mine, o, sizeof g_mine);
+    int id = fe_screen_id(), actor = ls_roles_actor();
+    rt_trace("ms: own camera options changed on screen %04X by player %d", id & 0xFFFF, actor + 1);
+    if (!camera_screen(id) || actor < 0 || actor == rt_net_slot()) memcpy(g_mine, o, sizeof g_mine);
     else memcpy(o, g_mine, sizeof g_mine);
     memcpy(g_seen, o, sizeof g_seen);
 }
