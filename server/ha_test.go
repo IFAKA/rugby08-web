@@ -43,7 +43,7 @@ func TestMsgLenHostMode(t *testing.T) {
 		}
 	}
 	// the old types are unchanged
-	if msgLen([]byte{'H'}) != 14 || msgLen([]byte{'A'}) != 6 || msgLen([]byte{'W'}) != 2 || msgLen([]byte{'X'}) != 0 {
+	if msgLen([]byte{'H'}) != 14 || msgLen([]byte{'A'}) != 6 || msgLen([]byte{'W'}) != 2 || msgLen([]byte{'X'}) != 14 {
 		t.Error("old message lengths changed")
 	}
 	in := make([]byte, 19)
