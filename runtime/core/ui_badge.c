@@ -50,13 +50,23 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     int rk = ls ? ls_roles_banner(role, sizeof role) : 0;
     if (ls) snprintf(you, sizeof you, "YOU: PLAYER %d", rt_net_slot() + 1);
     int jslot, join = fe_party_joining(&jslot) && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY;
-    if (w <= 0 || h <= 0 || (!badge && !toast && !ls && !join)) return 0;
+    int pct[4], joiners = 0, first = -1;   /* friends joining (the server's word): how far they got */
+    for (int k = 0; k < 4; k++) {
+        pct[k] = ls_on() && k != rt_net_slot() ? plat_join_progress(k) : -1;
+        if (pct[k] >= 0 && first < 0) first = k;
+        joiners += pct[k] >= 0;
+    }
+    if (w <= 0 || h <= 0 || (!badge && !toast && !ls && !join && !joiners)) return 0;
     static char last[256];
-    char b[48], all[256];
+    char b[64], all[256];
     if (ls) snprintf(b, sizeof b, "PARTY %s %d/4", ls_code(), count(ls_members()));
     else snprintf(b, sizeof b, "PARTY %s %d/4", ui_lobby_code(), ui_lobby_members());
-    snprintf(all, sizeof all, "%s|%s|%s|%d%s|%d|%u", badge ? b : "", toast ? toast : "", you, rk, role, join,
-             rk == LS_BANNER_LOBBY ? ui_party_view_gen() : 0);
+    if (first >= 0)   /* (anywhere in the menus: who is joining) */
+        snprintf(b + strlen(b), sizeof b - strlen(b), " - PLAYER %d JOINING %d%%", first + 1, pct[first]);
+    int rows = joiners && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY && rk != LS_BANNER_LOBBY;
+    snprintf(all, sizeof all, "%s|%s|%s|%d%s|%d|%u|%d%d%d%d%d", badge ? b : "", toast ? toast : "", you, rk, role, join,
+             rk == LS_BANNER_LOBBY ? ui_party_view_gen() : 0, rows, pct[0], pct[1], pct[2], pct[3]);
+    badge = badge || (joiners && in_menus());
     *changed = strcmp(all, last) != 0 || g_img.w != w || g_img.h != h;
     if (g_img.w != w || g_img.h != h) {
         free(g_img.px);
@@ -67,6 +77,8 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
         snprintf(last, sizeof last, "%s", all);
         memset(g_img.px, 0, (size_t)w * (size_t)h * 4);
         if (join) catchup_row(&g_img, jslot, 0, "JOINING THE PARTY...");   /* until the page reloads */
+        for (int k = 0; rows && k < 4; k++)   /* the others' party screen: a joiner's row fills up there too */
+            if (pct[k] >= 0) catchup_row(&g_img, k, pct[k], NULL);
         if (rk == LS_BANNER_LOBBY) ui_party_view(&g_img, role);   /* the host's menus: not this player's */
         else if (rk) {   /* another player's turn: the screen dimmed (or covered) and whose turn it is */
             ui_rect(&g_img, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xE8000000u : 0x90000000u);
@@ -100,8 +112,8 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     return 1;
 }
 
-/* Joining, on the party screen (the game's own frame, or the page's picture of it): this player's row
-   filling up, the buttons covered by what is going on (front-end units: 640 x 480, drawn 4:3 centred). */
+/* Joining, on the party screen (the game's own frame, or the page's picture of it): the joiner's row
+   filling up, and on the joiner's own screen (T) the buttons covered by what is going on (front-end units: 640 x 480, drawn 4:3 centred). */
 static void catchup_row(ui_image_t *im, int slot, int pct, const char *t) {
     int x0, y, by, sc = im->w >= 960 ? 3 : 2;
     float k = (float)im->w * 3 < (float)im->h * 4 ? (float)im->w / 640.f : (float)im->h / 480.f;
@@ -114,11 +126,12 @@ static void catchup_row(ui_image_t *im, int slot, int pct, const char *t) {
     ui_rect(im, bx - 2, ry - 2, bw + 4, bh + 4, UI_PANEL);
     ui_rect(im, bx, ry, bw * pct / 100, bh, UI_GOLD);
     ui_text(im, bx + bw + 8, ry + bh / 2 - 7 * sc / 2, sc, pc, UI_GOLD);
+    rt_trace("ms: joining on the party screen %d%% %s", pct, t ? t : "(player's row)");
+    if (!t) return;   /* (another player's row, seen by the others: the bar only) */
     int px = (int)(ox + (float)(x0 - 8) * k), py = (int)(oy + (float)(by - 4) * k);
     int pw = ui_text_width(t, sc) + 24, ph = (int)(48.f * k);
     ui_rect(im, px, py, pw, ph, 0xF4000000u);
     ui_text(im, px + 12, py + ph / 2 - 7 * sc / 2, sc, t, UI_GOLD);
-    rt_trace("ms: joining on the party screen %d%% %s", pct, t);
 }
 
 /* The page's picture of the party's screen, taken before the reload (platform/web/join_view.c), W x H:

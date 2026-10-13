@@ -27,6 +27,11 @@ EM_JS(int, js_join_backdrop, (uint8_t *out, int w, int h), {
     HEAPU8.set(g.getImageData(0, 0, w, h).data, out);
     return 1;
 });
+/* a friend joining the room (the server's members list): how far it got catching up, -1 not joining */
+EM_JS(int, js_join_progress, (int slot), {
+    var m = (Module.rugbyMembers || []).find((p) => p.slot === slot);
+    return m && m.joining ? Math.min(99, m.pct | 0) : -1;
+});
 // clang-format on
 
 int plat_join_preview(int *slot, uint32_t *players, char *code, int cap) {
@@ -34,3 +39,4 @@ int plat_join_preview(int *slot, uint32_t *players, char *code, int cap) {
 }
 void plat_join_snapshot(void) { js_join_snapshot(); }
 int plat_join_backdrop(uint8_t *rgba, int w, int h) { return js_join_backdrop(rgba, w, h); }
+int plat_join_progress(int slot) { return js_join_progress(slot); }

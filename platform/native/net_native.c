@@ -91,6 +91,10 @@ int plat_join_preview(int *slot, uint32_t *players, char *code, int cap) {
     return 0;
 }
 void plat_join_snapshot(void) {}
+int plat_join_progress(int slot) {
+    (void)slot;
+    return -1;
+}
 int plat_join_backdrop(uint8_t *rgba, int w, int h) {
     (void)rgba, (void)w, (void)h;
     return 0;

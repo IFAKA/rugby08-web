@@ -125,6 +125,7 @@ void plat_session_leave(void);           /* lockstep: leave for a fresh own game
 int plat_join_preview(int *slot, uint32_t *players, char *code, int cap); /* 1: joining that room as SLOT */
 void plat_join_snapshot(void);                     /* the frame just drawn is that party's screen: keep it */
 int plat_join_backdrop(uint8_t *rgba, int w, int h); /* while catching up: the kept picture, W x H RGBA */
+int plat_join_progress(int slot); /* the others: player SLOT joining, percent caught up; -1 not joining */
 const char *plat_page_message(void);     /* a message for the game to show (the page: join errors...), or NULL */
 extern int rt_net_progress;              /* lockstep: catching up, percent done */
 /* Host-authoritative mode (runtime/core/net_ha.c, --net-mode ha) */
