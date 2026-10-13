@@ -172,7 +172,8 @@ static void apply_inputs(uint32_t frame) {
         int desk = ls_roles_filter(s->d, s->nd);   /* who may act now (the host's menus, the pauser's) */
         for (int i = 0; i < s->nd; i++)
             if (s->d[i].type == NET_DESK_LOOK) own_camera_set_ref(s->d[i].x, s->d[i].y);
-            else if (desk || ((s->d[i].type == PLAT_DESK_KEY || s->d[i].type == PLAT_DESK_BUTTON) && !s->d[i].a))
+            else if ((desk && ls_roles_desk_event(&s->d[i])) ||
+                     ((s->d[i].type == PLAT_DESK_KEY || s->d[i].type == PLAT_DESK_BUTTON) && !s->d[i].a))
                 plat_desk_apply(&s->d[i]);   /* (releases always: nothing stays held) */
     } else if (!N.offline) {
         ls_roles_filter(NULL, 0);

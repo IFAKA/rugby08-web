@@ -27,7 +27,7 @@ void rt_pad_pause_frame(uint32_t frame) {
     int match = st && rd32(st) == VT_BACKEND;
     for (int k = 0; k < RT_MAX_PADS; k++) {
         uint16_t b = rt_pads[k].buttons;
-        if (match && !esc_up && (b & RT_PAD_START) && !(was[k] & RT_PAD_START)) {
+        if (match && !esc_up && (b & RT_PAD_START) && !(was[k] & RT_PAD_START) && ls_roles_may_pause(k)) {
             rt_trace("pads: controller of pad %d pressed Start at frame %u: Esc", k, frame);
             escape(1);
             ls_roles_paused_by(k);
