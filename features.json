@@ -596,6 +596,16 @@
       "notes": "2026-10-13: ok (2 pages: 390 hashes, 481 pictures equal; friend pauses/resumes both; own view only on its screen). Earlier runs saw 1-4 of ~240 pictures differ in cutscenes (game camera equal): not reproduced in this run, still watched."
     },
     {
+      "id": "ls.camera",
+      "passes": true,
+      "deps": [
+        "ls.match"
+      ],
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_camera_check.py",
+      "description": "Each player's own camera in a party (their own settings, their own view; the match reads one shared camera; friends' sticks turned into it): same match (hashes), own pictures, own controls.",
+      "notes": "2026-10-13: ok (Side vs Truck: 162 hashes equal, 97/100 pictures differ, the friend's Up runs within 35 degrees of its own look)."
+    },
+    {
       "id": "ls.leave",
       "deps": [
         "ls.match"
