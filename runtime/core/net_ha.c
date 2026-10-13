@@ -19,6 +19,7 @@
  *   'U' paused  host -> friends: u8 paused or not        (the party flow: net_ha_flow.c)
  *   'M' menu    host -> friends: u16 its front-end screen id when it changes (0: not in the menus; a
  *               friend's lobby says what the host is doing, fe_party.c)
+ *   'T' sides   host -> friends: its Team Select (party_sides.c), on change and every second there
  * A key goes first, on request and every KEY_EVERY frames; a friend decodes the records after the last
  * key in order with its own game's decoder (the same tables in every game: RT_MS_STREAM_CHECK). */
 #include "netplay_int.h"
@@ -129,6 +130,9 @@ static void handle(const uint8_t *m) {
     case 'M':
         if (rt_net_ha == 2 && len == 2) g_host_screen = m[HDR] | m[HDR + 1] << 8;
         break;
+    case 'T':
+        if (rt_net_ha == 2) party_sides_rx(m + HDR, len);
+        break;
     case 'Z':
         if (rt_net_ha == 1) net_ha_flow_pause_request();
         break;
@@ -158,7 +162,8 @@ static int msg_len(const uint8_t *m, int avail) {
     case 'E':
     case 'Z':
     case 'U':
-    case 'M': return avail < HDR ? HDR : HDR + (m[6] | m[7] << 8);
+    case 'M':
+    case 'T': return avail < HDR ? HDR : HDR + (m[6] | m[7] << 8);
     case 'I': return avail < 19 ? 19 : 19 + 6 * m[18];
     case 'H': return 14;
     case 'A':
@@ -213,6 +218,7 @@ void net_ha_present(uint32_t frame) {
             if (k != N.slot) rt_pads[k] = g_pad_at[k] && frame - g_pad_at[k] < PAD_STALE ? g_pad[k] : zero;
         return;
     }
+    rt_pads_party = ui_lobby_member_mask() & ~1u;   /* (a friend's Team Select shows the party: pad_attach.c) */
     rt_pads[N.slot] = N.local;
     net_ha_test_press(&N.local, net_ha_rx_phase(), frame);
     rt_pads[N.slot] = N.local;

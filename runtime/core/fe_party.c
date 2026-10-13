@@ -164,6 +164,7 @@ void fe_party_present(uint32_t frame) {
     ui_lobby_poll();
     uint32_t g = rd32(GAME_PTR), st = g ? rd32(g + 0x90) : 0, fe = rd32(FE_PTR), screen = fe ? rd32(fe + 4) : 0;
     if (!st || rd32(st) != VT_FRONTEND || !screen) return;
+    party_sides_present(frame);
     float px, py;   /* the menus' cursor where the pointer is (the browser: mouse and touch) */
     uint32_t cur = rd32(fe + 0x31488);
     if (plat_pointer(&px, &py) && cur) {
@@ -196,10 +197,14 @@ int fe_party_key(int sc, int down) {
         g_mine[sc] = 0;
         return mine;
     }
+    if (rt_net_ha == 2 && fe_screen_id() == 6 && fe_in_menus()) { /* a friend's Team Select: its keys go to the host */
+        g_mine[sc] = 1;
+        return 1;
+    }
     if (fe_screen_id() != FE_SCR_JOIN) return 0;
     char c = sc >= SC_A && sc <= SC_Z ? (char)('A' + sc - SC_A) : sc >= SC_1 && sc < SC_0 ? (char)('1' + sc - SC_1) : 0;
     if (c && !strchr(FE_PARTY_ALPHABET, c)) c = 0;
-    if (sc == SC_RETURN || sc == SC_KP_ENTER) join();   /* the typed code */
+    if (sc == SC_RETURN || sc == SC_KP_ENTER) join(); /* the typed code */
     else if (c || sc == SC_BACKSPACE) type(c);
     else return 0;
     g_mine[sc] = 1;

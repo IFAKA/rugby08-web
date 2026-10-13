@@ -22,3 +22,9 @@ int fe_party_key(int scancode, int down);            /* 1: typing the code took 
 int fe_screen_id(void);                              /* the front end's current screen id, -1 none */
 int fe_in_menus(void);                               /* the game is in its front end (not loading, not a match) */
 void fe_go(int id);                                  /* FeSetCurrentScreen(id) */
+
+/* party_sides.c: Team Select on every party member's screen */
+enum { PARTY_TS_SIDE, PARTY_TS_HOST };
+int party_ts_allow(int what);                        /* the game's Team Select callbacks ask */
+void party_sides_rx(const uint8_t *p, size_t len);   /* friend: the host's 'T' */
+void party_sides_present(uint32_t frame);

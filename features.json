@@ -538,7 +538,7 @@
       ],
       "desc": "Team Select on every party member's own screen, synced: only party controllers, each moves its own icon, each side's captain picks its team and kit, the host picks the AI side's and presses CONTINUE.",
       "check": "/opt/homebrew/bin/python3 tools/net/party_sides_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.camera",

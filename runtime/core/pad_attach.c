@@ -33,6 +33,44 @@
 #define MAX_ENTRIES 9
 #define SIDE_SLOTS  4        /* entries 1..4 can take a side */
 
+/* A friend's Team Select shows the party (party_sides.c): its keyboard entry stands for the host, pad
+   slots 1..3 for the friends, on the sides the host's game has them (0, 'H', 'A'; [4] the keyboard). */
+static int g_mirror;
+static char g_mirror_side[RT_MAX_PADS + 1];
+void rt_pads_mirror(int on, const char *sides) {
+    g_mirror = on;
+    if (sides) memcpy(g_mirror_side, sides, sizeof g_mirror_side);
+}
+int rt_pads_mirroring(void) { return g_mirror; }
+
+static char side_of(uint32_t c) {
+    char s = (char)rd8(c + C_SIDE);
+    return s == 'H' || s == 'A' ? s : 0;
+}
+
+/* The side of pad slot k's controller (k = -1: the keyboard), 0 if none or not plugged in. */
+char rt_pads_side(int k) {
+    uint32_t g = rd32(GAME_PTR), m = g ? rd32(g + G_CTRLMGR) : 0, look = m ? rd32(m + M_LOOKUP) : 0;
+    for (int e = 0; look && e < MAX_ENTRIES; e++) {
+        uint32_t c = rd32(look + 4u * (uint32_t)e);
+        if (!c) break;
+        uint32_t t = rd32(c + C_TYPE);
+        if ((k < 0 && t == T_KEYBOARD) || (k >= 0 && t == T_PAD && rt_dinput_pad_slot(rd32(c + C_DEVICE)) == k))
+            return rd32(c + C_ATTACHED) ? side_of(c) : 0;
+    }
+    return 0;
+}
+
+static void mirror_sides(const uint32_t *c, int n) {
+    for (int e = 0; e < n && g_mirror; e++) {
+        uint32_t t = rd32(c[e] + C_TYPE);
+        int k = t == T_KEYBOARD ? RT_MAX_PADS : t == T_PAD ? rt_dinput_pad_slot(rd32(c[e] + C_DEVICE)) : -1;
+        if (k < 0 || side_of(c[e]) == g_mirror_side[k]) continue;
+        wr8(c[e] + C_SIDE, (uint8_t)g_mirror_side[k]);
+        wr8(c[e] + C_SIDE + 1, 0);
+    }
+}
+
 static void trace(uint32_t frame, const uint32_t *c, int n) {
     static char last[160];
     char s[160];
@@ -119,5 +157,6 @@ void rt_pads_sync_game(uint32_t frame) {
     static int fixed = -1;   /* RT_PADS=N (reference runs): the boot order stays */
     if (fixed < 0) fixed = getenv("RT_PADS") != NULL;
     if (!fixed) order(poll, look, c, n, &s);
+    mirror_sides(c, n);
     trace(frame, c, n);
 }

@@ -27,7 +27,8 @@
 // 'S' the match setup (host, at launch; the room keeps the latest), 'F' a match frame (host; payload
 // byte 0 = 0 is a key frame, the room keeps the latest), 'E' the match is over (host; the room forgets
 // setup and key), 'U' paused or not (host), 'K' a key request, 'P' a pad and 'Z' a pause request
-// (friends), 'M' the host's front-end screen (u16 id; the room keeps the latest). A newcomer gets the
+// (friends), 'M' the host's front-end screen (u16 id; the room keeps the latest), 'T' its Team Select
+// (relayed on change and every second). A newcomer gets the
 // room's log, then the kept screen, setup and key frame.
 package main
 
@@ -105,7 +106,7 @@ func msgLen(b []byte) int {
 		return 6
 	case 'W', 'R':
 		return 2
-	case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M':
+	case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M', 'T':
 		if len(b) < haHeader {
 			return haHeader
 		}
@@ -513,7 +514,7 @@ func (c *client) game(b []byte) {
 			if r.pending[k] {
 				r.pending[k], r.from[k] = false, f
 			}
-		case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M':
+		case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M', 'T':
 			if k != c.slot {
 				continue
 			}

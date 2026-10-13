@@ -94,8 +94,9 @@ int rt_pad_count(void) {
 int rt_pad_attached(int k) {
     if (k < 0 || k >= rt_pad_count()) return 0;
     if (getenv("RT_PADS") || g_scripted[k]) return 1;
+    if (rt_pads_mirroring()) return k > 0 && (rt_pads_party >> k & 1);   /* a friend's Team Select: the party */
     if (k == 0) return g_gamepad;
-    return rt_net_ha == 1 && (rt_pads_party >> k & 1);
+    return rt_net_ha == 1 && (rt_pads_party >> k & 1);   /* (rt_pads_party: the host's members, net_ha.c) */
 }
 
 /* Every Present: this machine's game controller drives pad 0 (a host's too: its keyboard is the game's
