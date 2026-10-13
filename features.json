@@ -502,7 +502,7 @@
       ],
       "desc": "docs/PARTY_RESEARCH.md: every game mode (several controllers? screens players act on, match start/end, between-match screens), a real main-menu item and screens in the game's own front end, adding/removing a controller while the game runs, the code that moves a human-controlled player.",
       "check": "grep -q '^## Modes' docs/PARTY_RESEARCH.md && grep -q '^## Main menu item' docs/PARTY_RESEARCH.md && grep -q '^## Controller hot-plug' docs/PARTY_RESEARCH.md && grep -q '^## Player movement' docs/PARTY_RESEARCH.md",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.controllers",
