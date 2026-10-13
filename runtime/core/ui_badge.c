@@ -64,9 +64,10 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
         memset(g_img.px, 0, (size_t)w * (size_t)h * 4);
         if (rk) {   /* another player's turn: the screen dimmed (or covered) and whose turn it is */
             ui_rect(&g_img, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xE8000000u : 0x90000000u);
-            int tw = ui_text_width(role, 3) + 24;
+            int sc = ui_text_width(role, 3) + 24 <= w - 16 ? 3 : 2;   /* (fits the screen) */
+            int tw = ui_text_width(role, sc) + 24;
             ui_rect(&g_img, (w - tw) / 2, h / 2 - 22, tw, 44, UI_PANEL);
-            ui_text(&g_img, (w - tw) / 2 + 12, h / 2 - 10, 3, role, UI_GOLD);
+            ui_text(&g_img, (w - tw) / 2 + 12, h / 2 - 4 * sc, sc, role, UI_GOLD);
             rt_trace("ms: party role %s", role);
         }
         if (you[0]) {   /* which player this is, in a corner (2: the player's controller colour) */

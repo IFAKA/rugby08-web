@@ -9,6 +9,7 @@ void ls_roles_paused_by(int slot);                    /* that slot's Start pause
 int ls_roles_may_pause(int slot);                     /* that slot has pauses left (3 a match in a party) */
 int ls_roles_desk_event(const plat_desk_ev_t *e);     /* player 1's desk event may act (its Esc: a pause) */
 int ls_roles_pause_left(void);                        /* seconds the pause has left, -1: not paused */
+int ls_roles_actor(void);                             /* the slot acting in the menus now, -1: everyone */
 int ls_roles_filter(const plat_desk_ev_t *d, int nd); /* every game: other slots' pads off; 1: desk may act */
 int ls_roles_banner(char *line, int cap);             /* this player's banner (LS_BANNER_*), 0: none */
 void ls_roles_local(const rt_pad_t *p);               /* this player's own presses (leave the party?) */

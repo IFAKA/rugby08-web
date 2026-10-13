@@ -19,7 +19,8 @@
 #define VT_BACKEND  0x008CC6F0u
 #define SCR_HUD     0x79       /* in play */
 #define SCR_PAUSED  0x71
-#define SCR_OPTIONS 0x58      /* a set piece's options: penalty (punt, kick at goal, scrum, run), quick options */
+#define SCR_QUICK   0x58      /* a set piece's quick options */
+#define SCR_PENALTY 0x5F      /* penalty options (punt, kick at goal, scrum, run) */
 #define SC_ESCAPE   41         /* SDL scancode */
 
 #define PAUSES    3           /* per player and match (online sports games: EA FC 26, 3 a player) */
@@ -51,7 +52,7 @@ int ls_roles_may_pause(int slot) {   /* a player with pauses left (no limit outs
     return !ls_on() || __builtin_popcount(ls_members()) < 2 || (slot >= 0 && slot < RT_MAX_PADS && g_left[slot] > 0);
 }
 void ls_roles_paused_by(int slot) {   /* pad_pause.c: Start, every game at the same frame */
-    if (g_pauser < 0 && in_match()) g_pauser = slot, g_armed = 30;
+    if (g_pauser < 0 && in_match()) g_pauser = slot, g_armed = 120;   /* (the menu opens ~32 frames later) */
 }
 /* Player 1's keyboard Esc pauses too: none once its pauses are used up. */
 int ls_roles_desk_event(const plat_desk_ev_t *e) {
@@ -80,6 +81,14 @@ static void pause_step(int match, int id) {
 }
 int ls_roles_pause_left(void) { return g_paused ? (int)(PAUSE_MAX - g_pause_frames) / 60 : -1; }
 
+/* The player whose controller acts in the menus now: the pauser in a pause, the host in the shared menus,
+   else -1 (open play, Team Select: everyone). Settings changed then are that player's (own_camera.c). */
+int ls_roles_actor(void) {
+    if (!ls_on()) return -1;
+    if (in_match()) return g_paused ? g_pauser : -1;
+    return fe_in_menus() && !sides_screen(fe_screen_id()) ? ls_host() : -1;
+}
+
 /* Every game, once the frame's inputs are in rt_pads: who may act now. Returns whether the keyboard and
    mouse (player 1's, applied as desk events) may. */
 int ls_roles_filter(const plat_desk_ev_t *d, int nd) {
@@ -103,7 +112,7 @@ int ls_roles_filter(const plat_desk_ev_t *d, int nd) {
 /* A set piece's options (penalty, quick options: screen 0x58) are for the team with the ball: 1 if that
    is not this player's team (its screen shows the other team choosing, not their menu). */
 static int others_choice(int id) {
-    if (id != SCR_OPTIONS) return 0;
+    if (id != SCR_QUICK && id != SCR_PENALTY) return 0;
     ms_ball_t b;
     int me = rt_net_slot();
     char side = me == 0 && rt_pads_side(-1) ? rt_pads_side(-1) : rt_pads_side(me);
@@ -124,7 +133,7 @@ int ls_roles_banner(char *line, int cap) {
                LS_BANNER_COVER;
     if (!in_match() && fe_in_menus() && ls_host() != me && !sides_screen(id)) {
         if (g_leave_ask) return snprintf(line, (size_t)cap, "LEAVE THE PARTY?  S: YES   ESC: NO"), LS_BANNER_COVER;
-        return snprintf(line, (size_t)cap, "THE HOST IS CHOOSING   ESC: LEAVE THE PARTY"), LS_BANNER_VEIL;
+        return snprintf(line, (size_t)cap, "THE HOST IS CHOOSING  -  ESC: LEAVE THE PARTY"), LS_BANNER_VEIL;
     }
     return 0;
 }

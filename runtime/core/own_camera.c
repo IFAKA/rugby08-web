@@ -17,6 +17,7 @@
 #include "fe_party.h"
 #include "own_camera.h"
 #include "match_state.h"
+#include "ls_roles.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,7 +50,8 @@ void own_camera_options(void) {
         det_hash_skip(SKIP_OPTS, OPTIONS + O_CAM_LO, OPTIONS + O_CAM_HI);
     }
     if (!memcmp(o, g_seen, sizeof g_seen)) return;
-    if (ls_sender() == rt_net_slot()) memcpy(g_mine, o, sizeof g_mine);
+    int actor = ls_roles_actor();   /* (in a pause the pauser, in the menus the host: only they act) */
+    if ((actor >= 0 ? actor : ls_sender()) == rt_net_slot()) memcpy(g_mine, o, sizeof g_mine);
     else memcpy(o, g_mine, sizeof g_mine);
     memcpy(g_seen, o, sizeof g_seen);
 }

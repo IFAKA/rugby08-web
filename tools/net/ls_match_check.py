@@ -7,7 +7,8 @@ Both play (Cross now and then: each side answers its own set pieces). Measured:
   sync     the state hashes ("netplay: frame F hash H") are equal in both games;
   picture  the game's picture is the same at the same frame ("pix: frame F HASH", RT_PIX: the back
            buffer before the local overlays): menus, intro cutscene, set-piece banners, referee;
-  pause    the friend's Esc pauses both games (screen 0x71), its Cross on RESUME resumes both;
+  pause    the friend's Esc pauses both games (screen 0x71), the host's screen says who paused (the menu is
+           the friend's), its Cross on RESUME resumes both;
   presses  the friend's presses act in the match: its pause, and the away side's set pieces it answers.
 One line; details in logs/ls_match/."""
 
@@ -99,6 +100,8 @@ def pause(host, friend, out):
     friend.key("Escape", 3000)
     if not all(p.wait_for(lambda p=p: screen(p.lines) == PAUSED, 20) for p in (host, friend)):
         return "the friend's Esc did not pause both games"
+    if not host.wait("ms: party role PAUSED BY PLAYER 2", 10):
+        return "the host's screen did not say the friend paused (its own pause menu is the friend's)"
     friend.key("s", 3000)  # RESUME
     if not all(p.wait_for(lambda p=p: screen(p.lines) != PAUSED, 20) for p in (host, friend)):
         return "the friend's RESUME did not resume both games"
