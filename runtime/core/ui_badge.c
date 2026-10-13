@@ -39,6 +39,7 @@ static void ls_toasts(uint32_t frame) {
 }
 
 int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) {
+    ui_party_view_capture(frame, w, h);   /* (the party screen, before anything is drawn over it) */
     const char *msg = plat_page_message();   /* the page's news: a join refused, a lost connection */
     if (msg) party_toast(frame, msg);
     if (ls_on()) ls_toasts(frame);
@@ -54,7 +55,8 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     char b[48], all[256];
     if (ls) snprintf(b, sizeof b, "PARTY %s %d/4", ls_code(), count(ls_members()));
     else snprintf(b, sizeof b, "PARTY %s %d/4", ui_lobby_code(), ui_lobby_members());
-    snprintf(all, sizeof all, "%s|%s|%s|%d%s|%d", badge ? b : "", toast ? toast : "", you, rk, role, join);
+    snprintf(all, sizeof all, "%s|%s|%s|%d%s|%d|%u", badge ? b : "", toast ? toast : "", you, rk, role, join,
+             rk == LS_BANNER_LOBBY ? ui_party_view_gen() : 0);
     *changed = strcmp(all, last) != 0 || g_img.w != w || g_img.h != h;
     if (g_img.w != w || g_img.h != h) {
         free(g_img.px);
@@ -65,7 +67,8 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
         snprintf(last, sizeof last, "%s", all);
         memset(g_img.px, 0, (size_t)w * (size_t)h * 4);
         if (join) catchup_row(&g_img, jslot, 0, "JOINING THE PARTY...");   /* until the page reloads */
-        if (rk) {   /* another player's turn: the screen dimmed (or covered) and whose turn it is */
+        if (rk == LS_BANNER_LOBBY) ui_party_view(&g_img, role);   /* the host's menus: not this player's */
+        else if (rk) {   /* another player's turn: the screen dimmed (or covered) and whose turn it is */
             ui_rect(&g_img, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xE8000000u : 0x90000000u);
             int sc = ui_text_width(role, 3) + 24 <= w - 16 ? 3 : 2;   /* (fits the screen) */
             int tw = ui_text_width(role, sc) + 24;

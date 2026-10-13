@@ -14,7 +14,9 @@
   following the host (launch, intro, end, pause).
 - The party in the game's own menus (pt.menu): `fe_xml.c` its screen files as a tree (binary .rfe in, XML out) ·
   `fe_screens.c` ONLINE in the main menu and the party's screens · `fe_party.c` what they do (keys, texts, the
-  menus' cursor at the browser's pointer) · `party_sides.c` Team Select on everyone's screen · `party_leave.c`
+  menus' cursor at the browser's pointer) · `ls_cursor.c` each screen draws that cursor at its own player's pointer
+  (a friend's: from BeginScene to Present only, never game state) · `ui_party_view.c` a friend's screen stays on
+  the party screen while the host is in its own menus (drawing only) · `party_sides.c` Team Select on everyone's screen · `party_leave.c`
   leaving, the host ending the party, the messages everyone sees · `ui_lobby.c` parties on the relay · `ui_badge.c` the party badge · `ui_camera.c` C in a match cycles this player's own view (d3d8_pov.cpp; local, never game state)
   (`ui_font.c` bitmap font, drawn by `render/webgl/overlay.cpp` at Present).
 - `interp.c` (+`interp_int.h`) Unicorn fallback for guest code without a lifted body.

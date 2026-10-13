@@ -18,6 +18,7 @@ remove controllers, four sides), `party_menu_check.py` (pt.menu: ONLINE in the g
 pad), `party_webrtc_check.py` (pt.webrtc: data channels, losses, latency vs the relay).
 Lockstep party (ls.*): `ls_boot_check.py`, `ls_party_check.py`, `ls_controls_check.py`, `ls_match_check.py` (a party
 match: equal state hashes and pictures (RT_PIX), the friend's Start pauses both, its own camera changes only its
-picture); `pix_dump.py` turns RT_PIX_DUMP frames of two players into PNGs and a difference image.
+picture), `ls_cursor_check.py` (each screen draws the cursor at its own pointer, the host's mouse alone drives the
+menus, equal pictures with both pointers in one place); `pix_dump.py` turns RT_PIX_DUMP frames of two players into PNGs and a difference image.
 `ls_joinview_check.py`: joining shows the party screen from JOIN PARTY on (never a black one), "(YOU)" on each
 game's own row, equal hashes.

@@ -132,8 +132,8 @@ int ls_roles_banner(char *line, int cap) {
         return snprintf(line, (size_t)cap, "PAUSED BY PLAYER %d  %d S", g_pauser + 1, ls_roles_pause_left()),
                LS_BANNER_COVER;
     if (!in_match() && fe_in_menus() && ls_host() != me && !sides_screen(id)) {
-        if (g_leave_ask) return snprintf(line, (size_t)cap, "LEAVE THE PARTY?  S: YES   ESC: NO"), LS_BANNER_COVER;
-        return snprintf(line, (size_t)cap, "THE HOST IS CHOOSING  -  ESC: LEAVE THE PARTY"), LS_BANNER_VEIL;
+        if (g_leave_ask) return snprintf(line, (size_t)cap, "LEAVE THE PARTY?  S: YES   ESC: NO"), LS_BANNER_LOBBY;
+        return snprintf(line, (size_t)cap, "THE HOST IS CHOOSING  -  ESC: LEAVE THE PARTY"), LS_BANNER_LOBBY;
     }
     return 0;
 }

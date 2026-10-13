@@ -132,3 +132,24 @@ extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int 
     }
     restore(s);
 }
+
+// d3d9w_frame_read: the finished frame before the overlay (the default framebuffer), RGBA, top row
+// first, opaque; 1 if read. A party keeps the party screen with it (runtime/core/ui_party_view.c).
+extern "C" int d3d9w_frame_read(unsigned char *rgba, int w, int h) {
+    if (!rgba || w <= 0 || h <= 0) return 0;
+    GLint rd = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &rd);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)rd);
+    size_t row = (size_t)w * 4;
+    std::vector<unsigned char> t(row);
+    for (int y = 0; y < h / 2; y++) {   // (GL rows are bottom first)
+        unsigned char *a = rgba + row * (size_t)y, *b = rgba + row * (size_t)(h - 1 - y);
+        memcpy(t.data(), a, row);
+        memcpy(a, b, row);
+        memcpy(b, t.data(), row);
+    }
+    for (size_t i = 3; i < row * (size_t)h; i += 4) rgba[i] = 255;
+    return 1;
+}

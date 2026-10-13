@@ -35,6 +35,11 @@ int ui_open(void);                    /* (0: nothing of ours takes every key) */
 int ui_camera_key(int scancode, int down);
 void rt_pov_cycle(void);
 const char *rt_pov_name(void);
+/* ui_party_view.c: a friend's screen stays on the party screen while the host chooses (drawing only) */
+void ui_party_view_capture(uint32_t frame, int w, int h); /* at Present, before the overlays */
+int ui_party_view_due(void);                              /* the next Present's frame is read back */
+uint32_t ui_party_view_gen(void);                         /* changes when the view has to be redrawn */
+void ui_party_view(ui_image_t *im, const char *msg);
 /* At every Present: 1 if there is something to draw; *img the image (w x h), *changed since the last */
 int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed);
 

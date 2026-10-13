@@ -22,6 +22,8 @@ int fe_online(void);                                 /* the ONLINE item exists (
 const char *const *fe_party_items(int id);           /* a screen's buttons, NULL-terminated */
 uint32_t fe_party_action(uint32_t button);           /* game callback: one of our buttons was pressed */
 void fe_party_present(uint32_t frame);               /* every Present */
+void ls_cursor_scene(void);                          /* BeginScene: a friend's screen draws its own pointer */
+void ls_cursor_present(void);                        /* Present, first: the menus' shared cursor back */
 int fe_party_joining(int *slot);                     /* JOIN accepted, before the reload: as SLOT (join_view.c) */
 int fe_party_key(int scancode, int down);            /* 1: typing the code took the key */
 int fe_screen_id(void);                              /* the front end's current screen id, -1 none */

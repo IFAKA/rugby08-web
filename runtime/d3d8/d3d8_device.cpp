@@ -13,12 +13,7 @@ extern "C" void rt_coverage_frame(uint32_t frame);
 // A guest surface for the device's own backbuffer / depth buffer (host surfaces from d3d9-webgl).
 static uint32_t wrap_surface(IDirect3DSurface9 *s9, uint32_t w, uint32_t h, uint32_t fmt, uint32_t usage) {
     Obj *o = new Obj(K_SURFACE);
-    o->host = s9;
-    o->owns = false;
-    o->w = w;
-    o->h = h;
-    o->fmt = fmt;
-    o->usage = usage;
+    o->host = s9, o->owns = false, o->w = w, o->h = h, o->fmt = fmt, o->usage = usage;
     return d3d8_new(o);
 }
 
@@ -140,6 +135,7 @@ HLE_D3D(IDirect3DDevice8, Reset) {
 }
 
 HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
+    ls_cursor_present();   // first: the menus' shared cursor back before anything reads it
     Obj *o = d3d8_obj(a[0]);
     DevState *s = o->dev;
     const uint8_t *img;
@@ -237,7 +233,10 @@ HLE_D3D(IDirect3DDevice8, GetDepthStencilSurface) {
 }
 
 // ---- scene ----------------------------------------------------------------------------------
-HLE_D3D(IDirect3DDevice8, BeginScene) { return D(a)->BeginScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_; }
+HLE_D3D(IDirect3DDevice8, BeginScene) {   // (a party: this screen's own pointer drawn, runtime/core/ls_cursor.c)
+    ls_cursor_scene();
+    return D(a)->BeginScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_;
+}
 HLE_D3D(IDirect3DDevice8, EndScene) { return D(a)->EndScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_; }
 
 HLE_D3D(IDirect3DDevice8, Clear) { // (this, Count, D3DRECT*, Flags, Color, float Z, Stencil)

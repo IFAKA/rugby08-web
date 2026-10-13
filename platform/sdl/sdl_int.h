@@ -18,6 +18,7 @@ extern keymap_t g_keys[SDL_NUM_SCANCODES];
 extern uint8_t g_vk_down[256], g_dik_down[256];
 extern int g_mdx, g_mdy, g_mdw;          /* mouse motion since the last plat_mouse_delta */
 extern int g_px, g_py, g_pmoved;         /* the pointer in the window (plat_pointer) */
+extern int g_lpx, g_lpy, g_lpmoved;      /* this player's own pointer (plat_local_pointer) */
 extern uint8_t g_replay_buttons;         /* mouse buttons held by the input replay (ORed into DirectInput) */
 extern int g_inited;                     /* SDL video initialised */
 extern SDL_Window *g_win;

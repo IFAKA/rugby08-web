@@ -481,3 +481,8 @@ Next: `./init.sh next` shows what to fix.
 - "(YOU)" on this player's roster row in every game. Learned: the FE text setter 0x83BAB0 frees/allocates in a block heap (0xAA2620) by length, so per-player text is lockstep-safe only if every game's row is as long and set at the same frames: rows padded to 24, setter driven by the shared text.
 - The front end is 640x480 drawn 4:3 centred in a 16:9 back buffer (overlay mapping in ui_badge.c catchup_row).
 - Next: rugby08-72's friend lobby view (ui_party_view.c) reuses catchup_row/backdrop; ls_party_check rerun on this build.
+
+## 2026-10-14 — party: each player's own cursor; a friend stays on the party screen while the host chooses
+- Rule from the user (CLAUDE.md): share only what professional online sports games share; a friend never sees the host's menus or cursor.
+- ls_cursor.c: a friend's screen draws the menus' cursor at its own pointer (BeginScene..Present only; the shared, host-driven position is back before any logic). ui_party_view.c: while the host is in its own menus, a friend's screen shows the party screen (read back when last drawn, d3d9w_frame_read) with the message over its buttons; rows redrawn if the roster changed. Lockstep untouched (drawing only).
+- Proof: the user's two-window test (cursors independent, party view on the friend, Team Select shared); structure/lint ok. tools/net/ls_cursor_check.py written (equal pictures with both pointers in one place); its first full run is pending.

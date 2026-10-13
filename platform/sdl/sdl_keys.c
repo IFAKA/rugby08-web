@@ -38,6 +38,18 @@ int plat_pointer(float *x, float *y) {
 #endif
 }
 
+/* This player's own pointer (its real mouse or touch, never another player's) in 640x480 game units;
+   1 once it has moved over the game. A party draws it on this screen only (runtime/core/ls_cursor.c). */
+int g_lpx, g_lpy, g_lpmoved;
+int plat_local_pointer(float *x, float *y) {
+    int w = 640, h = 480;
+    if (!g_lpmoved || !g_win) return 0;
+    SDL_GetWindowSize(g_win, &w, &h);
+    *x = (float)g_lpx * 640.0f / (float)(w > 0 ? w : 640);
+    *y = (float)g_lpy * 480.0f / (float)(h > 0 ? h : 480);
+    return 1;
+}
+
 /* The real mouse buttons, or none when only the replay/netplay may drive input. */
 uint32_t live_mouse(void) { return g_inited && !virtual_cursor() ? SDL_GetMouseState(NULL, NULL) : 0; }
 uint8_t plat_mouse_buttons(void) {

@@ -3,7 +3,12 @@
 #define LS_ROLES_H
 #include "plat.h"
 
-enum { LS_BANNER_VEIL = 1, LS_BANNER_COVER = 2 };   /* a banner over a dimmed screen / over a covered one */
+enum {
+    LS_BANNER_VEIL = 1,
+    LS_BANNER_COVER = 2,
+    LS_BANNER_LOBBY = 3
+};   /* over a dimmed / covered screen;
+                                                                         the party view (ui_party_view.c) */
 int ls_host(void);                                    /* the room slot that drives the shared menus */
 void ls_roles_paused_by(int slot);                    /* that slot's Start paused the match */
 int ls_roles_may_pause(int slot);                     /* that slot has pauses left (3 a match in a party) */

@@ -27,6 +27,8 @@ static void desk_put(uint8_t type, uint8_t a, int x, int y) {
         g_desk[g_desk_n++] = (plat_desk_ev_t){ type, a, (int16_t)x, (int16_t)y };
 }
 void desk_record(const SDL_Event *e) {
+    if (e->type == SDL_MOUSEMOTION)
+        g_lpx = e->motion.x, g_lpy = e->motion.y, g_lpmoved = 1;   /* own pointer: ls_cursor.c */
     /* this player's own keys (its camera: runtime/core/ui_camera.c) never reach any game */
     if ((e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) && !e->key.repeat &&
         ui_camera_key(e->key.keysym.scancode, e->type == SDL_KEYDOWN))
