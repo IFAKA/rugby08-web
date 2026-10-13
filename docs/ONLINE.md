@@ -50,7 +50,9 @@ data and the game traffic all come from your server.
 ## Limits
 - The Mac app talks plain `ws://` only: against an HTTPS server it cannot connect yet (it needs TLS:
   a library such as OpenSSL), so for now it plays online on a local network, or everyone uses browsers.
-- A friend's game shows the host's cutscenes as a held picture (the host's replays and celebrations are
-  not sent yet); half time and full time have been checked only through a quit.
+- A friend's game shows the host's cutscenes as a held picture and not the host's in-match overlays
+  driven by its match logic (set-piece banners, penalty options, kick aim, scrum power bars): the match
+  is to move to lockstep (every game plays it, as sports games do online); half time and full time have
+  been checked only through a quit.
 - The older lockstep mode (every game plays the whole match from the presses) is still in the page
   behind `?panel`, for its checks.

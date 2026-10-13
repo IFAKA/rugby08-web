@@ -72,17 +72,26 @@ void ms_puppet_pose_end(void);
 int ms_puppet_forcing(void);
 int ms_puppet_check(char *out, int size);              /* friend's recorded frame vs the host's (RT_MS_POS) */
 void ms_puppet_place(uint32_t rugby);
+/* match_controls.c: the humans' players (each team's 4 player controls: the shirt number of its player) */
+#define MS_CONTROLS_BYTES 8
+void ms_controls_last(uint8_t *out);           /* host: its controls now (home 4, away 4; 0 none) */
+void ms_controls_host(const uint8_t *shirts);  /* friend: the host's, for ms_puppet_controls */
+void ms_puppet_controls(void);                 /* friend: its controls and their rings as the host's */
 /* players and ball, after the friend's presentation */ /* game/overrides/match/replay_playing.c */
 uint32_t ms_player_va(int team, int i); /* CRugbyPlayer* or 0 */
 uint32_t ms_team_va(int team); /* CRugbyTeam* or 0 */
 uint32_t ms_ball_va(void); /* BallManager* or 0 */
 
 /* match_camera.c: the match view (16 floats: eye, target, up, fov, aspect, near, far) */
-#define MS_CAMERA_BYTES 64
+#define MS_CAMERA_BYTES  64
+#define MS_HEAD_BYTES    (32 + MS_CAMERA_BYTES + MS_CONTROLS_BYTES + 4)   /* match_replay.c record(): + u8 directed */
+#define MS_HEAD_DIRECTED (32 + MS_CAMERA_BYTES + MS_CONTROLS_BYTES)
 void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj);   /* game/overrides/match/camera_update.c */
 void ms_camera_last(uint8_t *out);        /* this game's view at the last Present */
 void ms_camera_event(uint32_t listener, uint32_t event);  /* the CameraManager hears a match event */
-void ms_camera_remote(uint32_t id, uint32_t param);       /* friend: the host's camera event ('C') */
+void ms_camera_host(const uint8_t *cam);                  /* a friend shows this view (NULL: its own) */
+void ms_camera_remote(uint32_t id, uint32_t param);       /* a friend: the host's camera event ('C') */
+int ms_camera_directed(void);                             /* the game shows a set piece's or event's camera */
 void ms_camera_manager(uint32_t manager);                 /* the CameraManager (its listener inside) */
 const char *ms_camera_name(void);                         /* the camera this game shows ("Side", "Scrum" ...) */
 
@@ -95,7 +104,7 @@ void ms_measure_frame(uint32_t frame); /* ms_frame calls it */
 /* net_ha.c: the match over the network (host-authoritative) */
 void net_ha_setup(const uint8_t *setup);    /* host, at the launch */
 void net_ha_frame_out(uint32_t frame_no, const uint8_t *head, uint32_t frame, uint32_t rec, uint32_t rec_len);
-const uint8_t *net_ha_newest(int *fresh);   /* friend: newest host head (96) + frame, or NULL */
+const uint8_t *net_ha_newest(int *fresh);   /* friend: newest host head (MS_HEAD_BYTES) + frame, or NULL */
 void net_ha_send(char type, uint32_t frame, const void *payload, size_t len);
 void net_ha_send_end(uint32_t frame);
 void net_ha_nudge(int dx, int frames);   /* friend: push its sent stick left/right (-1/1) for some frames */

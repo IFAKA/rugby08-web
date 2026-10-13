@@ -85,10 +85,14 @@ static void window_event(const SDL_WindowEvent *w) {
         push(WM_ACTIVATEAPP_, 1, 0);
         push(WM_ACTIVATE_, 1, 0);
         break;
-    case SDL_WINDOWEVENT_FOCUS_LOST:
-        rel_set(0);
+    case SDL_WINDOWEVENT_FOCUS_LOST: rel_set(0);
+#ifndef __EMSCRIPTEN__
         push(WM_ACTIVATE_, 0, 0);
         push(WM_ACTIVATEAPP_, 0, 0);
+#endif
+        /* the browser: the game is never deactivated (a deactivated game stops updating and drawing:
+           a party's host in another window stopped its friends' Team Select and its picture went
+           black, user-reported); only the keyboard follows the focus (js_key_held, keys of the page). */
         break;
     case SDL_WINDOWEVENT_SIZE_CHANGED:
         push(WM_SIZE_, 0, ((uint32_t)w->data2 << 16) | ((uint32_t)w->data1 & 0xFFFF));

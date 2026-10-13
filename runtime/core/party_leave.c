@@ -16,6 +16,8 @@
 
 #define GAME_PTR   0x00A7ED28u
 #define VT_BACKEND 0x008CC6F0u
+#define FE_PTR     0x013834E8u   /* the front end */
+#define FE_RETURN  0x3144Cu      /* front end: the screen a match ends on (net_ha_flow.c) */
 
 static char g_toast[64];
 static uint32_t g_toast_until, g_rebuild_at;
@@ -31,7 +33,7 @@ static int in_match(void) {
     return st && rd32(st) == VT_BACKEND;
 }
 
-static void rebuild_teams(void) {   /* the controllers' sides as they are now: the AI takes the rest */
+void party_rebuild_teams(void) {   /* the controllers' sides as they are now: the AI takes the rest */
     uint32_t home = ms_team_va(0), away = ms_team_va(1);
     if (!home || !away) return;
     guest_call(0x006AC5E0u, 0);
@@ -48,7 +50,7 @@ void party_leave_present(uint32_t frame) {
     char line[64];
     if (g_rebuild_at && frame >= g_rebuild_at) {
         g_rebuild_at = 0;
-        if (in_match()) rebuild_teams();
+        if (in_match()) party_rebuild_teams();
     }
     if (rt_net_ha == 1) {
         uint32_t gone = was & ~now & ~1u;
@@ -73,6 +75,8 @@ void party_leave_present(uint32_t frame) {
         party_toast(frame, "THE HOST LEFT THE PARTY");
         int playing = in_match();
         ui_lobby_leave();
+        uint32_t fe = rd32(FE_PTR);
+        if (playing && fe) wr32(fe + FE_RETURN, FE_SCR_MAIN);   /* (the match was to end in the lobby: none now) */
         if (playing) guest_call(0x00576140u, 0);   /* out of the match, as the pause menu's quit does */
         else if (fe_in_menus()) fe_go(FE_SCR_MAIN);
         now = 0;

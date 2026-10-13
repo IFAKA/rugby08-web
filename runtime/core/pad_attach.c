@@ -75,11 +75,12 @@ static void mirror_sides(const uint32_t *c, int n) {
         uint32_t t = rd32(c[e] + C_TYPE);
         int k = t == T_KEYBOARD ? RT_MAX_PADS : t == T_PAD ? rt_dinput_pad_slot(rd32(c[e] + C_DEVICE)) : -1;
         if (k < 0) continue;
-        char now = side_of(c[e]);
+        char now = side_of(c[e]), want = rd32(c[e] + C_ATTACHED) ? g_mirror_side[k] : 0;   /* (a leaver's: none) */
         if (k == g_own && g_written[k] != 1 && now != g_written[k]) g_intent = now ? now : 'C';   /* moved here */
-        g_written[k] = g_mirror_side[k];
-        if (now == g_mirror_side[k]) continue;
-        wr8(c[e] + C_SIDE, (uint8_t)g_mirror_side[k]);
+        g_written[k] = want;
+        if (rd32(c[e] + C_ACTIVE) != (want != 0)) wr32(c[e] + C_ACTIVE, want != 0);
+        if (now == want) continue;
+        wr8(c[e] + C_SIDE, (uint8_t)want);
         wr8(c[e] + C_SIDE + 1, 0);
     }
 }

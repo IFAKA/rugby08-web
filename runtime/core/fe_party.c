@@ -51,7 +51,14 @@ static const char *host_doing(void) {
     if (s == 7) return "THE HOST IS PICKING THE STADIUM";
     if (s == 10 || s == 0xB || s == 0x78) return "THE HOST IS CHOOSING A GAME MODE";
     if (s == 14) return "THE HOST IS IN MY RUGBY";
-    if ((s >= 0x79 && s <= 0x13A) || s == 0xF || s == 0x15E) return "THE HOST IS IN A TOURNAMENT";
+    if (s == 0xF || s == 0x31D) {   /* a fixture's Team Select: the host's screen, this player's side */
+        int m = party_sides_mine();
+        return m == 'H'   ? "TEAM SELECT: YOU PLAY HOME (LEFT/RIGHT TO MOVE)"
+               : m == 'A' ? "TEAM SELECT: YOU PLAY AWAY (LEFT/RIGHT TO MOVE)"
+                          : "TEAM SELECT: PRESS LEFT OR RIGHT TO PLAY";
+    }
+    if ((s >= 0x79 && s <= 0x13A) || s == 0x15E) return "THE HOST IS IN A TOURNAMENT";
+    if (s >= 0x320 && s <= 0x335) return "THE HOST IS IN CHALLENGE MODE";
     return "THE HOST IS IN THE MENUS";
 }
 

@@ -6,7 +6,7 @@
  * Wire (little-endian, after netplay's types; the server relays these and does not log them):
  *   {u8 type, u8 slot, u32 frame, u16 len, len bytes}
  *   'S' setup   host -> friends at the match launch: MS_SETUP_BYTES (match_setup.c); the server keeps it
- *   'F' frame   host -> friends, one per recorded frame: u8 kind, u32 sequence number, the 96-byte head
+ *   'F' frame   host -> friends, one per recorded frame: u8 kind, u32 sequence number, the head (MS_HEAD_BYTES)
  *               (match_replay.c: score, view), then kind 0 (key) the raw 0x118C-byte frame, kind 1 the
  *               game's own record of the frame (its replay coder, ~380 bytes); the server keeps the last
  *               key for newcomers. Frames may come late, out of order or not at all (WebRTC's unreliable
@@ -118,7 +118,7 @@ void net_ha_setup(const uint8_t *setup) {
     g_want_key = 1;
 }
 
-/* host: match_replay.c for each recorded frame: head (96 bytes), the frame (guest), the game's record of
+/* host: match_replay.c for each recorded frame: head (MS_HEAD_BYTES), the frame (guest), the game's record of
    it (guest, rec_len bytes; 0: none) */
 void net_ha_frame_out(uint32_t frame_no, const uint8_t *head, uint32_t frame, uint32_t rec, uint32_t rec_len) {
     if (rt_net_ha != 1) return;

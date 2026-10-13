@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define REC_HEAD   96u   /* match_replay.c record(): 32 header bytes, the view, then the frame */
+#define REC_HEAD   MS_HEAD_BYTES   /* match_replay.c record(): 32 header bytes, the view, the controls, the frame */
 #define FRAME_SIZE 0x118Cu
 #define POS_UNITS  52.5f
 
@@ -162,6 +162,7 @@ static void place_ball(uint32_t rugby);
 void ms_puppet_place(uint32_t rugby) {
     if (!g_hostbuf || !ms_puppet_skip_update()) return;
     apply_actors(G2H(g_hostbuf));
+    ms_puppet_controls();   /* the humans' players marked as on the host (match_controls.c) */
     place_ball(rugby);
 }
 
@@ -211,6 +212,8 @@ void ms_puppet_after_update(uint32_t rugby) {
     memcpy(&clock, h + 4, 4);
     wrf(ms_setup_va() + 0x18F0, clock);
     score(h);
+    ms_camera_host(h[MS_HEAD_DIRECTED] ? h + 32 : NULL);   /* the host's cutscene or event view, else its own */
+    ms_controls_host(h + 32 + MS_CAMERA_BYTES);
     wrf(rugby + 0x58, fat(h + REC_HEAD, 0x116C));
     if (!g_hostbuf) g_hostbuf = gcalloc(FRAME_SIZE);
     if (g_hostbuf) memcpy(G2H(g_hostbuf), h + REC_HEAD, FRAME_SIZE);

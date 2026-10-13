@@ -21,7 +21,10 @@
 #define FE_SIDE   0x31478u   /* FE: the side of the controller whose message is handled (1 home, 2 away) */
 #define GAME_PTR  0x00A7ED28u
 #define TS_SCREEN 6
-#define OPT_LEN   32
+/* the Team Selects of the other modes (tournaments' fixtures 0xF, challenges 0x31D): the teams are the
+   fixture's, the sides the players': the host's CONTINUE/BACK only, its 'T' for its friends' lobbies */
+static int team_select(int id) { return id == TS_SCREEN || id == 0xF || id == 0x31D; }
+#define OPT_LEN 32
 enum { CATEGORY, TEAM, KIT, NTOGGLE };
 static const int k_win[2][NTOGGLE] = { { 9, 9, 10 }, { 19, 19, 20 } }, k_id[NTOGGLE] = { 28, 15, 27 };
 /* the game's callbacks that step each toggle (the side from FE_SIDE): category R1, team down, kit right */
@@ -65,6 +68,12 @@ static void trace(const ts_state_t *st, const char *who) {
              st->opt[0][0], st->opt[0][1], st->opt[0][2], st->opt[1][0], st->opt[1][1], st->opt[1][2]);
 }
 
+/* friend: this player's side in the host's Team Select ('H', 'A', 0; -1 before any) */
+int party_sides_mine(void) {
+    int me = ui_lobby_slot();
+    return g_have && me >= 1 && me <= 3 ? g_host.side[me] : -1;
+}
+
 void party_sides_rx(const uint8_t *p, size_t len) {   /* friend: 'T' */
     if (len != sizeof g_host) return;
     memcpy(&g_host, p, sizeof g_host);
@@ -76,7 +85,7 @@ void party_sides_rx(const uint8_t *p, size_t len) {   /* friend: 'T' */
 /* host: may this message's controller do it? (team, category, kit: its side's captain; others: the host) */
 int party_ts_allow(int what) {
     if (rt_net_ha == 2) return g_stepping;   /* a friend's Team Select only shows the host's */
-    if (rt_net_ha != 1 || fe_screen_id() != TS_SCREEN) return 1;
+    if (rt_net_ha != 1 || !team_select(fe_screen_id())) return 1;
     uint32_t g = rd32(GAME_PTR), m = g ? rd32(g + 0x10) : 0, fe = rd32(FE_PTR), sv = g_ecx;
     if (!m) return 1;
     g_ecx = m;
@@ -132,12 +141,45 @@ static void own_move(uint32_t frame) {
     }
 }
 
-static void friend_step(uint32_t frame, uint32_t screen) {
+/* This game's controllers stand for the party's, on the host's sides (its keyboard entry for the host,
+   pad slots 1..3 for the friends): in its Team Select and, from the host's last one, in the match. */
+static void mirror_party(void) {
     char sides[RT_MAX_PADS + 1] = { 0 };
     for (int k = 1; k < 4; k++) sides[k] = g_host.side[k];
-    sides[RT_MAX_PADS] = g_host.side[0];   /* the host's icon: this game's keyboard entry */
+    sides[RT_MAX_PADS] = g_host.side[0];
     rt_pads_mirror_own(ui_lobby_slot());
     rt_pads_mirror(1, sides);
+}
+
+/* A friend's match: its teams get the party's player controls, as the host's teams have them (the HUD's
+   bars and the rings under the humans' players; match_controls.c gives them their players): built once
+   the controllers are on the host's sides, again when they change (a friend left: the AI takes over). */
+static void friend_match(void) {
+    static uint32_t built;
+    static char built_sides[4];
+    uint32_t home = ms_team_va(0), mask = ui_lobby_member_mask() | 1u;
+    char now[4];
+    mirror_party();
+    if (!home || !ms_team_va(1)) return;
+    for (int k = 0; k < 4; k++) {
+        now[k] = rt_pads_side(k ? k : -1);
+        if (now[k] != ((mask >> k & 1) ? g_host.side[k] : 0)) return;   /* (pad_attach.c applies them next sync) */
+    }
+    if (home == built && !memcmp(now, built_sides, sizeof now)) return;
+    built = home;
+    memcpy(built_sides, now, sizeof now);
+    party_rebuild_teams();
+    int n[2] = { 0, 0 };
+    for (int t = 0; t < 2; t++)
+        for (uint32_t i = 0; i < 4; i++) {
+            uint32_t c = rd32(ms_team_va(t) + 0xC0 + 4 * i);
+            n[t] += c && c < 0x40000000u && rd32(c) == 0x008EE9D8u;
+        }
+    rt_trace("ms: sides friend's teams: %d home and %d away controls", n[0], n[1]);
+}
+
+static void friend_step(uint32_t frame, uint32_t screen) {
+    mirror_party();
     own_move(frame);
     uint32_t fe = rd32(FE_PTR);
     uint8_t keep = rd8(fe + FE_SIDE);
@@ -166,6 +208,10 @@ static void friend_step(uint32_t frame, uint32_t screen) {
 
 /* every Present (fe_party.c) */
 void party_sides_present(uint32_t frame) {
+    if (ui_lobby_state() == LOBBY_IN && rt_net_ha == 2 && g_have && !fe_in_menus() && ms_active()) {
+        friend_match();
+        return;
+    }
     if (ui_lobby_state() != LOBBY_IN || !fe_in_menus()) {
         rt_pads_mirror(0, NULL);
         return;
@@ -173,7 +219,7 @@ void party_sides_present(uint32_t frame) {
     uint32_t fe = rd32(FE_PTR), screen = fe ? rd32(fe + 4) : 0;
     int id = fe_screen_id(), host_at = net_ha_host_screen();
     if (rt_net_ha == 1) {
-        if (id == TS_SCREEN) host_step(frame, screen);
+        if (team_select(id)) host_step(frame, screen);
         return;
     }
     static uint32_t asked;

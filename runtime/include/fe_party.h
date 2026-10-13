@@ -27,10 +27,13 @@ void fe_go(int id);                                  /* FeSetCurrentScreen(id) *
 enum { PARTY_TS_SIDE, PARTY_TS_HOST };
 int party_ts_allow(int what);                        /* the game's Team Select callbacks ask */
 void party_sides_rx(const uint8_t *p, size_t len);   /* friend: the host's 'T' */
+int party_sides_mine(void);                          /* friend: its side there ('H', 'A', 0; -1 none yet) */
 void party_sides_present(uint32_t frame);
 
 /* party_leave.c: leaving, the host ending the party, the messages everyone sees */
 void party_leave_present(uint32_t frame);
-void party_leave_quit(uint32_t frame);                 /* a friend left the host's match by itself */
+void party_leave_quit(uint32_t frame);
+void party_rebuild_teams(void);
+/* the teams' player controls from the controllers' sides */ /* a friend left the host's match by itself */
 void party_toast(uint32_t frame, const char *s);
-const char *party_toast_text(uint32_t frame);          /* NULL: none now */
+const char *party_toast_text(uint32_t frame); /* NULL: none now */

@@ -130,7 +130,7 @@ int net_ha_rx_recent(uint32_t frame, uint32_t within) { return g_rx_at && frame 
 int net_ha_rx_phase(void) { return g_host_phase; }
 
 /* friend (match_puppet.c): the newest host frame, all chained records decoded in order. Returns its
-   96-byte head followed by the frame (host memory), or NULL before the first; *fresh: newer than the
+   head (MS_HEAD_BYTES) followed by the frame (host memory), or NULL before the first; *fresh: newer than the
    last call. Needs this game's replay manager (its decoder tables). */
 const uint8_t *net_ha_newest(int *fresh) {
     *fresh = 0;

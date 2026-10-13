@@ -3,11 +3,13 @@
 
 Two pages (host, friend; headless Chrome, muted, relay on a free port) play a party match. The friend's
 camera style is set differently from the host's (RT_TEST_CAMERA=2 Broadcast, a test switch writing the
-option its menus would; the host keeps its own, Side); both trace their camera every 30 frames ("ms: cam
-f F NAME eye .. target .. ball .."). Pass, over a minute of the match: each game shows its own style's
-cameras (the friend Broadcast / Zoom Broadcast, the host Side / Zoom Side), the friend's cameras switch on
-the host's match events (forwarded 'C': it shows event cameras such as Kickoff or Zoom), its view follows
-the ball (target vs ball along the pitch: correlation >= 0.5; a camera that does not follow scores ~0), and the personal settings are listed
+option its menus would; the host keeps Side). Each player sees the match as if playing alone (the user,
+2026-10-13): in open play each game shows its own style's camera, following the play; at set pieces and
+events the friend shows the host's camera (its own game, whose match logic does not run, has nothing to
+direct one). Both trace their view ("ms: cam f F NAME eye .. target .. ball .."; the host every frame,
+the friend every 15). Pass, over a minute of the match: the friend shows its own style (Broadcast or Zoom
+Broadcast, never Side), its own views follow the ball (target vs ball along the pitch: correlation >=
+0.5), some of its views are the host's set-piece views, and the personal settings are listed
 (docs/PARTY_RESEARCH.md "Personal settings"). One line; details in logs/party_camera/."""
 
 import os
@@ -25,13 +27,12 @@ CAM = re.compile(
 )
 
 
-def cams(lines):
-    seen, out = set(), []
+def views(lines):
+    out = []
     for x in lines:
         m = CAM.match(x)
-        if m and x not in seen:
-            seen.add(x)
-            out.append((m.group(2), float(m.group(8)), float(m.group(10)) * 100))  # name, target z, ball z (cm)
+        if m and m.group(3) != "1":  # (before the first view: the default eye 1 1000 1)
+            out.append((m.group(2), tuple(float(m.group(k)) for k in range(3, 9)), float(m.group(10)) * 100))
     return out
 
 
@@ -45,27 +46,22 @@ def corr(a, b):
 
 
 def judge(host, friend, out):
-    h, f = cams(host.lines), cams(friend.lines)
-    if len(h) < 60 or len(f) < 60:
+    h, f = views(host.lines), views(friend.lines)
+    if len(h) < 600 or len(f) < 60:
         return f"too few camera samples (host {len(h)}, friend {len(f)})"
-    hn = {n for n, *_ in h}
-    fn = {n for n, *_ in f}
-    out.append(f"host cameras {sorted(hn)}, friend cameras {sorted(fn)}")
-    own = sum(1 for n, *_ in f if "Broadcast" in n) / len(f)
-    if own < 0.7 or any("Side" in n for n in fn):
-        return f"the friend does not show its own style (Broadcast {own:.0%}, cameras {sorted(fn)})"
-    if not any("Side" in n for n in hn) or any("Broadcast" in n for n in hn):
-        return f"the host does not show its own style (cameras {sorted(hn)})"
-    events = len({x for x in friend.lines if "ms: cam host event" in x})
-    if not events or not (fn - {"Broadcast"}):
-        return f"the friend's cameras did not follow the host's match events ({events} events, {sorted(fn)})"
-    play = [(t, b) for n, t, b in f if n == "Broadcast"]
-    r = corr([t for t, _ in play], [b for _, b in play])
-    hplay = [(t, b) for n, t, b in h if n == "Side"]
-    rh = corr([t for t, _ in hplay], [b for _, b in hplay])
-    out.append(f"friend: {events} host events, {own:.0%} own style, target/ball correlation {r:.2f} (host {rh:.2f})")
-    if r < 0.5:  # a camera that does not follow the play scores ~0 (the friend's before pt.camera's events)
-        return f"the friend's camera does not follow the ball (correlation {r:.2f}, host {rh:.2f})"
+    hv = {v: name for name, v, _ in h}
+    shared = [hv[v] for _, v, _ in f if v in hv]
+    own = [(n, v, b) for n, v, b in f if v not in hv]
+    names = sorted({n for n, _, _ in own})
+    out.append(f"friend: {len(own)} own views ({names}), {len(shared)} the host's ({sorted(set(shared))})")
+    if any("Side" in n for n in names) or not any("Broadcast" in n for n in names):
+        return f"the friend does not show its own style in open play ({names})"
+    if not shared or any(n in ("Side", "Zoom Side") for n in shared):
+        return f"the friend's shared views are not the host's set-piece cameras ({sorted(set(shared))})"
+    r = corr([v[5] for _, v, _ in own], [b for _, _, b in own])  # target z vs ball z (cm)
+    out.append(f"own view target/ball correlation {r:.2f}")
+    if r < 0.5:
+        return f"the friend's own camera does not follow the ball (correlation {r:.2f})"
     doc = open(os.path.join(ROOT, "docs", "PARTY_RESEARCH.md")).read()
     if "## Personal settings" not in doc:
         return "the personal settings are not listed"
@@ -81,8 +77,8 @@ def main():
     try:
         with sync_playwright() as pw:
             br = browser(pw)
-            host = Player(br, "host", port, env="RT_MS_CAM=30")
-            friend = Player(br, "friend", port, env="RT_MS_CAM=30,RT_TEST_CAMERA=2")
+            host = Player(br, "host", port, env="RT_MS_CAM=1")
+            friend = Player(br, "friend", port, env="RT_MS_CAM=15,RT_TEST_CAMERA=2")
             try:
                 err, _ = web_soak.party(host, friend)
                 if not err:

@@ -161,6 +161,7 @@ static void friend_step(uint32_t frame, uint32_t vt) {
     guest_callv(0x004049C0u, 1, &zero);
     g_ecx = sv;
     guest_callv(0x004F3D10u, 0, NULL);
+    if (fe && fe_online()) wr32(fe + 0x3144C, FE_SCR_PARTY);   /* after the match: back to the party's lobby */
     g_tried = frame;
 }
 

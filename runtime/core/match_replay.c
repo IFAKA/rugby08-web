@@ -110,10 +110,10 @@ static FILE *open_env(const char *name) {
 }
 
 /* At each Present at which the recorder wrote a frame (its record stream grew; frame B holds
-   uninitialised memory until the first write: time 2e-44, headings 1e33): the 96-byte head {u32 frame,
+   uninitialised memory until the first write: time 2e-44, headings 1e33): the head (MS_HEAD_BYTES) {u32 frame,
    f32 clock, u32 phase id, u16 score home, away, score events, the latest one: u16 scorer, u32 type,
-   u32 team, f32 clock; the view (MS_CAMERA_BYTES, match_camera.c)} and the frame go to
-   RT_MS_REC_OUT=FILE (head then frame B, 96 + 0x118C bytes each) and to a host's friends (net_ha.c);
+   u32 team, f32 clock; the view (MS_CAMERA_BYTES, match_camera.c); the controls (match_controls.c); u8 directed: a set piece's or event's camera} and the frame go to
+   RT_MS_REC_OUT=FILE (head then frame B, MS_HEAD_BYTES + 0x118C bytes each) and to a host's friends (net_ha.c);
    RT_MS_STREAM_OUT=FILE gets the game's own record of the frame {u32 frame, u16 length, the record}. */
 static void record(uint32_t frame_no) {
     static FILE *out, *stream;
@@ -125,7 +125,8 @@ static void record(uint32_t frame_no) {
         stream = open_env("RT_MS_STREAM_OUT");
     }
     uint32_t f = (out || rt_net_ha == 1) && ms_active() ? ms_replay_current() : 0, start, end;
-    if (!f || !ms_replay_stream(&start, &end) || end == start || end == last_end) return;
+    if (!f || !ms_replay_stream(&start, &end) || end == start) return;
+    if (end == last_end) return;
     last_end = end;
     ms_score_ev_t ev[64];
     int nev = ms_score_events(ev, 64);
@@ -147,9 +148,12 @@ static void record(uint32_t frame_no) {
             last.type,
             last.team_id,
             last.clock };
-    uint8_t head[96];
+    uint8_t head[MS_HEAD_BYTES];
     memcpy(head, &h, sizeof h);
     ms_camera_last(head + sizeof h);
+    ms_controls_last(head + sizeof h + MS_CAMERA_BYTES);
+    head[MS_HEAD_DIRECTED] = (uint8_t)ms_camera_directed();
+    /* friends show the host's view (match_camera.c) */   /* friends show it (match_camera.c) */
     uint32_t len, rec = newest_record(end, &len);
     if (out) {
         fwrite(head, 1, sizeof head, out);
