@@ -3,6 +3,7 @@
 #include "rt.h"
 #include "plat.h"
 #include "ui.h"
+#include "own_camera.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +15,8 @@ const char *rt_net_room;   /* --net-room CODE (the session's room: plat_session_
 int rt_net_start(int argc, char **argv) {
     const char *url = NULL, *room = NULL, *name = "player";
     int ha = 0;   /* --net-mode ha: host-authoritative (net_ha.c) instead of lockstep */
+    for (int i = 1; i < argc; i++)   /* --own-camera: each player's own camera (own_camera.c) */
+        if (!strcmp(argv[i], "--own-camera")) rt_own_camera = 1;
     for (int i = 1; i + 1 < argc; i++) {
         int s, c;   /* --net-session SLOT,CREATOR: the web page already joined the room */
         if (!strcmp(argv[i], "--net-session") && sscanf(argv[i + 1], "%d,%d", &s, &c) == 2) return rt_net_begin(s, c);

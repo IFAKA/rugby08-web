@@ -126,7 +126,7 @@ void ms_camera_last(uint8_t *out) {
    instead, as FUN_006E8260's tail applies a view (0x006E8436..0x006E848D). */
 void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj) {
     static uint32_t s;
-    own_camera_after();
+    own_camera_after(cam);
     if (!g_host) {
         g_cam = cam, g_proj = proj;
         memcpy(g_last, G2H(ctrl + C_STATE), MS_CAMERA_BYTES);

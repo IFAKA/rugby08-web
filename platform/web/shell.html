@@ -191,7 +191,7 @@
             logLine('page: in room ' + room + ' as player ' + (m.slot + 1) + (m.creator ? ' (created it)' : ' (joining)'));
             Module.rugbyRoom = room;   // the game's ONLINE screens show it (runtime/core/ls_party.c)
             Module.rugbyNet = net;
-            play(['--net-session', m.slot + ',' + (m.creator ? 1 : 0)]);
+            play(['--net-session', m.slot + ',' + (m.creator ? 1 : 0), '--own-camera']);
             setInterval(() => send({ t: 'ping', ts: performance.now() }), 2000);
             send({ t: 'ping', ts: performance.now() });
           }

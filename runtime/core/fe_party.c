@@ -191,6 +191,7 @@ static void party_lines(uint32_t screen) {
 
 void fe_party_present(uint32_t frame) {
     own_camera_options();   /* camera settings changed in the shared menus: this player's only (own_camera.c) */
+    own_camera_present();   /* drawn: the match's camera, alike in every game, for the match's next step */
     if (!ls_on()) {   /* host-authoritative party (lockstep: every game runs the same screens itself) */
         ui_lobby_poll();
         party_sides_present(frame);   /* (both also in a match: they check where the game is themselves) */

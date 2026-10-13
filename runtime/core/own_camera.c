@@ -16,15 +16,14 @@
 #include "plat.h"
 #include "fe_party.h"
 #include "own_camera.h"
+#include "match_state.h"
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define OPTIONS   0x00A33320u
 #define O_CAM_LO  0x230u
 #define O_CAM_HI  0x258u
-#define BACKEND   0x009B65ECu
-#define B_CAMERA  0x64u
-#define C_LOOK    0x190u /* x, y, z: target - eye, y = 0 */
 #define SKIP_OPTS 0      /* det_hash_skip slot */
 
 static uint8_t g_mine[O_CAM_HI - O_CAM_LO], g_seen[O_CAM_HI - O_CAM_LO];
@@ -32,12 +31,14 @@ static int g_have;
 static float g_ref[2] = { -1.0f, 0.0f };   /* the match's look (x, z): player 1's; across the pitch at first */
 static float g_own[3];                      /* this game's camera's look, kept across the match's turn */
 static int g_own_set;
-static uint32_t g_va;                       /* where the camera keeps its look (this match's camera) */
 
-/* OFF until the match's other reads of the camera are found: with different camera styles, positions
-   still part within a second of kick-off (2026-10-13, the stick fixed; AI players too). */
-#define OWN_CAMERA_ENABLED 0
-static int on(void) { return OWN_CAMERA_ENABLED && ls_on(); }
+int rt_own_camera;   /* --own-camera (the web page's sessions) */
+static int on(void) {
+    static int test = -1;   /* RT_OWN_CAMERA_TEST (native checks): on outside a party */
+    if (test < 0) test = getenv("RT_OWN_CAMERA_TEST") != NULL;
+    return test || (rt_own_camera && ls_on());
+}
+int own_camera_on(void) { return on(); }
 
 /* Changes to the camera options since the last look: kept if this player's controller made them. */
 void own_camera_options(void) {
@@ -59,31 +60,73 @@ void own_camera_adopt(void) {
     memcpy(g_seen, g_mine, sizeof g_seen);
 }
 
+/* The match's camera, every game alike: looking along player 1's look at the ball, from 40 m back and
+   10 m up (the game's own look-at, FUN_00789BE0, so all the camera object keeps follows from it). */
+#define CAM_BYTES 0x110u   /* the LookAtCamera as the match reads it (eye +0x48, target +0x58, up +0x68, ...) */
+#define FN_LOOKAT 0x00789BE0u
+static uint32_t g_cam, g_scratch;
+static uint8_t g_mine_cam[CAM_BYTES], g_mine_look[12];
+
+/* The look sticks are read against (HumanMove 0x6BE760: BackendState [0x9B65EC] +0x64 -> +0x190). */
 static uint32_t look_va(void) {
-    uint32_t be = rd32(BACKEND), y = be ? rd32(be + B_CAMERA) : 0;
-    return y ? y + C_LOOK : 0;
+    uint32_t be = rd32(0x009B65ECu), y = be ? rd32(be + 0x64) : 0;
+    return y ? y + 0x190 : 0;
+}
+static int g_have_mine, g_stepped;
+
+static int in_match(void) {
+    uint32_t g = rd32(0x00A7ED28u), st = g ? rd32(g + 0x90) : 0;
+    return st && rd32(st) == 0x008CC6F0u;
 }
 
-/* Around each camera step (game/overrides/match/camera_update.c via match_camera.c). */
+/* Around each camera step (game/overrides/match/camera_update.c via match_camera.c): the step and the
+   drawing after it see this player's own camera. */
 void own_camera_before(void) {
     own_camera_options();
-    uint32_t v = look_va();
-    if (!on() || !v) return;
-    if (v != g_va) g_va = v, g_own_set = 0;   /* (a new match's camera) */
-    if (g_own_set) memcpy(G2H(v), g_own, sizeof g_own);   /* the camera goes on from its own */
+    if (!on() || !g_cam || !g_have_mine) return;
+    memcpy(G2H(g_cam), g_mine_cam, CAM_BYTES);
+    if (look_va()) memcpy(G2H(look_va()), g_mine_look, sizeof g_mine_look);
 }
-void own_camera_after(void) {
-    uint32_t v = look_va();
-    if (!on() || !v) return;
-    memcpy(g_own, G2H(v), sizeof g_own);
+void own_camera_after(uint32_t cam) {
+    if (!on()) return;
+    if (cam != g_cam) g_cam = cam, g_have_mine = 0;   /* (a new match's camera) */
+    g_stepped = 1;
+    float eye[3], target[3];
+    memcpy(eye, G2H(cam + 0x48), sizeof eye);
+    memcpy(target, G2H(cam + 0x58), sizeof target);
+    g_own[0] = target[0] - eye[0], g_own[1] = 0, g_own[2] = target[2] - eye[2];
     g_own_set = 1;
-    float m[3] = { g_ref[0], 0.0f, g_ref[1] };
-    memcpy(G2H(v), m, sizeof m);   /* the match reads sticks against player 1's */
+    if (rt_present_frame % 60 == 0)   /* (checks: tools/net/ls_camera_check.py) */
+        rt_trace("ms: own camera f %u look %.0f %.0f ref %.3f %.3f", rt_present_frame, (double)g_own[0],
+                 (double)g_own[2], (double)g_ref[0], (double)g_ref[1]);
+}
+
+/* After drawing (every Present, before the match's next step): the match's camera. */
+void own_camera_present(void) {
+    if (!on() || !g_stepped || !g_cam || !in_match()) return;
+    g_stepped = 0;
+    memcpy(g_mine_cam, G2H(g_cam), CAM_BYTES);
+    uint32_t lv = look_va();
+    if (lv) memcpy(g_mine_look, G2H(lv), sizeof g_mine_look);
+    g_have_mine = 1;
+    ms_ball_t b;
+    if (!ms_ball(&b) || (!g_scratch && !(g_scratch = gcalloc(48)))) return;
+    float bx = b.pos[0] * 100.0f, bz = b.pos[2] * 100.0f;
+    float v[12] = {
+        bx - g_ref[0] * 4000.0f, 1000.0f, bz - g_ref[1] * 4000.0f, 1.0f, bx, 50.0f, bz, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f
+    };
+    memcpy(G2H(g_scratch), v, sizeof v);
+    uint32_t args[3] = { g_scratch, g_scratch + 16, g_scratch + 32 }, sv = g_ecx;
+    g_ecx = g_cam;
+    guest_callv(FN_LOOKAT, 3, args);
+    g_ecx = sv;
+    float look[3] = { v[4] - v[0], 0.0f, v[6] - v[2] };
+    if (lv) memcpy(G2H(lv), look, sizeof look);
 }
 
 /* Player 1's look, quantized (sent when it changes; net_frame.c). 0 when there is no camera. */
 int own_camera_look(int16_t *x, int16_t *z) {
-    if (!g_own_set || !look_va()) return 0;
+    if (!g_own_set || !g_cam) return 0;
     float l = sqrtf(g_own[0] * g_own[0] + g_own[2] * g_own[2]);
     if (l < 1e-3f) return 0;
     *x = (int16_t)lrintf(g_own[0] / l * 16000.0f);
@@ -103,7 +146,7 @@ static void turn(int16_t *sx, int16_t *sy, float c, float s) {
     *sy = (int16_t)(ny > 32767 ? 32767 : ny < -32768 ? -32768 : ny);
 }
 void own_camera_turn_pad(rt_pad_t *p) {
-    if (!on() || !g_own_set || !look_va()) return;
+    if (!on() || !g_own_set || !g_cam) return;
     float a = atan2f(g_own[0], g_own[2]) - atan2f(g_ref[0], g_ref[1]);
     float c = cosf(a * OWN_CAMERA_SIGN), s = sinf(a * OWN_CAMERA_SIGN);
     turn(&p->lx, &p->ly, c, s);

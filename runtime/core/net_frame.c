@@ -109,7 +109,10 @@ static void admit(uint32_t frame) {
 /* Frames frame-119..frame, one slice each: this player's hash, sent once its slot plays. */
 static void exchange_hash(uint32_t frame) {
     uint64_t h;
-    if (!det_hash_step(frame, NET_HASH_CYCLE, NET_HASH_EVERY, &h)) return;
+    if (own_camera_on()) {   /* each player's own camera: the match's state, not all memory (ls_simhash.c) */
+        if ((frame + 1) % NET_HASH_EVERY) return;
+        h = ls_simhash();
+    } else if (!det_hash_step(frame, NET_HASH_CYCLE, NET_HASH_EVERY, &h)) return;
     uint32_t k = (frame / NET_HASH_EVERY) % HRING;
     N.hash[k][N.slot] = h;
     N.hash_frame[k][N.slot] = frame;
