@@ -94,6 +94,13 @@ extern int rt_pads_first; /* 1: pads enumerate before the keyboard (netplay) */
 int rt_pad_event(int pad, const char *name, int down);
 int rt_pad_count(void); /* replay "pad N tap|down|up NAME"; 0 = unknown name */
 void plat_local_pad(rt_pad_t *p); /* this player's live devices -> p (unchanged in replay runs) */
+int plat_gamepad(rt_pad_t *p);    /* this machine's game controller alone -> p: 1 while connected */
+/* Which pad slots are plugged in (pads.c, runtime/core/pad_attach.c): a slot exists from boot (the
+   game enumerates once) and the game's controller for it is attached or not, as a pad that comes
+   and goes on Windows: slot 0 this machine's game controller, slots 1..3 the party's friends (host). */
+extern uint32_t rt_pads_party; /* host: bit k = room slot k has a member */
+int rt_pad_attached(int k);
+void rt_pads_present(uint32_t frame); /* every Present, before the frame's input reaches the game */
 
 /* Netplay (runtime/core/netplay.c). Transport: platform/native/net_native.c, platform/web/. */
 extern int rt_net;

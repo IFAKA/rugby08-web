@@ -170,3 +170,15 @@ void plat_local_pad(rt_pad_t *p) {
     if (gc) controller_pad(gc, &q);
     *p = q;
 }
+
+/* This machine's game controller alone (the keyboard is the game's own keyboard device): 1 while one
+   is connected. Automated runs: 0, p unchanged (the replay is the input). */
+int plat_gamepad(rt_pad_t *p) {
+    if (automated_run() || !g_inited) return 0;
+    SDL_GameController *gc = controller();
+    if (!gc) return 0;
+    rt_pad_t q = { 0 };
+    controller_pad(gc, &q);
+    *p = q;
+    return 1;
+}

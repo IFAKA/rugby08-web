@@ -6,7 +6,8 @@ wants and waits for the next screen. Headless pages run at any speed, so this wo
   browser(pw) -> headless Chrome as every browser check runs it (muted; the real GPU: headless Chrome
                  renders WebGL with Metal by default, ~10x SwiftShader's frame rate in a match)
   screen(lines) -> the current screen id (int) or None
-  play_now(page, lines, log) -> None when the page is in a match (BackendState), else the reason
+  play_now(page, lines, log, until=ID) -> None when the page is in a match (BackendState), or on screen
+                 ID (e.g. TEAM_SELECT), else the reason
 
 Keys (docs/CONTROLS.md): 's' Cross (accept), Left/Right move the keyboard's icon in Team Select."""
 
@@ -45,16 +46,18 @@ def changed(page, lines, old, secs):
     return False
 
 
-def play_now(page, lines, log=None, secs=600):
+def play_now(page, lines, log=None, secs=600, until=None):
     """From the title or the main menu into a PLAY NOW match, the keyboard on the home side."""
     end, moved = time.time() + secs, False
     while time.time() < end:
         if any(BACKEND in x for x in lines):
             return None
         s = screen(lines)
+        if until is not None and s == until:
+            return None
         if log:
             log(f"route: screen {s:04X}" if s is not None else "route: no screen yet")
-        if s == TEAM_SELECT and not moved:
+        if s == TEAM_SELECT and not moved and until is None:
             tap(page, "ArrowLeft")
             page.wait_for_timeout(1500)
             moved = True

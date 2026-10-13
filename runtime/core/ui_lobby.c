@@ -10,6 +10,7 @@
 
 const char *rt_net_url = "ws://127.0.0.1:8080/ws";   /* --net URL (net_join.c) */
 static int g_state, g_connected, g_members, g_host;
+static uint32_t g_mask;   /* bit k: room slot k has a member */
 static char g_code[16], g_err[96];
 
 static int field(const char *json, int n, const char *key, char *out, int cap) {   /* "key":"value" or :number */
@@ -57,6 +58,7 @@ void ui_lobby_text(const char *json, int n) {
         g_host = !strcmp(creator, "true");
         g_state = LOBBY_IN;
         g_members = 1;
+        g_mask = 1u << atoi(slot);
         rt_trace("ms: ui room %s as player %d (%s)", g_code, atoi(slot) + 1, g_host ? "host" : "friend");
         rt_net_begin_ha(atoi(slot), g_host);
     } else if (field(json, n, "t", v, sizeof v) && !strcmp(v, "error")) {
@@ -65,7 +67,15 @@ void ui_lobby_text(const char *json, int n) {
         rt_trace("ms: ui lobby error %s", g_err);
     } else if (field(json, n, "t", v, sizeof v) && !strcmp(v, "members")) {
         int c = 0;   /* one "slot" per member */
-        for (const char *p = json; p + 6 < json + n; p++) c += !strncmp(p, "\"slot\"", 6);
+        uint32_t mask = 0;
+        for (const char *p = json; p + 8 < json + n; p++)
+            if (!strncmp(p, "\"slot\":", 7)) {
+                c++;
+                int k = atoi(p + 7);
+                if (k >= 0 && k < 32) mask |= 1u << k;
+            }
+        if (mask != g_mask) rt_trace("ms: ui room %s member slots %X", g_code, mask);
+        g_mask = mask;
         if (c != g_members) rt_trace("ms: ui room %s members %d", g_code, c);
         g_members = c;
     }
@@ -89,6 +99,7 @@ void ui_lobby_leave(void) {
     g_connected = 0;
     g_state = LOBBY_IDLE;
     g_code[0] = 0;
+    g_mask = 0;
     rt_net_end_ha();
 }
 
@@ -96,4 +107,5 @@ int ui_lobby_state(void) { return g_state; }
 const char *ui_lobby_code(void) { return g_code; }
 const char *ui_lobby_error(void) { return g_err; }
 int ui_lobby_members(void) { return g_members; }
+uint32_t ui_lobby_member_mask(void) { return g_mask; }
 int ui_lobby_is_host(void) { return g_host; }

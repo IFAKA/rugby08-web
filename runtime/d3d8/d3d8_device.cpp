@@ -151,6 +151,7 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     s->frame++;
     plat_replay_tick(s->frame);
     net_ha_present(s->frame);   // host-authoritative online play: friends' pads in, this player's out
+    rt_pads_present(s->frame);  // pads: this machine's game controller, the party's; the game's controllers follow
     if (rt_det == 1) det_frame(s->frame);   // input for this frame reaches the guest, virtual time advances
     rt_coverage_frame(s->frame);
     ms_frame(s->frame);

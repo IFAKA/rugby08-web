@@ -45,6 +45,7 @@ int ui_lobby_state(void);
 const char *ui_lobby_code(void);
 const char *ui_lobby_error(void);
 int ui_lobby_members(void);
+uint32_t ui_lobby_member_mask(void); /* bit k: room slot k has a member */
 int ui_lobby_is_host(void);
 
 #ifdef __cplusplus

@@ -7,6 +7,7 @@
  * Select L3 R3 = buttons 1-12), read through c_dfDIJoystick (DIJOYSTATE, 0x91B624). */
 
 #include "dinput_int.h"
+#include "../core/pad_attach.h"
 
 /* ---- IDirectInputA / 2A / 7A ------------------------------------------------------------------- */
 static uint32_t di_QueryInterface(const uint32_t *a) {
@@ -40,6 +41,22 @@ static uint32_t di_CreateDevice(const uint32_t *a) { /* (this, rguid, lplpDevice
     return DI_OK;
 }
 
+/* The enumeration order (Windows: mouse, keyboard, joysticks; Wine dinput.c enum_devices): the game's
+   device table and controller list follow it. */
+static int enum_order(int *order) {
+    int n = 0, np = rt_pad_count();
+    order[n++] = DEV_MOUSE;
+    if (!rt_pads_first) order[n++] = DEV_KEYBOARD;
+    for (int i = 0; i < np; i++) order[n++] = DEV_PAD + i;
+    if (rt_pads_first) order[n++] = DEV_KEYBOARD;
+    return n;
+}
+
+int rt_dinput_pad_slot(uint32_t di_index) {
+    int order[2 + RT_MAX_PADS], n = enum_order(order);
+    return di_index < (uint32_t)n && order[di_index] >= DEV_PAD ? order[di_index] - DEV_PAD : -1;
+}
+
 static uint32_t di_EnumDevices(const uint32_t *a) { /* (this, dwDevType, callback, pvRef, flags) */
     uint32_t type = a[1] & 0xFF;
     uint32_t inst = gcalloc(580);
@@ -48,11 +65,7 @@ static uint32_t di_EnumDevices(const uint32_t *a) { /* (this, dwDevType, callbac
        it entry 0, never assignable, so only the mouse could take a team (and became the pad). */
     /* Pads follow (joysticks, as on Windows); in a netplay session they come before the keyboard so
        that players 1-4 are entries 1-4. */
-    int order[2 + RT_MAX_PADS], n = 0, np = rt_pad_count();
-    order[n++] = DEV_MOUSE;
-    if (!rt_pads_first) order[n++] = DEV_KEYBOARD;
-    for (int i = 0; i < np; i++) order[n++] = DEV_PAD + i;
-    if (rt_pads_first) order[n++] = DEV_KEYBOARD;
+    int order[2 + RT_MAX_PADS], n = enum_order(order), np = rt_pad_count();
     for (int j = 0; j < n; j++) {
         int k = order[j];
         if (type && type != (k == DEV_KEYBOARD ? 3u : k == DEV_MOUSE ? 2u : 4u))

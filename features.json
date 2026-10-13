@@ -511,7 +511,7 @@
       ],
       "desc": "Controllers follow the party: solo is the original (no virtual pads); a friend joining adds a controller Team Select shows, leaving removes it; all 4 players can take a side.",
       "check": "/opt/homebrew/bin/python3 tools/net/party_controllers_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.webrtc",

@@ -202,16 +202,17 @@ static void pump(void) {
 void net_ha_present(uint32_t frame) {
     if (!rt_net_ha) return;
     g_frame = frame;
-    plat_local_pad(&N.local);   /* devices; in replay runs the replay's pad events are already there */
+    if (rt_net_ha == 2) plat_local_pad(&N.local);   /* devices; in replay runs the replay's pad events */
     pump();
     net_ha_flow_present(frame);
-    rt_pads[N.slot] = N.local;
-    if (rt_net_ha == 1) {
+    if (rt_net_ha == 1) {   /* the host's own pad 0 is its game controller (pads.c); friends' pads in */
         static const rt_pad_t zero;
+        rt_pads_party = ui_lobby_member_mask() & ~(1u << N.slot);
         for (int k = 0; k < RT_MAX_PADS; k++)
             if (k != N.slot) rt_pads[k] = g_pad_at[k] && frame - g_pad_at[k] < PAD_STALE ? g_pad[k] : zero;
         return;
     }
+    rt_pads[N.slot] = N.local;
     net_ha_test_press(&N.local, g_host_phase, frame);
     rt_pads[N.slot] = N.local;
     send('P', frame, &N.local, sizeof N.local, NULL, 0);
@@ -250,6 +251,7 @@ const uint8_t *net_ha_newest(int *fresh) {
 /* Back to playing alone: friends' pads let go, no frames kept. */
 void rt_net_end_ha(void) {
     static const rt_pad_t zero;
+    rt_pads_party = 0;
     for (int k = 0; k < RT_MAX_PADS; k++)
         if (k != N.slot) rt_pads[k] = zero;
     memset(g_pad_at, 0, sizeof g_pad_at);

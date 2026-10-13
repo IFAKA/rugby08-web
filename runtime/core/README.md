@@ -4,7 +4,7 @@
 - `cpu.c` CPU state globals, dispatch lookup, import/COM bridges, the guest lock, `guest_call`, dispatch misses.
 - `cpu_ext.c` helpers for instructions `tools/lift_ext.py` adds (faults, BCD, packed BCD).
 - `mem.c` guest arena + PE loader · `heap.c` guest heap (dlmalloc mspace) · `thread.c` per-thread CPU state.
-- `det.c` deterministic mode (`RT_DET=1`: virtual clock, guest scheduler) · `det_hash.c` its state hash · `pads.c` virtual pads.
+- `det.c` deterministic mode (`RT_DET=1`: virtual clock, guest scheduler) · `det_hash.c` its state hash · `pads.c` pad slots (this machine's game controller, the party's friends) · `pad_attach.c` the game's controllers follow them (plugged in or not, entries 1..4).
 - Online: `netplay.c` (+`netplay_int.h`) lockstep messages, roster and session · `net_frame.c` the per-frame step ·
   `net_join.c` joining a room from the command line · `net_ha.c` host-authoritative play (`--net-mode ha`: friends'
   pads to the host, the host's frames to friends) · `match_state.c` the live match in guest memory (docs/MATCH_STATE.md) ·
