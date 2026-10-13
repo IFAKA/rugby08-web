@@ -713,6 +713,16 @@
       "desc": "Deploy-ready on the user's own server (HTTPS: domain + certificate or an HTTPS tunnel, decided with the user); docs/ONLINE.md is the players' guide. Deploying itself needs the user's go.",
       "check": "tools/net/deploy_check.sh",
       "passes": false
+    },
+    {
+      "id": "ls.cursor",
+      "deps": [
+        "ls.party"
+      ],
+      "desc": "Share only what online sports games share: each screen draws the menus' cursor at its own player's pointer (runtime/core/ls_cursor.c); the host's mouse alone drives the shared menus; while the host is in its own menus a friend's screen stays on the party screen with the message (runtime/core/ui_party_view.c). With both pointers in one place the two games' pictures are equal (the friend's pointer changes nothing in the game).",
+      "check": "cd tools/net && /opt/homebrew/bin/python3 ls_cursor_check.py",
+      "passes": false,
+      "notes": "2026-10-14: built in d868fc8; the user's two-window test passed (cursors independent, party view, Team Select shared). The check never ran clean: its host page froze at boot after data/controltypes.csv both times while another session's 3-page check ran at once; rerun it alone."
     }
   ]
 }
