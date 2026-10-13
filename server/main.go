@@ -81,6 +81,7 @@ type client struct {
 
 type room struct {
 	code    string
+	build   string // the creator's game build: lockstep needs the same game everywhere
 	slots   [maxPlayers]*client
 	auth    int               // slot that grants joins
 	log     []byte            // every game message since frame 0, in relay order
@@ -383,17 +384,21 @@ func (r *room) setAuth() {
 	log.Printf("room %s: player %d admits newcomers now", r.code, best+1)
 }
 
+// a page of another game build cannot play in lockstep with the room (both reload the page to update)
+const anotherBuild = "That party runs another version of the game: reload both pages"
+
 type request struct {
-	T    string          `json:"t"`
-	Room string          `json:"room"`
-	Name string          `json:"name"`
-	Auto bool            `json:"auto"`
-	TS   any             `json:"ts"`
-	RTT  int             `json:"rtt"`
-	Pct  int             `json:"pct"`
-	Slot int             `json:"slot"`
-	To   *int            `json:"to"`
-	Data json.RawMessage `json:"data"`
+	T     string          `json:"t"`
+	Room  string          `json:"room"`
+	Name  string          `json:"name"`
+	Auto  bool            `json:"auto"`
+	Build string          `json:"build"`
+	TS    any             `json:"ts"`
+	RTT   int             `json:"rtt"`
+	Pct   int             `json:"pct"`
+	Slot  int             `json:"slot"`
+	To    *int            `json:"to"`
+	Data  json.RawMessage `json:"data"`
 }
 
 func cleanName(n string, slot int) string {
@@ -424,7 +429,7 @@ func (c *client) handle(req request) {
 				for code = newCode(); rooms[code] != nil; code = newCode() {
 				}
 			}
-			r = &room{code: code}
+			r = &room{code: code, build: req.Build}
 			for k := range r.from {
 				r.from[k], r.last[k] = -1, -1
 			}
@@ -435,6 +440,10 @@ func (c *client) handle(req request) {
 		}
 		if r == nil {
 			c.send(map[string]any{"t": "error", "msg": "No party with that code"})
+			return
+		}
+		if r.build != req.Build {
+			c.send(map[string]any{"t": "error", "msg": anotherBuild})
 			return
 		}
 		slot := -1 // the creator is player 1; a newcomer takes the lowest free controller
@@ -472,6 +481,8 @@ func (c *client) handle(req request) {
 		switch {
 		case r == nil:
 			c.send(map[string]any{"t": "peek", "ok": false, "msg": "No party with that code"})
+		case r.build != req.Build:
+			c.send(map[string]any{"t": "peek", "ok": false, "msg": anotherBuild})
 		case !free:
 			c.send(map[string]any{"t": "peek", "ok": false, "msg": "Party full"})
 		default:

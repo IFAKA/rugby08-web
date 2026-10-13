@@ -30,6 +30,10 @@ int ui_catchup(int w, int h, const uint8_t **img);   /* ui_badge.c: the joining 
 /* ui_badge.c (the party's screens are the game's own: fe_party.c) */
 int ui_key(int scancode, int down);   /* 1: typing a party code took it (the game must not see it) */
 int ui_open(void);                    /* (0: nothing of ours takes every key) */
+/* ui_camera.c: C in a match cycles this player's own view (runtime/d3d8/d3d8_pov.cpp, drawing only) */
+int ui_camera_key(int scancode, int down);
+void rt_pov_cycle(void);
+const char *rt_pov_name(void);
 /* At every Present: 1 if there is something to draw; *img the image (w x h), *changed since the last */
 int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed);
 

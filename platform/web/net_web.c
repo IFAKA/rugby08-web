@@ -7,6 +7,7 @@
 #include "rt.h"
 #include <emscripten.h>
 
+// clang-format off
 EM_JS(int, js_net_send, (const void *p, int n, int text), {
     var net = Module.rugbyNet;
     if (!net || net.closed) return -1;
@@ -14,9 +15,20 @@ EM_JS(int, js_net_send, (const void *p, int n, int text), {
     if (!text && Module.rtc) Module.rtc.mark('tx', bytes);
     if (!text && Module.rtc && Module.rtc.send(bytes)) return 0;   /* peer to peer (js/rtc.js) */
     if (!text && Module.rtc) Module.rtc.stats.ws++;
-    net.ws.send(text ? new TextDecoder().decode(bytes) : bytes);
+    if (!text && Module.peers && Module.peers.me >= 0) Module.peers.send(bytes);   /* lockstep: also (js/peers.js) */
+    var data = text ? new TextDecoder().decode(bytes) : bytes;
+    var go = () => { if (net.ws.readyState == 1) net.ws.send(data); };
+    if (Module.peers) Module.peers.later(go, true); else go();
     return 0;
 });
+EM_JS(int, js_net_recv_peer, (void *p, int cap), {   /* a peer's copy of an input or hash (js/peers.js) */
+    var q = Module.peers ? Module.peers.inq : [];
+    if (!q.length) return 0;
+    var m = q.shift(), n = Math.min(m.length, cap);
+    HEAPU8.set(m.subarray(0, n), p);
+    return n;
+});
+// clang-format on
 EM_JS(int, js_net_recv, (void *p, int cap), {
     var net = Module.rugbyNet;
     if (!net) return -1;
@@ -83,6 +95,7 @@ int net_tx_recv(void *buf, int cap, int wait_ms) {
     }
     return n;
 }
+int net_tx_recv_peer(void *buf, int cap) { return js_net_recv_peer(buf, cap); }
 void net_tx_status(int kind, int value) { js_net_status(kind, value); }
 int net_tx_delay(void) { return js_net_delay(); }
 // clang-format off

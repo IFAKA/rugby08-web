@@ -49,4 +49,5 @@ static inline void release(uint32_t g) {
 
 extern int rt_trace_vsc; // runtime/debug/frames.cpp: RT_TRACE_DRAWS_FRAME is on for this frame
 void d3d8_debug_present(uint32_t frame, int w, int h);
+void d3d8_debug_pixels(uint32_t frame, int w, int h);   // RT_PIX: hash of the game's picture
 void d3d8_debug_light(uint32_t index, const D3DLIGHT9 *l, uint32_t caller, uint32_t light_va);

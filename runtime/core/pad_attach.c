@@ -119,6 +119,15 @@ typedef struct {
     int nf, plugged, nu;
 } sorted_t;
 
+/* The keyboard is player 1's (lockstep: the room's creator, whose keyboard and mouse every game
+   applies): it goes when that player leaves (not before the roster has player 1, at boot). */
+static int keyboard_attached(void) {
+    static int had;
+    if (!rt_net || rt_net_ha) return 1;
+    had |= rt_net_active(0);
+    return !had || rt_net_active(0);
+}
+
 /* Plugged in or not, as its slot says; sorts the entries: mouse (and anything else), the keyboard,
    plugged pads by slot, unplugged pads. */
 static void plug(const uint32_t *c, int n, sorted_t *o) {
@@ -127,9 +136,9 @@ static void plug(const uint32_t *c, int n, sorted_t *o) {
         uint32_t t = rd32(c[e] + C_TYPE);
         if (t == T_KEYBOARD) o->kb = c[e];
         else if (t != T_PAD) o->first[o->nf++] = c[e];   /* the mouse keeps its place */
-        if (t != T_PAD) continue;
-        int k = rt_dinput_pad_slot(rd32(c[e] + C_DEVICE));
-        uint32_t want = (uint32_t)rt_pad_attached(k);
+        if (t != T_PAD && t != T_KEYBOARD) continue;
+        int k = t == T_PAD ? rt_dinput_pad_slot(rd32(c[e] + C_DEVICE)) : -1;
+        uint32_t want = (uint32_t)(t == T_PAD ? rt_pad_attached(k) : keyboard_attached());
         if (rd32(c[e] + C_ATTACHED) != want) {
             if (!want) {   /* unplugged: off its side and inactive first (the game's own disconnect state) */
                 g_unplugged += side_of(c[e]) != 0;
@@ -138,6 +147,7 @@ static void plug(const uint32_t *c, int n, sorted_t *o) {
             }
             wr32(c[e] + C_ATTACHED, want);
         }
+        if (t == T_KEYBOARD) continue;
         if (want && k >= 0 && k < RT_MAX_PADS && !o->pads[k]) {
             o->pads[k] = c[e];
             o->plugged++;

@@ -16,3 +16,6 @@ relay on a free port, the Online screens). `web_soak.py` (pt.freeze: two pages i
 the host's tab hidden), `party_controllers_check.py` (pt.controllers: solo = the real devices, friends add and
 remove controllers, four sides), `party_menu_check.py` (pt.menu: ONLINE in the game's menus by keyboard, mouse and
 pad), `party_webrtc_check.py` (pt.webrtc: data channels, losses, latency vs the relay).
+Lockstep party (ls.*): `ls_boot_check.py`, `ls_party_check.py`, `ls_controls_check.py`, `ls_match_check.py` (a party
+match: equal state hashes and pictures (RT_PIX), the friend's Start pauses both, its own camera changes only its
+picture); `pix_dump.py` turns RT_PIX_DUMP frames of two players into PNGs and a difference image.

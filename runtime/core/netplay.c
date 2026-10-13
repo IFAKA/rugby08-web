@@ -42,6 +42,7 @@ int rt_net_active(int k) { return k >= 0 && k < RT_MAX_PADS && N.active[k]; }
 
 void net_store_input(int slot, uint32_t frame, const rt_pad_t *pad, int nd, const plat_desk_ev_t *d) {
     slot_in_t *s = &N.in[frame % RING][slot];
+    if (s->have && (int32_t)(frame - s->frame) < 0) return;   /* a late copy of an old input (two paths) */
     s->frame = frame;
     s->have = 1;
     s->pad = *pad;
@@ -109,7 +110,7 @@ void net_handle(const uint8_t *m) {
         break;
     case 'D':
         add_event(k, f, 0);
-        if (k == N.slot && N.my_from >= 0) {
+        if (k == N.slot && N.my_from >= 0 && (int64_t)f >= N.my_from) { /* (not a leave of the slot's last player) */
             rt_trace("netplay: removed from the session");
             exit(4);
         }
@@ -153,6 +154,7 @@ static int consume(void) {
             ok = 0;
             break;
         }
+        N.by_relay += m[0] == 'I' && m[1] < RT_MAX_PADS && m[1] != N.slot && !net_have_input(m[1], get32(m + 2));
         net_handle(m);
         p += len;
     }
@@ -189,19 +191,34 @@ static void hint_json(const char *s, int n) {
     if (strstr(b, "\"front\"") && (p = strstr(b, "\"frame\":"))) hint(-1, atoll(p + 8));
 }
 
+/* Peers' direct copies of inputs and hashes (web: js/peers.js), ahead of the relay's: taken only for a
+   frame not played yet and within the window, so they never stand in the relay's ordered stream. */
+static void pump_peers(void) {
+    uint8_t m[19 + 6 * NDESK];
+    int n;
+    while ((n = net_tx_recv_peer(m, sizeof m)) > 0) {
+        if (n < 14 || (m[0] != 'I' && m[0] != 'H') || n < msg_len(m, n)) continue;
+        uint32_t f = get32(m + 2);
+        if (f < N.frame || f >= N.frame + AHEAD || N.offline) continue;
+        N.by_peer += m[0] == 'I' && m[1] < RT_MAX_PADS && !net_have_input(m[1], f);
+        net_handle(m);
+    }
+}
+
 void net_pump(int wait_ms) {
     int64_t g, f;
     if (net_tx_hints(&g, &f)) hint(g, f);
+    pump_peers();
     while (!N.offline) {
-        consume();   /* (it may stop at a message for a frame too far ahead: reading goes on, for the hints) */
-        if (N.rx_n >= (int)sizeof N.rx - (1 << 20) - 64) return;   /* (room for an 'X') */
+        consume(); /* (it may stop at a message for a frame too far ahead: reading goes on, for the hints) */
+        if (N.rx_n >= (int)sizeof N.rx - (1 << 20) - 64) return; /* (room for an 'X') */
         int n = net_tx_recv(N.rx + N.rx_n, (int)sizeof N.rx - N.rx_n, wait_ms);
         if (n < 0) {
             go_offline();
             return;
         }
         if (n == 0) return;
-        if (N.rx[N.rx_n] == '{') hint_json((const char *)N.rx + N.rx_n, n);   /* text: lobby JSON */
+        if (N.rx[N.rx_n] == '{') hint_json((const char *)N.rx + N.rx_n, n); /* text: lobby JSON */
         else N.rx_n += n;
         wait_ms = 0;
     }
@@ -213,16 +230,17 @@ int rt_net_begin(int slot, int creator) {
     N.auth = creator;
     if (rt_net_cfg_delay > 0) N.delay = rt_net_cfg_delay;
     rt_npads = RT_MAX_PADS;
-    rt_pads_first = 1;   /* every controller exists from boot: joiners plug in */
+    rt_pads_first = 1; /* every controller exists from boot: joiners plug in */
     rt_det = 1;
     rt_net = 1;
-    add_event(0, 0, 1);   /* the room's creator plays from the first frame */
+    add_event(0, 0, 1); /* the room's creator plays from the first frame */
     if (creator) {
         N.my_from = 0;
         N.next_send = 0;
+        N.joined = 1;
     }
     rt_ff = !creator;
-    plat_desk_capture(slot == DESK_SLOT);   /* the host plays with the game's own keyboard and mouse */
+    plat_desk_capture(slot == DESK_SLOT); /* the host plays with the game's own keyboard and mouse */
     det_on_frame(net_frame);
     rt_trace("netplay: session started as player %d%s", slot + 1, creator ? " (created the room)" : ", catching up");
     return 1;

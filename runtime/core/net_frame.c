@@ -148,7 +148,7 @@ static void wait_inputs(uint32_t frame) {
         if (++waited == 20 && !rt_ff) net_tx_status(1, who);   /* ~0.1 s late: the page shows who we wait for */
         if (waited % 2000 == 0) rt_trace("netplay: waiting for player %d at frame %u", who + 1, frame);
     }
-    if (waited >= 20 && !rt_ff && !N.offline) net_tx_status(0, 0);
+    if (waited >= 20 && !rt_ff && !N.offline) net_tx_status(0, 0), N.stalls++;
 }
 
 static void apply_inputs(uint32_t frame) {
@@ -179,9 +179,11 @@ static void trace_applied(uint32_t frame) {
              N.active[3], c);
 }
 
-/* Catching up: until this player's slot plays, or while far behind the others. */
+/* Catching up when joining: until this player's slot plays and it is near the others. Once in step it
+   stays in step (the others wait for its inputs), so it never fast-forwards again. */
 static void catch_up(uint32_t frame) {
-    int ff = !N.offline && (N.my_from < 0 || (int64_t)frame < N.my_from || N.max_seen > frame + 2u * N.delay + 60);
+    int ff = !N.offline && !N.joined &&
+             (N.my_from < 0 || (int64_t)frame < N.my_from || N.max_seen > frame + 2u * N.delay + 60);
     if (ff && frame % 30 == 0) {
         uint32_t target = N.my_from > (int64_t)frame ? (uint32_t)N.my_from : N.max_seen;
         rt_net_progress = target > frame ? (int)((uint64_t)frame * 100 / target) : 99;
@@ -190,6 +192,7 @@ static void catch_up(uint32_t frame) {
     if (rt_ff && !ff) {
         rt_trace("netplay: caught up at frame %u", frame);
         net_tx_status(0, 0);
+        N.joined = 1;
     }
     rt_ff = ff;
 }
@@ -202,9 +205,11 @@ void net_frame(uint32_t frame) {
     net_pump(0);
     if (N.my_from >= 0 && !N.offline) {   /* my input for every frame up to frame + delay, each once */
         int64_t own = (int64_t)frame + N.delay, upto = own;
-        /* catching up: idle inputs as far as the others have gone, so nobody waits for this game */
-        if (rt_ff && (int64_t)N.max_seen + N.delay > upto) upto = (int64_t)N.max_seen + N.delay;
-        if (rt_ff && N.front + N.delay + 30 > upto) upto = N.front + N.delay + 30;
+        /* joining: idle inputs as far as the others have gone, so nobody waits for this game. Only then:
+           a game in step sends its real inputs (idle ones ahead would drop its presses and let the others
+           run away from it, which would make it catch up again, and so on) */
+        if (rt_ff && !N.joined && (int64_t)N.max_seen + N.delay > upto) upto = (int64_t)N.max_seen + N.delay;
+        if (rt_ff && !N.joined && N.front + N.delay + 30 > upto) upto = N.front + N.delay + 30;
         for (int64_t f = N.next_send; f <= upto; f++) send_input(f, f > own);
     }
     if (N.auth && !N.offline) admit(frame);
@@ -215,4 +220,9 @@ void net_frame(uint32_t frame) {
     if (frame >= 2 * NET_HASH_EVERY && frame % NET_HASH_EVERY == NET_HASH_EVERY - 1)
         check_hashes(frame - NET_HASH_EVERY);
     catch_up(frame);
+    if (frame % 600 == 0 && !rt_ff && !N.offline) {   /* (checks: tools/net/ls_lag_check.py) */
+        rt_trace("netplay: pace at frame %u: delay %d inputs first by peer %u by relay %u stalls %u", frame, N.delay,
+                 N.by_peer, N.by_relay, N.stalls);
+        N.by_peer = N.by_relay = N.stalls = 0;
+    }
 }

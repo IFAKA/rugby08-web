@@ -102,6 +102,7 @@ int plat_gamepad(rt_pad_t *p);    /* this machine's game controller alone -> p: 
 extern uint32_t rt_pads_party; /* host: bit k = room slot k has a member */
 int rt_pad_attached(int k);
 void rt_pads_present(uint32_t frame); /* every Present, before the frame's input reaches the game */
+void rt_pad_pause_frame(uint32_t frame); /* every Present, after it: Start pauses a match (pad_pause.c) */
 
 /* Netplay (runtime/core/netplay.c). Transport: platform/native/net_native.c, platform/web/. */
 extern int rt_net;
@@ -131,6 +132,7 @@ int net_tx_open(const char *url); /* 0 = connected */
 int net_tx_send(const void *data, int len, int text);
 void net_tx_close(void);
 int net_tx_recv(void *buf, int cap, int wait_ms); /* >0 length, 0 none, -1 closed */
+int net_tx_recv_peer(void *buf, int cap); /* a peer's direct copy of an 'I'/'H' (web), >0 length, 0 none */
 int net_tx_delay(void);
 int net_tx_hints(int64_t *grant, int64_t *front);
 /* lockstep: the server's hints the page holds (1: some) */ /* this player's input delay in frames (0: no preference) */

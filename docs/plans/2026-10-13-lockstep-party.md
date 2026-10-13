@@ -58,3 +58,16 @@ the catch-up cover, the camera POV) are drawn outside the game state (render/web
 8. **ls.ha_out**: remove the host-authoritative puppet (net_ha*, match_puppet/camera/controls/live,
    party_sides mirror, game/overrides used only by it) and its checks; docs.
 9. Then pt.page, pt.touch, pt.deploy (unchanged).
+
+## Findings while doing ls.match / ls.leave / ls.lag (2026-10-13)
+- A joined game fast-forwarded again whenever it trailed by 2·delay+60 frames, and while fast-forwarding it
+  sent idle inputs ahead "so nobody waits": its presses were dropped and the others ran on, so it fell
+  behind again (a friend flipped every 6 frames; with 3 players the session raced at ~130 fps). Now only
+  joining fast-forwards and sends idle inputs ahead; in step, the others wait for real inputs (lockstep).
+- The PC game pauses only on the keyboard's Esc: a friend's controller is a pad, so Start on any controller
+  now presses Esc at the same frame in every game (runtime/core/pad_pause.c).
+- The keyboard is player 1's: when player 1 leaves, it goes off its side (pad_attach.c) and the AI plays.
+- A newcomer reusing a slot was removed by the 'D' of the slot's previous player (replayed from the log).
+- One build per party: the page sends its build id (stamped at link time), the server refuses another.
+- Pictures (RT_PIX) equal in menus and play; rare differences (1-4 frames a run) in loading screens and
+  cutscenes are being traced (the game camera's hash logged next to the picture's).

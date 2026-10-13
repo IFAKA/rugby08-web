@@ -74,7 +74,9 @@
       }
       setInterval(() => flushLog(false), 3000);
       addEventListener('pagehide', () => flushLog(true));
-      logLine('page: ' + navigator.userAgent + ' ' + location.href);
+      // this page's game build (stamped at link time: tools/web/stamp_build.cmake): a party plays one build
+      var BUILD = '@RUGBY_BUILD@';
+      logLine('page: ' + navigator.userAgent + ' ' + location.href + ' build ' + BUILD);
       addEventListener('error', (e) => logLine('page error: ' + e.message + ' ' + (e.error && e.error.stack || '')));
       addEventListener('unhandledrejection', (e) => logLine('page error: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
       var $ = (id) => document.getElementById(id);
@@ -124,10 +126,14 @@
           else if (kind === 0) { send({ t: 'progress', pct: 100 }); sessionStorage.removeItem('rugbyRetry'); }
           else if (kind === 3) say('CONNECTION LOST: YOU PLAY ON YOUR OWN');
         },
-        rugbyNetDelay() {   // my input delay in frames: my trip to the server plus the slowest friend's, plus slack
+        // my input delay in frames: the trip to the slowest friend peer to peer, its jitter included
+        // (js/peers.js), else by the server (my trip to it plus the slowest friend's), plus a frame of slack
+        rugbyNetDelay() {
           var others = members.filter(m => m.slot !== me.slot).map(m => m.rtt || 80);
           if (!others.length) return 1;
-          return Math.max(2, Math.min(20, Math.ceil(((rtt || 80) / 2 + Math.max(...others) / 2) / 16.7) + 1));
+          var p2p = Module.peers && Module.peers.oneWay();
+          var ms = p2p != null ? p2p : (rtt || 80) / 2 + Math.max(...others) / 2;
+          return Math.max(2, Math.min(20, Math.ceil(ms / 16.7) + 1));
         },
         // the game's JOIN PARTY / LEAVE PARTY (runtime/core/ls_party.c): play in that room / a fresh own game
         rugbyJoin(code) {
@@ -135,7 +141,7 @@
           if (code === room) { say("THAT IS YOUR OWN PARTY: GIVE THE CODE TO YOUR FRIENDS"); return; }
           pendingJoin = code;
           if (!net || net.closed) { say('CANNOT REACH THE GAME SERVER'); return; }
-          send({ t: 'peek', room: code });   // the server answers whether it can be joined
+          send({ t: 'peek', room: code, build: BUILD });   // the server answers whether it can be joined
         },
         rugbyLeave() { reload(''); },
       };
@@ -163,13 +169,14 @@
         function offline() { if (started) return; net = null; if (join) say('CANNOT REACH THE GAME SERVER'); play([]); }
         ws.onopen = () => {
           opened = true; clearTimeout(fallback);
-          ws.send(JSON.stringify(join ? { t: 'join', room: join, auto } : { t: 'host' }));
+          ws.send(JSON.stringify(join ? { t: 'join', room: join, auto, build: BUILD } : { t: 'host', build: BUILD }));
         };
         ws.onerror = () => { if (!opened) { clearTimeout(fallback); offline(); } };
         ws.onclose = () => { net && (net.closed = true); };
         ws.onmessage = (ev) => {
           if (typeof ev.data !== 'string') { net.queue.push(new Uint8Array(ev.data)); return; }   // game messages: netplay.c
           var m = JSON.parse(ev.data);
+          if (Module.peers && Module.peers.text(m)) return;   // WebRTC signaling (js/peers.js)
           if (m.t === 'error' && !started) { say(m.msg.toUpperCase()); reload(''); return; }   // could not join: own game
           if (m.t === 'error') { say(m.msg.toUpperCase()); return; }   // e.g. dropped for a stalled connection
           if (m.t === 'peek') {   // the answer for JOIN PARTY

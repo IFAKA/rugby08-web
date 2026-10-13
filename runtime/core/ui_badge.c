@@ -24,11 +24,12 @@ static int count(uint32_t m) {
 
 /* lockstep: who joined or left, from the roster (drawn here only: never game state) */
 static void ls_toasts(uint32_t frame) {
-    static uint32_t was = 1;
+    static uint32_t was;
     uint32_t now = ls_members();
     char line[48];
-    for (int k = 1; k < 4; k++)
-        if ((now ^ was) >> k & 1) {
+    if (!was) was = now;   /* (whoever is there when this game starts: no news) */
+    for (int k = 0; k < 4; k++)
+        if (((now ^ was) >> k & 1) && k != rt_net_slot()) {
             snprintf(line, sizeof line, "PLAYER %d %s", k + 1, now >> k & 1 ? "JOINED" : "LEFT");
             party_toast(frame, line);
         }

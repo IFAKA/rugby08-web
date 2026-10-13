@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 int rt_trace_vsc;   // RT_TRACE_DRAWS_FRAME is on for this frame: d3d8_device prints vertex shader constants
@@ -64,6 +65,46 @@ static void save_frame_png(int w, int h, const char *path) {
     for (int y = 0; y < h; y++) memcpy(&flip[(size_t)y * w * 4], &px[(size_t)(h - 1 - y) * w * 4], (size_t)w * 4);
     int rc = rt_png_write(path, w, h, flip.data());
     rt_trace("screenshot %s %dx%d (%s)", path, w, h, rc == 0 ? "ok" : "failed");
+}
+
+// RT_PIX=N: every N-th presented frame, "pix: frame F HASH" (FNV-1a of the game's picture, before the
+// local overlays: badge, toasts): every player of a lockstep session must see the same picture.
+void d3d8_debug_pixels(uint32_t frame, int w, int h) {
+    static long every = -1;
+    if (every < 0) every = getenv("RT_PIX") ? atol(getenv("RT_PIX")) : 0;
+    if (every <= 0 || frame % every) return;
+    std::vector<uint8_t> px((size_t)w * h * 4);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    uint64_t hash = 1469598103934665603ull;
+    for (uint8_t b : px) hash = (hash ^ b) * 1099511628211ull;
+    uint32_t cam = 2166136261u;   // the game's camera (view, projection): game state, unlike the picture
+    for (uint32_t va = 0xA60B68; va < 0xA60B68 + 64; va++) cam = (cam ^ rd8(va)) * 16777619u;
+    for (uint32_t va = 0xA60C28; va < 0xA60C28 + 64; va++) cam = (cam ^ rd8(va)) * 16777619u;
+    char blocks[16 * 12 * 4 + 1];   // 16x12 blocks, a 16-bit hash each: where two pictures differ
+    for (int by = 0; by < 12; by++)
+        for (int bx = 0; bx < 16; bx++) {
+            uint32_t bh = 2166136261u;
+            for (int y = by * h / 12; y < (by + 1) * h / 12; y++)
+                for (int x = bx * w / 16 * 4; x < (bx + 1) * w / 16 * 4; x++)
+                    bh = (bh ^ px[(size_t)y * w * 4 + x]) * 16777619u;
+            snprintf(blocks + (by * 16 + bx) * 4, 5, "%04X", (bh ^ bh >> 16) & 0xFFFF);
+        }
+    rt_trace("pix: frame %u %016llX cam %08X blocks %s", frame, (unsigned long long)hash, cam, blocks);
+    // RT_PIX_DUMP=A-B[/S]: those frames also as "pix: dump F W H HEX" (RGB, bottom row first; 1/S of the
+    // size, S 4 by default), to see a difference (tools/net/pix_dump.py turns them into PNGs)
+    static long a = -2, b = -1, sc = 4;
+    if (a == -2 && (a = -1, getenv("RT_PIX_DUMP"))) sscanf(getenv("RT_PIX_DUMP"), "%ld-%ld/%ld", &a, &b, &sc);
+    if ((long)frame < a || (long)frame > b || sc < 1) return;
+    int dw = w / (int)sc, dh = h / (int)sc;
+    std::string hex = "";
+    static const char *dig = "0123456789ABCDEF";
+    for (int y = 0; y < dh; y++)
+        for (int x = 0; x < dw; x++) {
+            const uint8_t *p = &px[((size_t)(y * h / dh) * w + (size_t)(x * w / dw)) * 4];
+            for (int c = 0; c < 3; c++) hex += dig[p[c] >> 4], hex += dig[p[c] & 15];
+        }
+    rt_trace("pix: dump %u %d %d %s", frame, dw, dh, hex.c_str());
 }
 
 void d3d8_debug_present(uint32_t frame, int w, int h) {

@@ -1,5 +1,6 @@
 /* sdl_desk.c -- netplay keyboard and mouse: the host records its events, every game injects them. */
 #include "sdl_int.h"
+#include "ui.h"
 
 /* ---- netplay keyboard and mouse (plat.h plat_desk_*) -------------------------------------------- */
 /* The host records its real events instead of handing them to its own game; netplay sends them with
@@ -26,6 +27,10 @@ static void desk_put(uint8_t type, uint8_t a, int x, int y) {
         g_desk[g_desk_n++] = (plat_desk_ev_t){ type, a, (int16_t)x, (int16_t)y };
 }
 void desk_record(const SDL_Event *e) {
+    /* this player's own keys (its camera: runtime/core/ui_camera.c) never reach any game */
+    if ((e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) && !e->key.repeat &&
+        ui_camera_key(e->key.keysym.scancode, e->type == SDL_KEYDOWN))
+        return;
     if (!g_desk_on) return;
     if (e->type == SDL_WINDOWEVENT && e->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {   /* nothing stays held */
         for (int i = 0; i < SDL_NUM_SCANCODES; i++)

@@ -107,6 +107,11 @@ int net_tx_send(const void *data, int len, int text) {
 }
 
 /* Next message payload into buf (>0 its length), 0 if none within wait_ms, -1 if closed. */
+int net_tx_recv_peer(void *buf, int cap) {   /* (no peer-to-peer channels natively: the relay only) */
+    (void)buf;
+    (void)cap;
+    return 0;
+}
 int net_tx_recv(void *buf, int cap, int wait_ms) {
     for (;;) {
         if (g_rn >= 2) {

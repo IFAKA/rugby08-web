@@ -152,6 +152,7 @@ void translate(const SDL_Event *e) {
     case SDL_KEYUP: {   /* the in-game Online screens take keys first (runtime/core/ui_online.c) */
         int down = e->type == SDL_KEYDOWN, sc = (int)e->key.keysym.scancode;
         if (down && e->key.repeat ? ui_open() : ui_key(sc, down)) break;
+        if (!det_on() && !e->key.repeat && ui_camera_key(sc, down)) break;   /* (det: sdl_desk.c desk_record) */
         key_event(&e->key);
         break;
     }
