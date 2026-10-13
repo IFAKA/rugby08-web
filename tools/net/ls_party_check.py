@@ -6,8 +6,9 @@ host goes ONLINE > CREATE PARTY: its screen shows its session's code. Each frien
 goes ONLINE > JOIN PARTY and types the code (keyboard, Enter): its page reloads into the host's
 session, catches up (time measured) and from then on shows the host's game: the same screen, the
 roster on the PARTY screen and the badge count the players; all games print the same state hashes.
-Then the first friend picks LEAVE PARTY with its own controller (the shared screen's cursor moves for
-everyone): its page goes back to a fresh own game, the others see it leave and stay in sync. One line;
+The shared menus are the host's: a friend's screen says the host is choosing; the first friend leaves
+from its own prompt (Esc, then S): its page goes back to a fresh own game, the others see it leave and
+stay in sync. One line;
 details in logs/ls_party/."""
 
 import os
@@ -123,7 +124,11 @@ def run(br, port, out):
         if not in_sync(players, out, "three players"):
             return "the three games are not in sync"
         f1 = friends[0]
-        f1.key("ArrowDown", 1500)  # LEAVE PARTY, by the first friend's controller
+        if not f1.wait("ms: party role THE HOST IS CHOOSING", 30):
+            return "the first friend was not told the host is choosing"
+        f1.key("Escape", 1500)  # a friend leaves from its own prompt (the shared menus are the host's)
+        if not f1.wait("ms: party role LEAVE THE PARTY?", 10):
+            return "Esc did not ask the first friend whether to leave"
         n = len(f1.lines)
         f1.key("s", 3000)
         if not f1.wait_for(lambda: any("created the room" in x for x in f1.lines[n:]), 120):

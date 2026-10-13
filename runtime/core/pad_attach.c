@@ -120,12 +120,13 @@ typedef struct {
 } sorted_t;
 
 /* The keyboard is player 1's (lockstep: the room's creator, whose keyboard and mouse every game
-   applies): it goes when that player leaves (not before the roster has player 1, at boot). */
-static int keyboard_attached(void) {
+   applies). When that player leaves it goes off its side (the AI plays on) but stays plugged in: the
+   game pauses on the keyboard's Esc, which Start on any controller presses (pad_pause.c). */
+static int player1_gone(void) {
     static int had;
-    if (!rt_net || rt_net_ha) return 1;
+    if (!rt_net || rt_net_ha) return 0;
     had |= rt_net_active(0);
-    return !had || rt_net_active(0);
+    return had && !rt_net_active(0);
 }
 
 /* Plugged in or not, as its slot says; sorts the entries: mouse (and anything else), the keyboard,
@@ -138,7 +139,11 @@ static void plug(const uint32_t *c, int n, sorted_t *o) {
         else if (t != T_PAD) o->first[o->nf++] = c[e];   /* the mouse keeps its place */
         if (t != T_PAD && t != T_KEYBOARD) continue;
         int k = t == T_PAD ? rt_dinput_pad_slot(rd32(c[e] + C_DEVICE)) : -1;
-        uint32_t want = (uint32_t)(t == T_PAD ? rt_pad_attached(k) : keyboard_attached());
+        if (t == T_KEYBOARD && player1_gone() && side_of(c[e])) {
+            g_unplugged++;   /* (the teams are rebuilt: pads.c) */
+            wr8(c[e] + C_SIDE, 0);
+        }
+        uint32_t want = (uint32_t)(t == T_PAD ? rt_pad_attached(k) : 1);
         if (rd32(c[e] + C_ATTACHED) != want) {
             if (!want) {   /* unplugged: off its side and inactive first (the game's own disconnect state) */
                 g_unplugged += side_of(c[e]) != 0;

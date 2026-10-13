@@ -85,6 +85,7 @@
       var net = null, me = { slot: -1, creator: false }, members = [], room = '', rtt = 0, started = false;
       var joinCode = q.get('room') || sessionStorage.getItem('rugbyJoin') || '';   // the friend's game to join (kept across a reload)
       var pendingJoin = null;   // a JOIN PARTY code being checked with the server
+      var partyEver = false;   // this game has had friends in its room (a lost connection then ends its party)
 
       // A message for the game to show (runtime/core/ui_badge.c), kept across a reload.
       function say(text) { logLine('page: message ' + text); Module.rugbyMessage = text; sessionStorage.setItem('rugbyMessage', text); }
@@ -124,6 +125,8 @@
         rugbyNetStatus(kind, value) {
           if (kind === 2) send({ t: 'progress', pct: value });
           else if (kind === 0) { send({ t: 'progress', pct: 100 }); sessionStorage.removeItem('rugbyRetry'); }
+          // offline: alone, play on; in a party, back to an own game (the party went on without this one)
+          else if (kind === 3 && partyEver) { say('YOU LOST THE CONNECTION TO THE PARTY'); reload(''); }
           else if (kind === 3) say('CONNECTION LOST: YOU PLAY ON YOUR OWN');
         },
         // my input delay in frames: the trip to the slowest friend peer to peer, its jitter included
@@ -192,7 +195,7 @@
             setInterval(() => send({ t: 'ping', ts: performance.now() }), 2000);
             send({ t: 'ping', ts: performance.now() });
           }
-          if (m.t === 'members') members = m.players;
+          if (m.t === 'members') { members = m.players; partyEver = partyEver || members.length > 1; }
           if (m.t === 'granted') Module.rugbyGrant = m.from;   // catching up: the server's hints (netplay.c)
           if (m.t === 'front') Module.rugbyFront = m.frame;
           if (m.t === 'pong') { var r = performance.now() - m.ts; rtt = rtt ? Math.round(rtt * 0.7 + r * 0.3) : Math.round(r); send({ t: 'rtt', rtt }); }

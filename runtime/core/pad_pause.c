@@ -6,6 +6,7 @@
  * Host-authoritative play pauses its own way (net_ha_flow.c). */
 #include "rt.h"
 #include "plat.h"
+#include "ls_roles.h"
 
 #define GAME_PTR   0x00A7ED28u
 #define G_STATE    0x90u
@@ -29,6 +30,7 @@ void rt_pad_pause_frame(uint32_t frame) {
         if (match && !esc_up && (b & RT_PAD_START) && !(was[k] & RT_PAD_START)) {
             rt_trace("pads: controller of pad %d pressed Start at frame %u: Esc", k, frame);
             escape(1);
+            ls_roles_paused_by(k);
             esc_up = frame + 3;   /* held a few frames: the game polls its keyboard once a frame */
         }
         was[k] = b;

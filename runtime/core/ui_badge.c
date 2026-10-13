@@ -5,6 +5,7 @@
 #include "plat.h"
 #include "ui.h"
 #include "fe_party.h"
+#include "ls_roles.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,12 +44,15 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     const char *toast = party_toast_text(frame);
     int ls = ls_on() && count(ls_members()) > 1;
     int badge = (ls || ui_lobby_state() == LOBBY_IN) && in_menus();
-    if (w <= 0 || h <= 0 || (!badge && !toast)) return 0;
-    static char last[128];
-    char b[48], all[128];
+    char you[32] = "", role[64] = "";   /* in a party: which player this is; the host's or a pauser's turn */
+    int rk = ls ? ls_roles_banner(role, sizeof role) : 0;
+    if (ls) snprintf(you, sizeof you, "YOU: PLAYER %d", rt_net_slot() + 1);
+    if (w <= 0 || h <= 0 || (!badge && !toast && !ls)) return 0;
+    static char last[256];
+    char b[48], all[256];
     if (ls) snprintf(b, sizeof b, "PARTY %s %d/4", ls_code(), count(ls_members()));
     else snprintf(b, sizeof b, "PARTY %s %d/4", ui_lobby_code(), ui_lobby_members());
-    snprintf(all, sizeof all, "%s|%s", badge ? b : "", toast ? toast : "");
+    snprintf(all, sizeof all, "%s|%s|%s|%d%s", badge ? b : "", toast ? toast : "", you, rk, role);
     *changed = strcmp(all, last) != 0 || g_img.w != w || g_img.h != h;
     if (g_img.w != w || g_img.h != h) {
         free(g_img.px);
@@ -58,6 +62,20 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     if (*changed) {
         snprintf(last, sizeof last, "%s", all);
         memset(g_img.px, 0, (size_t)w * (size_t)h * 4);
+        if (rk) {   /* another player's turn: the screen dimmed (or covered) and whose turn it is */
+            ui_rect(&g_img, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xE8000000u : 0x90000000u);
+            int tw = ui_text_width(role, 3) + 24;
+            ui_rect(&g_img, (w - tw) / 2, h / 2 - 22, tw, 44, UI_PANEL);
+            ui_text(&g_img, (w - tw) / 2 + 12, h / 2 - 10, 3, role, UI_GOLD);
+            rt_trace("ms: party role %s", role);
+        }
+        if (you[0]) {   /* which player this is, in a corner (2: the player's controller colour) */
+            static const uint32_t col[4] = { 0xFF3040E0u, 0xFFE07030u, 0xFF40C040u, 0xFF30D0E0u };
+            int tw = ui_text_width(you, 2) + 16;
+            ui_rect(&g_img, 8, 8, tw, 28, UI_PANEL);
+            ui_rect(&g_img, 8, 8, 4, 28, col[rt_net_slot() & 3]);
+            ui_text(&g_img, 18, 15, 2, you, UI_WHITE);
+        }
         if (badge) {
             int bw = ui_text_width(b, 2) + 16;
             ui_rect(&g_img, w - bw - 8, 8, bw, 28, UI_PANEL);

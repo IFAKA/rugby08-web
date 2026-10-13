@@ -3,6 +3,7 @@
  * decide catching up. Protocol and state: netplay.c, netplay_int.h. */
 #include "netplay_int.h"
 #include "own_camera.h"
+#include "ls_roles.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +46,7 @@ static void read_local(uint32_t frame) {
         N.local = g;
     } else if (had) memset(&N.local, 0, sizeof N.local);
     had = N.slot == DESK_SLOT && N.local.spare;
+    ls_roles_local(&N.local);   /* this player's own presses where another player is the host */
     static rt_pad_t last;   /* trace input changes (checks: tools/net/net_live_input.py) */
     if (memcmp(&last, &N.local, sizeof last) != 0) {
         rt_trace("netplay: local input frame %u buttons %04X stick %d,%d", frame, N.local.buttons, N.local.lx,
@@ -167,9 +169,13 @@ static void apply_inputs(uint32_t frame) {
     /* the host's keyboard and mouse, at the frame they were sent for (offline: as they come) */
     if (!N.offline && N.active[DESK_SLOT] && net_have_input(DESK_SLOT, frame)) {
         const slot_in_t *s = &N.in[frame % RING][DESK_SLOT];
+        int desk = ls_roles_filter(s->d, s->nd);   /* who may act now (the host's menus, the pauser's) */
         for (int i = 0; i < s->nd; i++)
             if (s->d[i].type == NET_DESK_LOOK) own_camera_set_ref(s->d[i].x, s->d[i].y);
-            else plat_desk_apply(&s->d[i]);
+            else if (desk || ((s->d[i].type == PLAT_DESK_KEY || s->d[i].type == PLAT_DESK_BUTTON) && !s->d[i].a))
+                plat_desk_apply(&s->d[i]);   /* (releases always: nothing stays held) */
+    } else if (!N.offline) {
+        ls_roles_filter(NULL, 0);
     } else if (N.offline && N.slot == DESK_SLOT) {
         plat_desk_ev_t d[NDESK];
         for (int i = 0, n = plat_desk_take(d, NDESK); i < n; i++) plat_desk_apply(&d[i]);

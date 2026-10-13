@@ -73,6 +73,12 @@ EM_JS(void, js_net_close, (void), {
     if (Module.rugbyNet && Module.rugbyNet.ws) Module.rugbyNet.ws.close();
     Module.rugbyNet = null;
 });
+/* Waiting for a player's input: a hidden tab's timers fire once a second or less (and the others drop a
+   player whose input stops for 3 s), so a hidden page waits on the worker's timer (platform.c). */
+EM_ASYNC_JS(void, js_net_wait, (int ms), {
+    if (document.hidden && Module.rtTimer) await Module.rtTimer(ms);
+    else await new Promise(r => setTimeout(r, ms));
+});
 // clang-format on
 int net_tx_open(const char *url) {
     (void)url;   /* the page's own server */
@@ -90,7 +96,7 @@ int net_tx_send(const void *data, int len, int text) { return js_net_send(data, 
 int net_tx_recv(void *buf, int cap, int wait_ms) {
     int n = js_net_recv(buf, cap);
     if (n == 0 && wait_ms > 0) {
-        emscripten_sleep((unsigned)wait_ms);
+        js_net_wait(wait_ms);
         n = js_net_recv(buf, cap);
     }
     return n;
