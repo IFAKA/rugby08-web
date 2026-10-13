@@ -7,6 +7,7 @@
 #include "rt.h"
 #include "fe_party.h"
 #include "fe_xml.h"
+#include "plat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -140,7 +141,7 @@ static int line_y(int i) { return i < 2 ? 0 : i == 2 ? 34 : 54 + 20 * (i - 3); }
 void fe_party_layout(int i, int *x, int *y, int *buttons_y) {
     fe_node *items = g_menu ? fe_find(g_menu, "Window", "0") : NULL;
     const char *xp = items ? fe_get(items, "xPos") : NULL;
-    *x = xp ? atoi(xp) : 0;
+    *x = xp ? atoi(xp) : plat_join_menu_x() > 0 ? plat_join_menu_x() : 0;   /* (joining: the menu not loaded yet) */
     *y = INFO_Y + line_y(i);
     *buttons_y = ITEMS_Y;
 }

@@ -126,7 +126,7 @@ static void catchup_row(ui_image_t *im, int slot, int pct, const char *t) {
     ui_rect(im, bx - 2, ry - 2, bw + 4, bh + 4, UI_PANEL);
     ui_rect(im, bx, ry, bw * pct / 100, bh, UI_GOLD);
     ui_text(im, bx + bw + 8, ry + bh / 2 - 7 * sc / 2, sc, pc, UI_GOLD);
-    rt_trace("ms: joining on the party screen %d%% %s", pct, t ? t : "(player's row)");
+    rt_trace("ms: joining on the party screen %d%% %s (menu x %d)", pct, t ? t : "(player's row)", x0);
     if (!t) return;   /* (another player's row, seen by the others: the bar only) */
     int px = (int)(ox + (float)(x0 - 8) * k), py = (int)(oy + (float)(by - 4) * k);
     int pw = ui_text_width(t, sc) + 24, ph = (int)(48.f * k);

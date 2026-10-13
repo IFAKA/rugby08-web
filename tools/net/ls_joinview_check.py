@@ -92,6 +92,9 @@ def run(br, port, out):
         if not os.path.exists(os.path.join(D, "catchup.png")):
             return "the friend's catch-up never showed the party screen"
         out.append("friend: never a black page, the party screen all along (reload.png, catchup.png)")
+        xs = {x.rsplit("menu x ", 1)[1].rstrip(")") for x in friend.lines[n:] if "(menu x " in x}
+        if len(xs) != 1 or "0" in xs:  # the bar where the game's own menu has it, before and after the reload
+            return f"the friend's joining overlay moved: menu x {sorted(xs)}"
         if not any("party screen 0% JOINING THE PARTY" in x for x in friend.lines[n:]):
             return "JOIN PARTY did not show the party's screen before the reload"
         out.append(f"friend: caught up in {time.time() - t0:.0f} s")

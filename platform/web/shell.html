@@ -151,15 +151,15 @@
         rugbyLeave() { reload(''); },
       };
       // Joining a party shows its party screen from the start (platform/web/join_view.c): JOIN PARTY accepted,
-      // the game draws that party's screen, the page keeps a picture of it (or reloads anyway after 4 s), and
+      // the game draws that party's screen, the page keeps a picture of it (or reloads anyway after 20 s), and
       // after the reload gives it back to the game while it catches up (and shows it while the page loads).
       function preview(code, m) {
         Module.rugbyPreview = { room: code, slot: m.slot | 0, players: m.players | 0 };
-        var go = setTimeout(() => reload(code), 4000);
-        Module.rugbySnapshot = () => {
+        var go = setTimeout(() => { logLine('page: no picture of the party in time'); reload(code); }, 20000);
+        Module.rugbySnapshot = (x) => {
           Module.rugbySnapshot = null;
           clearTimeout(go);
-          try { sessionStorage.setItem('rugbyBackdrop', $('canvas').toDataURL('image/jpeg', 0.85)); }
+          try { sessionStorage.setItem('rugbyBackdrop', $('canvas').toDataURL('image/jpeg', 0.85)); sessionStorage.setItem('rugbyBackdropX', x); }
           catch (e) { logLine('page: no picture of the party ' + e); }
           reload(code);
         };
@@ -167,6 +167,7 @@
       if (backdrop) {
         Module.rugbyBackdrop = new Image();
         Module.rugbyBackdrop.src = backdrop;
+        Module.rugbyBackdropX = +(sessionStorage.getItem('rugbyBackdropX') || -1);
         $('loading').textContent = '';
         $('loading').style.background = '#000 url(' + backdrop + ') center / contain no-repeat';
       }

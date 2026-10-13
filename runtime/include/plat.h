@@ -123,7 +123,8 @@ void plat_session_join(const char *code); /* lockstep: play in that room instead
 void plat_session_leave(void);           /* lockstep: leave for a fresh own game (the page reloads) */
 /* joining a party: its screen from the start (platform/web/join_view.c; native: none) */
 int plat_join_preview(int *slot, uint32_t *players, char *code, int cap); /* 1: joining that room as SLOT */
-void plat_join_snapshot(void);                     /* the frame just drawn is that party's screen: keep it */
+void plat_join_snapshot(int menu_x); /* the frame just drawn is that party's screen: keep it (and the menu's x) */
+int plat_join_menu_x(void);         /* after the reload: that menu x (front-end units), -1 none */
 int plat_join_backdrop(uint8_t *rgba, int w, int h); /* while catching up: the kept picture, W x H RGBA */
 int plat_join_progress(int slot); /* the others: player SLOT joining, percent caught up; -1 not joining */
 const char *plat_page_message(void);     /* a message for the game to show (the page: join errors...), or NULL */

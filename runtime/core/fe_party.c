@@ -247,8 +247,10 @@ void fe_party_present(uint32_t frame) {
         set_text(screen, 2, g_status[0] ? g_status : "TYPE OR PICK YOUR FRIEND'S CODE");
     } else if (id == FE_SCR_PARTY) {
         party_lines(screen);
-        static int settled;   /* the party being joined: its screen, once in place, is kept by the page */
-        if (previewing(NULL, NULL, NULL) && ++settled == 60) plat_join_snapshot();
+        static int settled;   /* the party being joined: its screen, once in (60 frames), is kept by the page */
+        int x, y, by;
+        fe_party_layout(0, &x, &y, &by);
+        if (previewing(NULL, NULL, NULL) && ++settled == 60) plat_join_snapshot(x);
     }
 }
 

@@ -90,7 +90,8 @@ int plat_join_preview(int *slot, uint32_t *players, char *code, int cap) {
     (void)slot, (void)players, (void)code, (void)cap;
     return 0;
 }
-void plat_join_snapshot(void) {}
+void plat_join_snapshot(int menu_x) { (void)menu_x; }
+int plat_join_menu_x(void) { return -1; }
 int plat_join_progress(int slot) {
     (void)slot;
     return -1;
