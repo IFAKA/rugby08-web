@@ -34,6 +34,10 @@ static uint32_t mk_buttons(void) {
 /* Interactive play captures the pointer (SDL relative mode) and tracks the in-window position from
    the deltas, so the pointer can never stall at a window edge while the game cursor still has room. */
 static void rel_set(int on) {
+#ifdef __EMSCRIPTEN__
+    (void)on;   /* the browser: the game's menu cursor follows the pointer itself (plat_pointer) */
+    return;
+#endif
     if (virtual_cursor() || !g_win || on == g_rel) return;
     if (on) {
         int x, y;
@@ -115,6 +119,7 @@ static uint32_t mouse_lparam(int x, int y) {
 static void motion_event(const SDL_MouseMotionEvent *m) {
     g_mdx += m->xrel;
     g_mdy += m->yrel;
+    g_px = m->x, g_py = m->y, g_pmoved = 1;
     if (!g_rel && plat_window_focused()) rel_set(1);
     if (g_rel) rel_move(m->xrel, m->yrel);
     push(WM_MOUSEMOVE_, mk_buttons(), mouse_lparam(m->x, m->y));

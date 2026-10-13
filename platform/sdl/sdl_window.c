@@ -71,6 +71,13 @@ int plat_window_focused(void) { return g_win && (SDL_GetWindowFlags(g_win) & SDL
 
 void plat_window_move(int x, int y, int w, int h, int move, int size) {
     if (!g_win) return;
+#ifdef __EMSCRIPTEN__
+    /* The browser: the window is the canvas, sized by the device to its back buffer (plat_gl_set_size),
+       as a fullscreen mode is on Windows. The game's desktop-sized window (1920x1080, y CW_USEDEFAULT)
+       put the pointer in coordinates the game's 640x480 mouse clamps away: the cursor went astray. */
+    (void)x, (void)y, (void)w, (void)h, (void)move, (void)size;
+    return;
+#endif
     if (size && w > 0 && h > 0) SDL_SetWindowSize(g_win, w, h);
     if (move) SDL_SetWindowPosition(g_win, x, y);
 }
@@ -78,7 +85,9 @@ void plat_window_move(int x, int y, int w, int h, int move, int size) {
 void plat_window_rect(int *x, int *y, int *w, int *h) {
     int px = 0, py = 0, pw = 800, ph = 600;
     if (g_win) {
+#ifndef __EMSCRIPTEN__ /* the browser: the canvas is at the screen's origin */
         SDL_GetWindowPosition(g_win, &px, &py);
+#endif
         SDL_GetWindowSize(g_win, &pw, &ph);
     }
     if (x) *x = px;

@@ -326,3 +326,7 @@ Next: `./init.sh next` shows what to fix.
 - Referee: tools/check/regress.sh (RT_DET runs, fresh user dir) — screenshots, audio, log signature and the guest state hash every 60 frames identical to master's binary.
 - Learned: the hash was only hermetic by luck. dlmalloc seeded its heap magic from time(0) (online's 289992c fix ported), and the arena must sit at a fixed address (host pointers in chunk headers). Runs started in different seconds never matched before.
 - Next: merge online's changes onto this layout when the user asks.
+
+## 2026-10-14 — browser mouse on master (ported from online-ha 4521d3a + the pointer part of ba3f317)
+- The canvas is the window (device sizes it to the back buffer; the game's 1920x1080 window no longer resizes it; origin 0,0), and the browser places the menus' cursor where the pointer is (runtime/core/fe_pointer.c at every Present; SDL relative mode and DirectInput deltas off in the browser). Native unchanged.
+- Proof: master web build, headless, pointer at 5 game points on the title screen: arrow tip at the pointer at all 5; build-native ok.

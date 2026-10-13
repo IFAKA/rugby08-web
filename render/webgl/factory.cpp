@@ -55,8 +55,10 @@ class D3D9 : public IDirect3D9 {
             g_logical_height = h;
         }
 
-        // Set canvas drawingBuffer to match backbuffer size (D3D9-compliant: fixed at CreateDevice)
-        emscripten_set_canvas_element_size(g_canvas_selector, g_logical_width, g_logical_height);
+        // The window takes the back buffer's size, as a fullscreen mode switch does on Windows: the
+        // canvas drawing buffer, and the window the game's mouse coordinates are in (a canvas resized
+        // behind SDL's back left the pointer in the old desktop-sized window: the cursor went astray)
+        plat_gl_set_size(g_logical_width, g_logical_height);
 
         *ppReturnedDeviceInterface = new D3D9Device();
 

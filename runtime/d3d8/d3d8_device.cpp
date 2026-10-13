@@ -2,6 +2,7 @@
 // draws. States: d3d8_state.cpp; shaders: d3d8_dev_shaders.cpp; shared state: d3d8_dev.hpp.
 #include "d3d8_dev.hpp"
 extern "C" void rt_coverage_frame(uint32_t frame);
+extern "C" void fe_pointer_present(void);   // runtime/core/fe_pointer.c
 #include "plat.h"
 #include <GLES3/gl3.h>
 #include <cstdlib>
@@ -144,6 +145,7 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     plat_replay_tick(s->frame);
     if (rt_det == 1) det_frame(s->frame);   // input for this frame reaches the guest, virtual time advances
     rt_coverage_frame(s->frame);
+    fe_pointer_present();   // the browser: the menus' cursor where the pointer is
     d3d8_debug_present(s->frame, (int)o->w, (int)o->h);   // runtime/debug/frames.cpp
     plat_gl_swap();   // web: also yields the frame to the browser (platform/web)
     return D3D_OK_;

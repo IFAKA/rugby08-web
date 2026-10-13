@@ -4,6 +4,7 @@
 keymap_t g_keys[SDL_NUM_SCANCODES];
 uint8_t g_vk_down[256], g_dik_down[256];
 int g_mdx, g_mdy, g_mdw;
+int g_px, g_py, g_pmoved;      /* the pointer in the window, and whether it moved since plat_pointer */
 uint8_t g_replay_buttons;      /* mouse buttons held by the input replay (ORed into DirectInput) */
 int g_inited;                  /* SDL video initialised (set in video_init) */
 
@@ -12,7 +13,26 @@ void plat_mouse_delta(int *dx, int *dy, int *dw) {
     *dx = g_mdx;
     *dy = g_mdy;
     *dw = g_mdw;
+#ifdef __EMSCRIPTEN__
+    *dx = *dy = 0;   /* the browser: the menu cursor is placed where the pointer is (plat_pointer), not moved */
+#endif
     g_mdx = g_mdy = g_mdw = 0;
+}
+/* The browser: the pointer (mouse or a touch) over the game, in its 640x480 screen units; 1 when it
+   moved since the last call. Elsewhere 0 (the game moves its cursor by DirectInput deltas). */
+int plat_pointer(float *x, float *y) {
+#ifdef __EMSCRIPTEN__
+    int w = 640, h = 480;
+    if (!g_pmoved || !g_win) return 0;
+    SDL_GetWindowSize(g_win, &w, &h);
+    *x = (float)g_px * 640.0f / (float)(w > 0 ? w : 640);
+    *y = (float)g_py * 480.0f / (float)(h > 0 ? h : 480);
+    g_pmoved = 0;
+    return 1;
+#else
+    (void)x, (void)y;
+    return 0;
+#endif
 }
 uint8_t plat_mouse_buttons(void) {
     uint32_t b = g_inited ? SDL_GetMouseState(NULL, NULL) : 0;

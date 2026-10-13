@@ -168,7 +168,7 @@ HRESULT D3D9Device::Reset(D3DPRESENT_PARAMETERS *pPresentationParameters) {
     if (w <= 0 || h <= 0 || (w == g_logical_width && h == g_logical_height)) return D3D_OK;
     g_logical_width = w;
     g_logical_height = h;
-    emscripten_set_canvas_element_size(g_canvas_selector, w, h);
+    plat_gl_set_size(w, h);   // the window too, so the mouse stays in the game's coordinates (factory.cpp)
     if (m_backbuffer_surface) {
         m_backbuffer_surface->m_width = (UINT)w;
         m_backbuffer_surface->m_height = (UINT)h;
