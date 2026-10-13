@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "pad_attach.h"
+#include "fe_party.h"
 
 rt_pad_t rt_pads[RT_MAX_PADS];
 int rt_npads = -1;
@@ -31,6 +32,7 @@ int rt_pad_event(int pad, const char *name, int down) {
     g_scripted[pad] = 1;
     /* a friend (and lockstep netplay): replay pad events are this player's input, sent to the host */
     rt_pad_t *p = rt_net && rt_net_ha != 1 ? rt_net_local_pad() : &rt_pads[pad];
+    p->spare = 1;   /* plugged in (lockstep: the input stream says so, rt_pad_attached) */
     for (size_t i = 0; i < sizeof k_buttons / sizeof *k_buttons; i++)
         if (!strcmp(name, k_buttons[i].name)) {
             p->buttons = down ? p->buttons | k_buttons[i].bit : p->buttons & ~k_buttons[i].bit;
@@ -93,7 +95,9 @@ int rt_pad_count(void) {
    slot), a pad a replay drives; RT_PADS=N (reference runs recorded with N pads): all N. */
 int rt_pad_attached(int k) {
     if (k < 0 || k >= rt_pad_count()) return 0;
-    if (getenv("RT_PADS") || g_scripted[k]) return 1;
+    if (getenv("RT_PADS")) return 1;
+    if (rt_net && !rt_net_ha) return rt_net_active(k) && rt_pads[k].spare;   /* lockstep: the input stream */
+    if (g_scripted[k]) return 1;
     if (rt_pads_mirroring()) return k > 0 && (rt_pads_party >> k & 1);   /* a friend's Team Select: the party */
     if (k == 0) return g_gamepad;
     return rt_net_ha == 1 && (rt_pads_party >> k & 1);   /* (rt_pads_party: the host's members, net_ha.c) */
@@ -103,6 +107,18 @@ int rt_pad_attached(int k) {
    keyboard; a friend's game is driven by the host), then the game's controllers follow the slots. */
 void rt_pads_present(uint32_t frame) {
     rt_pad_t g;
+    if (rt_net && !rt_net_ha) {   /* lockstep: every pad comes from the input stream (net_frame.c) */
+        static uint32_t rebuild_at;
+        rt_pads_sync_game(frame);
+        /* a player who left had a side: in a match the teams are rebuilt as at half time (the AI takes
+           the player; the game's reassign screen would stop everyone), at the same frame in every game */
+        if (rt_pads_take_unplugged()) rebuild_at = frame + 2;
+        if (rebuild_at && frame >= rebuild_at) {
+            rebuild_at = 0;
+            party_rebuild_teams();
+        }
+        return;
+    }
     int on = plat_gamepad(&g);
     if (on) rt_pads[0] = g;
     else if (g_gamepad) memset(&rt_pads[0], 0, sizeof rt_pads[0]);

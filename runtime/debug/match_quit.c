@@ -54,6 +54,12 @@ void ms_quit_frame(uint32_t frame) {
     if (at < 0) return;
     uint32_t g = rd32(GAME_PTR), st = g ? rd32(g + 0x90) : 0, vt = st ? rd32(st) : 0;
     if (vt != last_vt) rt_trace("ms: game state %08X at frame %u", vt, frame);
+    static long pages = -2;   /* RT_DET_PAGES_MATCH=N: the page hashes N frames into the first match */
+    if (pages == -2) pages = getenv("RT_DET_PAGES_MATCH") ? atol(getenv("RT_DET_PAGES_MATCH")) : -1;
+    if (pages >= 0 && vt != last_vt && vt == VT_BACKEND) {
+        det_pages_at(frame + (uint32_t)pages);
+        pages = -1;
+    }
     last_vt = vt;
     static uint32_t last_screen;   /* the front end's current screen ([0x013834E8]+4) */
     uint32_t fe = rd32(0x013834E8u), screen = fe ? rd32(fe + 4) : 0;

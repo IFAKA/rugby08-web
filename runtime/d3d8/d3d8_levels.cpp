@@ -2,6 +2,7 @@
 // guest VAs) that UnlockRect uploads to the renderer, converting the formats it does not handle;
 // render-target levels are read back on lock. The COM handlers: d3d8_textures.cpp.
 #include "d3d8_res.hpp"
+#include "plat.h"
 #include <GLES3/gl3.h>
 #include <algorithm>
 #include <cstring>
@@ -142,8 +143,24 @@ uint32_t new_texture(Obj *dev, uint32_t w, uint32_t h, uint32_t levels, uint32_t
 // what was drawn (D3D returns the rendered surface). The game renders each stadium's shadow map
 // into a 256x256 target and reads it back; an empty read made every lit object fully shadowed.
 // Rows need no flip: d3d9-webgl draws into targets Y-flipped, so GL row 0 is the D3D top row.
+static void gpu_read(Obj *t, uint32_t l);
+// Lockstep (runtime/core/net_external.c): one game reads its GPU, every game gets the same pixels.
 void readback_level(Obj *t, uint32_t l) {
     if (!(t->usage & 1u) || !t->host || compressed(t->fmt)) return;      // D3DUSAGE_RENDERTARGET
+    uint32_t w = std::max(1u, t->w >> l), h = std::max(1u, t->h >> l), b = bpp(t->fmt) / 8, pitch = t->lvl_pitch[l];
+    uint8_t *dst = (uint8_t *)G2H(t->lvl_shadow[l]);
+    std::vector<uint8_t> rows((size_t)w * h * b);
+    if (rt_net_external_source()) {
+        gpu_read(t, l);
+        for (uint32_t y = 0; y < h; y++) memcpy(&rows[(size_t)y * w * b], dst + y * pitch, (size_t)w * b);
+        rt_net_external_put(rows.data(), (uint32_t)rows.size());
+        return;
+    }
+    rt_net_external_get(rows.data(), (uint32_t)rows.size());
+    for (uint32_t y = 0; y < h; y++) memcpy(dst + y * pitch, &rows[(size_t)y * w * b], (size_t)w * b);
+}
+
+static void gpu_read(Obj *t, uint32_t l) {
     GLuint tex = d3d9w_texture_gl(d3d8_texture9(t));
     if (!tex) return;
     uint32_t w = std::max(1u, t->w >> l), h = std::max(1u, t->h >> l), b = bpp(t->fmt) / 8;
@@ -159,6 +176,7 @@ void readback_level(Obj *t, uint32_t l) {
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev);
     glDeleteFramebuffers(1, &fbo);
     if (!ok) return;
+    rt_trace("d3d8: render target read back %ux%u level %u fmt %u", w, h, l, t->fmt);
     uint8_t *dst = (uint8_t *)G2H(t->lvl_shadow[l]);
     uint32_t pitch = t->lvl_pitch[l];
     for (uint32_t y = 0; y < h; y++)

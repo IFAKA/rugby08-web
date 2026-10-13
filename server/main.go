@@ -107,6 +107,11 @@ func msgLen(b []byte) int {
 		return 6
 	case 'W', 'R':
 		return 2
+	case 'X': // external data (runtime/core/net_external.c): type, slot, u32 frame, u32 seq, u32 len, data
+		if len(b) < 14 {
+			return 14
+		}
+		return 14 + int(binary.LittleEndian.Uint32(b[10:]))
 	case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M', 'T', 'C', 'Y':
 		if len(b) < haHeader {
 			return haHeader
@@ -494,6 +499,10 @@ func (c *client) game(b []byte) {
 			continue
 		}
 		switch m[0] {
+		case 'X': // logged like the inputs: a game catching up later needs it at the same point
+			if k == c.slot {
+				r.relay(m, c.slot)
+			}
 		case 'I', 'H':
 			if k != c.slot {
 				continue

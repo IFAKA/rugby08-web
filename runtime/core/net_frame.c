@@ -30,7 +30,16 @@ static void fault_inject(uint32_t frame) {
 /* This player's pad from its devices (no-op in replay runs: replay events already set N.local), and
  * its input delay as the page or the platform chose it. */
 static void read_local(uint32_t frame) {
-    plat_local_pad(&N.local);
+    static int had;   /* controller 1's player: its game controller (its keyboard is the game's keyboard) */
+    rt_pad_t g;
+    if (N.slot != DESK_SLOT) {
+        plat_local_pad(&N.local);   /* a friend: keyboard and game controller drive its pad */
+        N.local.spare = 1;          /* (plugged in while it plays: rt_pad_attached) */
+    } else if (plat_gamepad(&g)) {
+        g.spare = 1;
+        N.local = g;
+    } else if (had) memset(&N.local, 0, sizeof N.local);
+    had = N.slot == DESK_SLOT && N.local.spare;
     static rt_pad_t last;   /* trace input changes (checks: tools/net/net_live_input.py) */
     if (memcmp(&last, &N.local, sizeof last) != 0) {
         rt_trace("netplay: local input frame %u buttons %04X stick %d,%d", frame, N.local.buttons, N.local.lx,

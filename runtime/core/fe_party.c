@@ -67,7 +67,10 @@ void fe_go(int id) {
     guest_call(SET_SCREEN, 2, (uint32_t)id, 1u);
 }
 
-static int in_party(void) { return ui_lobby_state() == LOBBY_IN || ui_lobby_state() == LOBBY_WAITING; }
+static int in_party(void) {
+    if (ls_on()) return (ls_members() & (ls_members() - 1)) != 0;   /* lockstep: someone else plays here */
+    return ui_lobby_state() == LOBBY_IN || ui_lobby_state() == LOBBY_WAITING;
+}
 
 const char *const *fe_party_items(int id) {
     static const char *const online[] = { "CREATE PARTY", "JOIN PARTY", "BACK", NULL };
@@ -75,7 +78,7 @@ const char *const *fe_party_items(int id) {
     static const char *const friend_[] = { "LEAVE PARTY", NULL };
     static const char *const none[] = { NULL };
     if (id == FE_SCR_ONLINE) return online;
-    if (id == FE_SCR_PARTY) return ui_lobby_state() == LOBBY_IN && !ui_lobby_is_host() ? friend_ : host;
+    if (id == FE_SCR_PARTY) return !ls_on() && ui_lobby_state() == LOBBY_IN && !ui_lobby_is_host() ? friend_ : host;
     return none;
 }
 
@@ -93,7 +96,8 @@ static void join(void) {
         return;
     }
     snprintf(g_status, sizeof g_status, "JOINING...");
-    ui_lobby_join(g_typed);
+    if (ls_on()) ls_join(ls_sender(), g_typed);
+    else ui_lobby_join(g_typed);
 }
 
 uint32_t fe_party_action(uint32_t button) {
@@ -103,7 +107,7 @@ uint32_t fe_party_action(uint32_t button) {
     rt_trace("ms: party action %s on screen %d", t, at);
     if (!strcmp(t, "ONLINE")) fe_go(in_party() ? FE_SCR_PARTY : FE_SCR_ONLINE);
     else if (!strcmp(t, "CREATE PARTY")) {
-        if (!in_party()) ui_lobby_host();
+        if (!ls_on() && !in_party()) ui_lobby_host();
         fe_go(FE_SCR_PARTY);
     } else if (!strcmp(t, "JOIN PARTY")) {
         g_typed[0] = g_status[0] = 0;
@@ -111,7 +115,8 @@ uint32_t fe_party_action(uint32_t button) {
     } else if (!strcmp(t, "BACK")) fe_go(at == FE_SCR_JOIN ? FE_SCR_ONLINE : FE_SCR_MAIN);
     else if (!strcmp(t, "CONTINUE")) fe_go(FE_SCR_MAIN);
     else if (!strcmp(t, "LEAVE PARTY")) {
-        ui_lobby_leave();
+        if (ls_on()) ls_leave(ls_sender());
+        else ui_lobby_leave();
         fe_go(FE_SCR_MAIN);
     } else if (!strcmp(t, "DEL")) type(0);
     else if (!strcmp(t, "OK")) join();
@@ -146,8 +151,25 @@ static void set_text(uint32_t screen, int id, const char *s) {
     g_ecx = sv;
 }
 
+static void ls_lines(uint32_t screen) {   /* lockstep: the code and the roster, the same in every game */
+    char l[64];
+    uint32_t mask = ls_members();
+    set_text(screen, 0, " ");
+    set_text(screen, 1, ls_code()[0] ? ls_code() : "......");
+    set_text(screen, 2, ls_code()[0] ? "GIVE THIS CODE TO YOUR FRIENDS" : "PLAYING OFFLINE");
+    for (int k = 0; k < 4; k++) {
+        if (!(mask >> k & 1)) snprintf(l, sizeof l, "%d  WAITING...", k + 1);
+        else snprintf(l, sizeof l, "%d  PLAYER %d%s", k + 1, k + 1, k == 0 ? " (HOST)" : "");
+        set_text(screen, 3 + k, l);
+    }
+}
+
 static void party_lines(uint32_t screen) {
     char l[64];
+    if (ls_on()) {
+        ls_lines(screen);
+        return;
+    }
     int st = ui_lobby_state(), host = st != LOBBY_IN || ui_lobby_is_host();
     uint32_t mask = ui_lobby_member_mask();
     set_text(screen, 0, " ");
@@ -167,9 +189,11 @@ static void party_lines(uint32_t screen) {
 }
 
 void fe_party_present(uint32_t frame) {
-    ui_lobby_poll();
-    party_sides_present(frame);   /* (both also in a match: they check where the game is themselves) */
-    party_leave_present(frame);
+    if (!ls_on()) {   /* host-authoritative party (lockstep: every game runs the same screens itself) */
+        ui_lobby_poll();
+        party_sides_present(frame);   /* (both also in a match: they check where the game is themselves) */
+        party_leave_present(frame);
+    }
     uint32_t g = rd32(GAME_PTR), st = g ? rd32(g + 0x90) : 0, fe = rd32(FE_PTR), screen = fe ? rd32(fe + 4) : 0;
     if (!st || rd32(st) != VT_FRONTEND || !screen) return;
     float px, py;   /* the menus' cursor where the pointer is (the browser: mouse and touch) */

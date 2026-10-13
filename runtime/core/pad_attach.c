@@ -35,6 +35,12 @@
 
 /* A friend's Team Select shows the party (party_sides.c): its keyboard entry stands for the host, pad
    slots 1..3 for the friends, on the sides the host's game has them (0, 'H', 'A'; [4] the keyboard). */
+static int g_unplugged;   /* controllers unplugged from a side since rt_pads_take_unplugged */
+int rt_pads_take_unplugged(void) {
+    int n = g_unplugged;
+    g_unplugged = 0;
+    return n;
+}
 static int g_mirror, g_own = -1;          /* g_own: this player's pad slot in the mirror */
 static char g_mirror_side[RT_MAX_PADS + 1], g_written[RT_MAX_PADS + 1], g_intent;
 /* The side this player moved its own icon to on its own screen (a mouse click on the arrows, ...):
@@ -126,6 +132,7 @@ static void plug(const uint32_t *c, int n, sorted_t *o) {
         uint32_t want = (uint32_t)rt_pad_attached(k);
         if (rd32(c[e] + C_ATTACHED) != want) {
             if (!want) {   /* unplugged: off its side and inactive first (the game's own disconnect state) */
+                g_unplugged += side_of(c[e]) != 0;
                 wr8(c[e] + C_SIDE, 0);
                 wr32(c[e] + C_ACTIVE, 0);
             }

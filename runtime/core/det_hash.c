@@ -63,13 +63,15 @@ int det_hash_step(uint32_t frame, uint32_t parts, uint32_t every, uint64_t *out)
 
 /* RT_DET_HASH=N: "det: frame F hash H" every N frames. RT_DET_PAGES=F: page hashes at frame F
  * (one line per 64 KiB page) to locate the first difference between two runs. */
+static long pages_at = -1;
+void det_pages_at(uint32_t frame) { pages_at = (long)frame; }   /* RT_DET_PAGES at a frame known later */
+
 void det_hash_frame(uint32_t frame) {
     static int every = -1;
-    static long pages_at = -1;
     if (every < 0) {
         const char *e = getenv("RT_DET_HASH"), *p = getenv("RT_DET_PAGES");
         every = e ? atoi(e) : 0;
-        pages_at = p ? atol(p) : -1;
+        if (p) pages_at = atol(p);
     }
     if (every > 0 && frame % (uint32_t)every == 0)
         rt_trace("det: frame %u hash %016llX vt %llu", frame, (unsigned long long)det_hash(),

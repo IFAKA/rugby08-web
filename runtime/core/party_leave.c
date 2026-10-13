@@ -35,7 +35,7 @@ static int in_match(void) {
 
 void party_rebuild_teams(void) {   /* the controllers' sides as they are now: the AI takes the rest */
     uint32_t home = ms_team_va(0), away = ms_team_va(1);
-    if (!home || !away) return;
+    if (!home || !away || !in_match()) return;
     guest_call(0x006AC5E0u, 0);
     guest_call(0x0062CFC0u, 1, home);
     guest_call(0x0062CFC0u, 1, away);

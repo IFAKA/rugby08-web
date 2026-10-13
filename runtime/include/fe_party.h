@@ -3,6 +3,9 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct fe_node;
 enum { FE_SCR_MAIN = 50, FE_SCR_ONLINE = 7100, FE_SCR_PARTY = 7101, FE_SCR_JOIN = 7102 };
@@ -23,6 +26,14 @@ int fe_screen_id(void);                              /* the front end's current 
 int fe_in_menus(void);                               /* the game is in its front end (not loading, not a match) */
 void fe_go(int id);                                  /* FeSetCurrentScreen(id) */
 
+/* ls_party.c: the party in lockstep (the session is the party) */
+int ls_on(void);                                     /* a lockstep session runs */
+uint32_t ls_members(void);                           /* bit k: room slot k plays (the roster: every game alike) */
+const char *ls_code(void);                           /* the room's code */
+int ls_sender(void);                                 /* the room slot whose controller the menus handle */
+void ls_join(int sender, const char *code);          /* JOIN PARTY: that player's page joins the room */
+void ls_leave(int sender);                           /* LEAVE PARTY: that player's page starts its own game */
+
 /* party_sides.c: Team Select on every party member's screen */
 enum { PARTY_TS_SIDE, PARTY_TS_HOST };
 int party_ts_allow(int what);                        /* the game's Team Select callbacks ask */
@@ -37,3 +48,6 @@ void party_rebuild_teams(void);
 /* the teams' player controls from the controllers' sides */ /* a friend left the host's match by itself */
 void party_toast(uint32_t frame, const char *s);
 const char *party_toast_text(uint32_t frame); /* NULL: none now */
+#ifdef __cplusplus
+}
+#endif

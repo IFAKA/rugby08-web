@@ -565,7 +565,7 @@
       ],
       "desc": "Every web game boots in lockstep with its room open (server log from frame 0; offline = solo as before): menus and a match at >= 55 fps in the test browser, a hidden page keeps pace, equal hashes with a joiner (docs/plans/2026-10-13-lockstep-party.md).",
       "check": "/opt/homebrew/bin/python3 tools/net/ls_boot_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ls.party",

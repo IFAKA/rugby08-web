@@ -72,6 +72,10 @@ void net_tx_status(int kind, int value) {
     (void)value;
 }
 int net_tx_delay(void) { return 0; }
+/* The lockstep session's room: natively the --net-room code; joining and leaving are the page's. */
+const char *plat_session_code(void) { return rt_net_room ? rt_net_room : ""; }
+void plat_session_join(const char *code) { (void)code; }
+void plat_session_leave(void) {}
 
 int net_tx_send(const void *data, int len, int text) {
     uint8_t h[14];

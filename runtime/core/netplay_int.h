@@ -38,7 +38,7 @@ typedef struct {
     int64_t next_send;                /* first frame I have not sent an input for */
     uint32_t max_seen, frame;         /* highest input frame received; frame being resolved */
     uint8_t want[RT_MAX_PADS];        /* join requests to grant (authority) */
-    uint8_t rx[1 << 16];              /* received binary bytes not handled yet */
+    uint8_t rx[1 << 21];              /* received binary bytes not handled yet (an 'X' may be ~1 MB) */
     int rx_n;
 } net_state_t;
 extern net_state_t N;
@@ -60,6 +60,8 @@ void net_roster_at(uint32_t frame);
 void net_send_grant(int slot, uint32_t frame);
 void net_handle(const uint8_t *m);
 void net_pump(int wait_ms);
+/* net_external.c: data a game reads from its machine, shared through the stream ('X') */
+void net_external_rx(const uint8_t *m);
 /* net_frame.c */
 void net_frame(uint32_t frame);   /* det_frame hook: runs first at every Present */
 

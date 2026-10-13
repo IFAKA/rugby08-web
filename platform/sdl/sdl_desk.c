@@ -48,7 +48,24 @@ void desk_record(const SDL_Event *e) {
         desk_put(PLAT_DESK_KEY, (uint8_t)down, sc, 0);
         break;
     }
-    case SDL_MOUSEMOTION: desk_put(PLAT_DESK_MOVE, 0, e->motion.xrel, e->motion.yrel); break;
+    case SDL_MOUSEMOTION: {
+#ifdef __EMSCRIPTEN__   /* the browser: the cursor goes where the pointer is (the page scales the canvas: the
+                           deltas are of the pointer's place in the window the game knows, not CSS pixels) */
+        int ox, oy, ow, oh, rw = 640, rh = 480;
+        plat_window_rect(&ox, &oy, &ow, &oh);
+        if (g_win) SDL_GetWindowSize(g_win, &rw, &rh);
+        int tx = e->motion.x * ow / (rw > 0 ? rw : 640), ty = e->motion.y * oh / (rh > 0 ? rh : 480);
+        tx = tx < 0 ? 0 : tx > ow - 1 ? ow - 1 : tx;
+        ty = ty < 0 ? 0 : ty > oh - 1 ? oh - 1 : ty;
+        static int at_x = -1, at_y;   /* where the recorded moves have put the cursor */
+        if (at_x < 0) at_x = g_vcur_x - ox, at_y = g_vcur_y - oy;
+        desk_put(PLAT_DESK_MOVE, 0, tx - at_x, ty - at_y);
+        at_x = tx, at_y = ty;
+#else
+        desk_put(PLAT_DESK_MOVE, 0, e->motion.xrel, e->motion.yrel);
+#endif
+        break;
+    }
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP: {
         int b = e->button.button, down = e->type == SDL_MOUSEBUTTONDOWN;

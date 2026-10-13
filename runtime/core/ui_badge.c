@@ -16,14 +16,35 @@ int ui_open(void) { return 0; }
 
 static int in_menus(void) { return fe_in_menus() && fe_screen_id() != FE_SCR_PARTY; }
 
+static int count(uint32_t m) {
+    int n = 0;
+    for (; m; m &= m - 1) n++;
+    return n;
+}
+
+/* lockstep: who joined or left, from the roster (drawn here only: never game state) */
+static void ls_toasts(uint32_t frame) {
+    static uint32_t was = 1;
+    uint32_t now = ls_members();
+    char line[48];
+    for (int k = 1; k < 4; k++)
+        if ((now ^ was) >> k & 1) {
+            snprintf(line, sizeof line, "PLAYER %d %s", k + 1, now >> k & 1 ? "JOINED" : "LEFT");
+            party_toast(frame, line);
+        }
+    was = now;
+}
+
 int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) {
-    fe_party_present(frame);
+    if (ls_on()) ls_toasts(frame);
     const char *toast = party_toast_text(frame);
-    int badge = ui_lobby_state() == LOBBY_IN && in_menus();
+    int ls = ls_on() && count(ls_members()) > 1;
+    int badge = (ls || ui_lobby_state() == LOBBY_IN) && in_menus();
     if (w <= 0 || h <= 0 || (!badge && !toast)) return 0;
     static char last[128];
     char b[48], all[128];
-    snprintf(b, sizeof b, "PARTY %s %d/4", ui_lobby_code(), ui_lobby_members());
+    if (ls) snprintf(b, sizeof b, "PARTY %s %d/4", ls_code(), count(ls_members()));
+    else snprintf(b, sizeof b, "PARTY %s %d/4", ui_lobby_code(), ui_lobby_members());
     snprintf(all, sizeof all, "%s|%s", badge ? b : "", toast ? toast : "");
     *changed = strcmp(all, last) != 0 || g_img.w != w || g_img.h != h;
     if (g_img.w != w || g_img.h != h) {

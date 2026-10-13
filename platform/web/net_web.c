@@ -85,3 +85,18 @@ int net_tx_recv(void *buf, int cap, int wait_ms) {
 }
 void net_tx_status(int kind, int value) { js_net_status(kind, value); }
 int net_tx_delay(void) { return js_net_delay(); }
+
+/* The lockstep session's room (the page's, platform/web/shell.html): its code, joining another room (the
+   page reloads into it and catches up), leaving for a fresh own game. */
+// clang-format off
+EM_JS(void, js_session_code, (char *out, int cap), { stringToUTF8(Module.rugbyRoom || '', out, cap); });
+EM_JS(void, js_session_join, (const char *code), { if (Module.rugbyJoin) Module.rugbyJoin(UTF8ToString(code)); });
+EM_JS(void, js_session_leave, (void), { if (Module.rugbyLeave) Module.rugbyLeave(); });
+// clang-format on
+const char *plat_session_code(void) {
+    static char c[16];
+    js_session_code(c, sizeof c);
+    return c;
+}
+void plat_session_join(const char *code) { js_session_join(code); }
+void plat_session_leave(void) { js_session_leave(); }

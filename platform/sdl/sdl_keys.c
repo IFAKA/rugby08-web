@@ -24,7 +24,10 @@ int plat_pointer(float *x, float *y) {
 #ifdef __EMSCRIPTEN__
     int w = 640, h = 480;
     if (!g_pmoved || !g_win) return 0;
-    SDL_GetWindowSize(g_win, &w, &h);
+    if (det_on()) {   /* (lockstep: the pointer is the host's applied events, in the window the game knows) */
+        int ox, oy;
+        plat_window_rect(&ox, &oy, &w, &h);
+    } else SDL_GetWindowSize(g_win, &w, &h);
     *x = (float)g_px * 640.0f / (float)(w > 0 ? w : 640);
     *y = (float)g_py * 480.0f / (float)(h > 0 ? h : 480);
     g_pmoved = 0;

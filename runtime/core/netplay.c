@@ -24,6 +24,7 @@
  *   'A' slot u32 frame             6        slot joins   'D' slot u32 frame        6  slot leaves
  *   'W' slot                       2        (server -> authority) slot wants to join
  *   'R' slot                       2        (server -> new authority) you grant joins now
+ *   'X' slot u32 frame u32 seq u32 len data   14 + len  external data (net_external.c)
  * Lobby messages are JSON text (server/main.go). Transport: net_tx_* (platform). */
 #include "netplay_int.h"
 #include <stdio.h>
@@ -36,6 +37,7 @@ net_state_t N = { .delay = 4, .my_from = -1 };
 
 rt_pad_t *rt_net_local_pad(void) { return &N.local; }
 int rt_net_slot(void) { return N.slot; }
+int rt_net_active(int k) { return k >= 0 && k < RT_MAX_PADS && N.active[k]; }
 
 void net_store_input(int slot, uint32_t frame, const rt_pad_t *pad, int nd, const plat_desk_ev_t *d) {
     slot_in_t *s = &N.in[frame % RING][slot];
@@ -111,6 +113,7 @@ void net_handle(const uint8_t *m) {
             exit(4);
         }
         break;
+    case 'X': net_external_rx(m); break;
     case 'W': N.want[k] = 1; break;
     case 'R':
         N.auth = 1;
@@ -128,6 +131,7 @@ static int msg_len(const uint8_t *m, int avail) {
     case 'D': return 6;
     case 'W':
     case 'R': return 2;
+    case 'X': return avail < 14 ? 14 : 14 + (int)get32(m + 10);
     }
     return 0;
 }
@@ -165,7 +169,7 @@ static void go_offline(void) {
 }
 
 void net_pump(int wait_ms) {
-    while (!N.offline && consume() && N.rx_n < (int)sizeof N.rx - 4096) {
+    while (!N.offline && consume() && N.rx_n < (int)sizeof N.rx - (1 << 20) - 64) {   /* (room for an 'X') */
         int n = net_tx_recv(N.rx + N.rx_n, (int)sizeof N.rx - N.rx_n, wait_ms);
         if (n < 0) {
             go_offline();

@@ -114,7 +114,7 @@
         $('cover-btn').hidden = !button; $('cover-btn').textContent = button || ''; $('cover-btn').onclick = action;
       }
       function toast(text) { var t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(t.timer); t.timer = setTimeout(() => t.hidden = true, 3500); }
-      function ownGame() { sessionStorage.removeItem('rugbyJoin'); sessionStorage.removeItem('rugbyRetry'); location.replace(location.pathname + (LOG ? '?log' : '')); }
+      function ownGame() { sessionStorage.removeItem('rugbyJoin'); sessionStorage.removeItem('rugbyRetry'); location.replace(location.pathname + location.search.replace(/([?&])room=[^&]*&?/, '$1').replace(/[?&]$/, '')); }
 
       var Module = {
         noInitialRun: true,
@@ -124,9 +124,9 @@
         setStatus(text) { if (!started && text) $('cover-text').textContent = text.replace(/\(.*\)/, '').trim() || 'Loading the game…'; },
         onRuntimeInitialized() {
           if (q.has('solo')) { play([]); return; }   // offline, no server (checks, direct links)
-          // lockstep play from the page's own lobby: checks (net=auto), the old panel (panel), shared join links
-          if (q.get('net') === 'auto' || q.has('panel') || joinCode) { connect(); return; }
-          play([]);   // online play is in the game's own screens (F2: runtime/core/ui_online.c)
+          // every game is a lockstep session with its room open from frame 0 (docs/plans/2026-10-13-lockstep-party.md):
+          // friends join it from their game's ONLINE screens; offline (no server) it is the plain game
+          connect();
         },
         onExit(code) {
           if (code === 3 && room) {   // this copy fell out of sync: rebuild it by joining again
@@ -168,6 +168,13 @@
           return Math.max(2, Math.min(20, Math.ceil(((rtt || 80) / 2 + Math.max(...others) / 2) / 16.7) + 1));
         },
         rugbyToast: toast,
+        // the game's JOIN PARTY / LEAVE PARTY (runtime/core/ls_party.c): play in that room / a fresh own game
+        rugbyJoin(code) {
+          if (!code || code === room) return;
+          sessionStorage.setItem('rugbyJoin', code); sessionStorage.removeItem('rugbyRetry');
+          location.replace(location.pathname + location.search.replace(/([?&])room=[^&]*&?/, '$1').replace(/[?&]$/, ''));
+        },
+        rugbyLeave() { ownGame(); },
       };
       $('canvas').addEventListener('webglcontextlost', (e) => { e.preventDefault(); Module.onExit(0); }, false);
 
@@ -205,7 +212,7 @@
             me = { slot: m.slot, creator: m.creator }; room = m.room;
             if (m.creator) catching = false;   // (net=auto: the first one in creates the room)
             $('code').textContent = room;
-            $('friends-btn').hidden = false;
+            Module.rugbyRoom = room;   /* the game's ONLINE screens show it (runtime/core/ls_party.c) */
             Module.rugbyNet = net;
             play(['--net-session', m.slot + ',' + (m.creator ? 1 : 0)]);
             setInterval(() => send({ t: 'ping', ts: performance.now() }), 2000);

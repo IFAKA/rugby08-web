@@ -4,6 +4,7 @@
 extern "C" void rt_coverage_frame(uint32_t frame);
 #include "match_state.h"
 #include "ui.h"
+#include "fe_party.h"
 #include "plat.h"
 #include <GLES3/gl3.h>
 #include <cstdlib>
@@ -142,6 +143,7 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     Obj *o = d3d8_obj(a[0]);
     DevState *s = o->dev;
     if (!rt_ff) dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
+    fe_party_present(s->frame);   // the party's screens (game state: also while catching up, lockstep)
     {   // the in-game Online screens (runtime/core/ui_online.c), before screenshots see the frame
         const uint8_t *img;
         int changed;
