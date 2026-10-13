@@ -559,18 +559,90 @@
       "passes": true
     },
     {
-      "id": "pt.modes",
+      "id": "ls.boot",
       "deps": [
         "pt.pause_leave"
       ],
-      "desc": "Every game mode that allows several players works in a party, including between-match screens (one check per mode).",
+      "desc": "Every web game boots in lockstep with its room open (server log from frame 0; offline = solo as before): menus and a match at >= 55 fps in the test browser, a hidden page keeps pace, equal hashes with a joiner (docs/plans/2026-10-13-lockstep-party.md).",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_boot_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.party",
+      "deps": [
+        "ls.boot"
+      ],
+      "desc": "The ONLINE screens drive lockstep: CREATE PARTY shows this session's code and roster, JOIN PARTY reloads into the host's session with a catch-up screen, LEAVE PARTY back to an own game; 3 pages, identical frames and hashes.",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_party_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.controls",
+      "deps": [
+        "ls.party"
+      ],
+      "desc": "Each player drives their own controller; solo shows only its own; joiners plugged / leavers unplugged at the same frame everywhere; Team Select is the game's own, 4 players take sides.",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_controls_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.match",
+      "deps": [
+        "ls.controls"
+      ],
+      "desc": "A full PLAY NOW match in a party: every screen shows the same match (identical frames: overlays, cutscenes, referee), own view per player (POV), pause from anyone, a friend's presses act.",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_match_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.leave",
+      "deps": [
+        "ls.match"
+      ],
+      "desc": "Leaving (page closed or LEAVE PARTY): the AI takes the player without a reassign screen; the host leaving hands the room on and the others play on.",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_leave_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.lag",
+      "deps": [
+        "ls.leave"
+      ],
+      "desc": "Inputs over WebRTC with relay fallback, input delay from measured round trips, no stalls on jitter; measured.",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_lag_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.modes",
+      "deps": [
+        "ls.lag"
+      ],
+      "desc": "Tournaments and the other multi-player modes in a party (shared menus).",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_modes_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.ha_out",
+      "deps": [
+        "ls.modes"
+      ],
+      "desc": "The host-authoritative puppet and its checks are removed; docs updated.",
+      "check": "tools/check/no_ha.sh",
+      "passes": false
+    },
+    {
+      "id": "pt.modes",
+      "deps": [
+        "ls.ha_out"
+      ],
+      "desc": "Every game mode that allows several players works in a party, including between-match screens (one check per mode). Superseded by ls.modes (lockstep, 2026-10-13).",
       "check": "/opt/homebrew/bin/python3 tools/net/party_modes_check.py",
       "passes": false
     },
     {
       "id": "pt.page",
       "deps": [
-        "pt.modes"
+        "ls.ha_out"
       ],
       "desc": "The page only runs the game: it fills the window and resizes with it; the fps counter stays; nothing else on the page.",
       "check": "/opt/homebrew/bin/python3 tools/net/page_layout_check.py",
@@ -606,9 +678,9 @@
     {
       "id": "pt.lockstep_out",
       "deps": [
-        "pt.predict"
+        "ls.ha_out"
       ],
-      "desc": "The old lockstep mode removed: page panel, netplay lockstep paths, its checks and features items, docs.",
+      "desc": "Superseded: the party moved to lockstep (ls.*); the old page panel goes with ls.party.",
       "check": "tools/check/no_lockstep.sh",
       "passes": false
     },
