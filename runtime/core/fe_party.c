@@ -6,6 +6,7 @@
  * The info lines are rewritten at every Present through the game's own text setter. Rooms: ui_lobby.c.
  * Trace: "ms: party screen ID", "ms: party action TEXT", "ms: party code TYPED". */
 #include "rt.h"
+#include "../debug/debug.h"
 #include "plat.h"
 #include "ui.h"
 #include "fe_party.h"
@@ -190,6 +191,7 @@ static void party_lines(uint32_t screen) {
 }
 
 void fe_party_present(uint32_t frame) {
+    dbg_render_writes_end(frame);   /* (RT_RENDER_WRITES: what the drawing wrote) */
     own_camera_options();   /* camera settings changed in the shared menus: this player's only (own_camera.c) */
     own_camera_present();   /* drawn: the match's camera, alike in every game, for the match's next step */
     if (!ls_on()) {   /* host-authoritative party (lockstep: every game runs the same screens itself) */

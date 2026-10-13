@@ -96,19 +96,22 @@ void own_camera_after(uint32_t cam) {
     memcpy(target, G2H(cam + 0x58), sizeof target);
     g_own[0] = target[0] - eye[0], g_own[1] = 0, g_own[2] = target[2] - eye[2];
     g_own_set = 1;
-    if (rt_present_frame % 60 == 0)   /* (checks: tools/net/ls_camera_check.py) */
-        rt_trace("ms: own camera f %u look %.0f %.0f ref %.3f %.3f", rt_present_frame, (double)g_own[0],
-                 (double)g_own[2], (double)g_ref[0], (double)g_ref[1]);
+    int ci = -1;   /* (checks: tools/net/ls_camera_check.py; the away side's first human's player) */
+    if (rt_present_frame % 30 == 0 && ms_controlled(1, 0, &ci) | 1)
+        rt_trace("ms: own camera f %u look %.0f %.0f ref %.3f %.3f away %d", rt_present_frame, (double)g_own[0],
+                 (double)g_own[2], (double)g_ref[0], (double)g_ref[1], ci);
 }
 
 /* After drawing (every Present, before the match's next step): the match's camera. */
 void own_camera_present(void) {
-    if (!on() || !g_stepped || !g_cam || !in_match()) return;
-    g_stepped = 0;
-    memcpy(g_mine_cam, G2H(g_cam), CAM_BYTES);
+    if (!on() || !g_cam || !in_match()) return;
     uint32_t lv = look_va();
-    if (lv) memcpy(g_mine_look, G2H(lv), sizeof g_mine_look);
-    g_have_mine = 1;
+    if (g_stepped) {   /* (the step ran: its result is this player's camera; else it is the match's still) */
+        memcpy(g_mine_cam, G2H(g_cam), CAM_BYTES);
+        if (lv) memcpy(g_mine_look, G2H(lv), sizeof g_mine_look);
+        g_have_mine = 1;
+    }
+    g_stepped = 0;
     ms_ball_t b;
     if (!ms_ball(&b) || (!g_scratch && !(g_scratch = gcalloc(48)))) return;
     float bx = b.pos[0] * 100.0f, bz = b.pos[2] * 100.0f;

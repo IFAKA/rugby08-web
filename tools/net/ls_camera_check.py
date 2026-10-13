@@ -24,7 +24,7 @@ from ls_party_check import in_sync  # noqa: E402
 
 D = os.path.join(ROOT, "logs", "ls_camera")
 POS = re.compile(r"ms: pos f (\d+) t \S+ clock \S+ score \S+ phase \S+ upd \S+ us p (.*?) ball")
-LOOK = re.compile(r"ms: own camera f (\d+) look (\S+) (\S+)")
+LOOK = re.compile(r"ms: own camera f (\d+) look (\S+) (\S+) ref \S+ \S+ away (-?\d+)")
 
 
 def positions(p):

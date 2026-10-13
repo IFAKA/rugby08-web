@@ -39,7 +39,6 @@ static void read_local(uint32_t frame) {
     rt_pad_t g;
     if (N.slot != DESK_SLOT) {
         plat_local_pad(&N.local);   /* a friend: keyboard and game controller drive its pad */
-        own_camera_turn_pad(&N.local);   /* its stick from its own camera's direction into player 1's */
         N.local.spare = 1;          /* (plugged in while it plays: rt_pad_attached) */
     } else if (plat_gamepad(&g)) {
         g.spare = 1;
@@ -67,6 +66,7 @@ static void send_input(int64_t f, int idle) {
         d[nd++] = (plat_desk_ev_t){ NET_DESK_LOOK, 0, x, z }, lx = x, lz = z;
     rt_pad_t pad = N.local;
     if (idle) memset(&pad, 0, sizeof pad), pad.spare = N.slot != DESK_SLOT;   /* plugged in, nothing pressed */
+    else if (N.slot != DESK_SLOT) own_camera_turn_pad(&pad);   /* from its own camera's direction to player 1's */
     uint8_t m[19 + 6 * NDESK] = { 'I', (uint8_t)N.slot };
     put32(m + 2, (uint32_t)f);
     memcpy(m + 6, &pad, sizeof pad);

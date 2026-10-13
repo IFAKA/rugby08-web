@@ -9,6 +9,7 @@
  * applies the host's through the same three calls, and its own camera goes on from there. The current
  * camera's name is kept for the rule and for measures (RT_MS_CAM). */
 #include "rt.h"
+#include "../debug/debug.h"
 #include "plat.h"
 #include "match_state.h"
 #include "own_camera.h"
@@ -97,6 +98,7 @@ int ms_camera_directed(void) {
 
 void ms_camera_manager(uint32_t manager) {   /* its event listener: the sub-object with vtable 0x8CCC88 */
     own_camera_before();
+    dbg_render_writes_begin(rt_present_frame);
     g_manager = manager;
     if (g_listener || !manager) return;
     for (uint32_t off = 0; off < 0x40; off += 4)
