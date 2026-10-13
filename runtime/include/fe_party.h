@@ -28,3 +28,9 @@ enum { PARTY_TS_SIDE, PARTY_TS_HOST };
 int party_ts_allow(int what);                        /* the game's Team Select callbacks ask */
 void party_sides_rx(const uint8_t *p, size_t len);   /* friend: the host's 'T' */
 void party_sides_present(uint32_t frame);
+
+/* party_leave.c: leaving, the host ending the party, the messages everyone sees */
+void party_leave_present(uint32_t frame);
+void party_leave_quit(uint32_t frame);                 /* a friend left the host's match by itself */
+void party_toast(uint32_t frame, const char *s);
+const char *party_toast_text(uint32_t frame);          /* NULL: none now */

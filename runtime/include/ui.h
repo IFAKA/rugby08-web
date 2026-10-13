@@ -45,6 +45,7 @@ const char *ui_lobby_error(void);
 int ui_lobby_members(void);
 uint32_t ui_lobby_member_mask(void); /* bit k: room slot k has a member */
 int ui_lobby_slot(void);             /* this player's room slot (0 = the host) */
+int ui_lobby_ended(void);            /* the relay closed the party: its host left */
 int ui_lobby_is_host(void);
 
 #ifdef __cplusplus

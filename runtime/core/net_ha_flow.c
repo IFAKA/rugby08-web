@@ -20,6 +20,7 @@
 #include "rt.h"
 #include "plat.h"
 #include "match_state.h"
+#include "fe_party.h"
 #include <string.h>
 
 #define GAME_PTR    0x00A7ED28u
@@ -51,15 +52,18 @@ void net_ha_flow_setup(const uint8_t *setup) {   /* friend: 'S' */
 }
 void net_ha_flow_end(void) { g_end = 1; }   /* friend: 'E' */
 
-static int g_pause_req, g_host_paused;
+static int g_pause_req, g_resume_req, g_host_paused;
 static uint32_t g_esc_up;
 void net_ha_flow_pause_request(void) { g_pause_req = 1; }   /* host: 'Z' */
+void net_ha_flow_resume_request(void) { g_resume_req = 1; } /* host: 'Y' */
 void net_ha_flow_host_paused(int paused) { g_host_paused = paused; }   /* friend: 'U' */
 
 static int paused_here(void) {
     uint32_t fe = rd32(FE_PTR), screen = fe ? rd32(fe + 4) : 0;
     return screen && state_vt() == VT_BACKEND && rd16(screen + 4) == SCR_PAUSED;
 }
+int net_ha_flow_paused(void) { return paused_here(); }
+
 static void escape(uint32_t frame, int down) {
     plat_desk_ev_t e = { PLAT_DESK_KEY, (uint8_t)down, SC_ESCAPE, 0 };
     plat_desk_apply(&e);
@@ -68,25 +72,39 @@ static void escape(uint32_t frame, int down) {
 
 static void pause_step(uint32_t frame) {
     static int was_here, was_host;
+    static uint16_t was_buttons;
     if (g_esc_up && frame >= g_esc_up) escape(frame, 0);
     int here = paused_here();
+    /* Start on this player's game controller pauses too (the original only pauses on the keyboard's Esc) */
+    uint16_t b = rt_pads[0].buttons;
+    if ((b & RT_PAD_START) && !(was_buttons & RT_PAD_START) && !here && state_vt() == VT_BACKEND) escape(frame, 1);
+    was_buttons = b;
     if (rt_net_ha == 1) {
         if (here != was_here) {
             uint8_t p = (uint8_t)here;
             rt_trace("ms: flow frame %u: %s", frame, here ? "paused" : "resumed");
             net_ha_send('U', frame, &p, 1);
         }
-        if (g_pause_req && !here && state_vt() == VT_BACKEND) {
-            rt_trace("ms: flow frame %u: a friend pauses", frame);
-            escape(frame, 1);
+        static uint32_t want_pause;   /* a friend's pause, kept until the match pauses (Esc can be ignored
+                                         for a moment: a stoppage, a cutscene): Esc again every 30 Presents */
+        if (g_pause_req && !want_pause) want_pause = frame, rt_trace("ms: flow frame %u: a friend pauses", frame);
+        if (want_pause && (here || state_vt() != VT_BACKEND || frame - want_pause > 180)) want_pause = 0;
+        if (want_pause && (frame - want_pause) % 30 == 0) escape(frame, 1);
+        if (g_resume_req && here) {   /* a friend's RESUME: everyone's (the pause menu's own resume) */
+            rt_trace("ms: flow frame %u: a friend resumes", frame);
+            guest_callv(0x00575F90u, 0, NULL);
         }
-        g_pause_req = 0;
+        g_pause_req = g_resume_req = 0;
     } else {
         if (here && !was_here && !g_host_paused) {
             rt_trace("ms: flow frame %u: pausing the host", frame);
             net_ha_send('Z', frame, NULL, 0);
         }
         if (g_host_paused && !was_host && !here) escape(frame, 1);   /* the host paused: our menu too */
+        if (g_host_paused && was_host && was_here && !here) {        /* our RESUME: everyone's */
+            rt_trace("ms: flow frame %u: resuming everyone", frame);
+            net_ha_send('Y', frame, NULL, 0);
+        }
         if (!g_host_paused && was_host && here) {                     /* it resumed: close ours */
             rt_trace("ms: flow frame %u: the host resumed", frame);
             guest_callv(0x00575F90u, 0, NULL);
@@ -110,6 +128,13 @@ static void follow_play(uint32_t frame) {
 }
 
 static void friend_step(uint32_t frame, uint32_t vt) {
+    static uint32_t prev;
+    if (prev == VT_BACKEND && vt != VT_BACKEND && !g_end && !g_launch) {   /* we left the host's match ourselves */
+        prev = vt;
+        party_leave_quit(frame);
+        return;
+    }
+    prev = vt;
     if (g_end) {   /* first out of the ended match, then into the next one */
         if (vt == VT_BACKEND && !g_tried) {
             rt_trace("ms: flow frame %u: the host's match is over, leaving ours", frame);

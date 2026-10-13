@@ -34,7 +34,12 @@ run() { # name, replay, frames, extra env...
 }
 run host tests/replays/host_flow.txt 20500 RT_MS_LOG=1 RT_MS_QUIT_AT=$T RT_MS_RELAUNCH=300 &
 HOST=$!
-sleep 2
+for _ in $( # the host first: it creates the room (the first in a room hosts)
+  seq 1 120
+); do
+  grep -q "room .*: created" "$D/server.log" && break
+  sleep 0.5
+done
 run friend tests/replays/friend_party.txt 20500 RT_NET_HA_PAUSE=150 RT_NET_HA_MASH=120 &
 FRIEND=$!
 wait $HOST $FRIEND

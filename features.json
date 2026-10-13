@@ -547,7 +547,7 @@
       ],
       "desc": "Each player's own camera and personal settings in the match (no copy of the host's camera); the personal settings audited and listed.",
       "check": "/opt/homebrew/bin/python3 tools/net/party_camera_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.pause_leave",
@@ -556,7 +556,7 @@
       ],
       "desc": "Start/Esc/touch pauses the match for everyone, the pauser drives the menu, personal settings there; closing the page leaves (AI takes the player), the host leaving ends the party, a mid-match joiner watches until the next Team Select.",
       "check": "/opt/homebrew/bin/python3 tools/net/party_pause_leave_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.modes",

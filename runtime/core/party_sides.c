@@ -111,11 +111,34 @@ static void host_step(uint32_t frame, uint32_t screen) {
     net_ha_send('T', frame, &st, sizeof st);
 }
 
-static void friend_step(uint32_t screen) {
+/* This player moved its icon on its own screen (it shows the host's Team Select): stick pulses toward that
+   side until the host's game has it there (each pulse is one step, home - centre - away), 1.5 s at most. */
+static void own_move(uint32_t frame) {
+    static char want;
+    static uint32_t until, last;
+    char i = rt_pads_take_intent();
+    int me = ui_lobby_slot();
+    if (i) want = i, until = frame + 90, rt_trace("ms: sides friend moved its icon to %c", i);
+    if (!want || me < 1 || me > 3) return;
+    char at = g_host.side[me] ? g_host.side[me] : 'C';
+    int pos_at = at == 'H' ? -1 : at == 'A' ? 1 : 0, pos_want = want == 'H' ? -1 : want == 'A' ? 1 : 0;
+    if (pos_at == pos_want || frame > until) {
+        want = 0;
+        return;
+    }
+    if (frame - last >= 12) {
+        net_ha_nudge(pos_want < pos_at ? -1 : 1, 5);
+        last = frame;
+    }
+}
+
+static void friend_step(uint32_t frame, uint32_t screen) {
     char sides[RT_MAX_PADS + 1] = { 0 };
     for (int k = 1; k < 4; k++) sides[k] = g_host.side[k];
     sides[RT_MAX_PADS] = g_host.side[0];   /* the host's icon: this game's keyboard entry */
+    rt_pads_mirror_own(ui_lobby_slot());
     rt_pads_mirror(1, sides);
+    own_move(frame);
     uint32_t fe = rd32(FE_PTR);
     uint8_t keep = rd8(fe + FE_SIDE);
     int changed = 0;
@@ -162,6 +185,6 @@ void party_sides_present(uint32_t frame) {
         rt_pads_mirror(0, NULL);
         fe_go(FE_SCR_PARTY);
     }
-    if (id == TS_SCREEN && g_have) friend_step(screen);
+    if (id == TS_SCREEN && g_have) friend_step(frame, screen);
     else rt_pads_mirror(0, NULL);
 }

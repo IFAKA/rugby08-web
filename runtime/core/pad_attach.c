@@ -35,9 +35,18 @@
 
 /* A friend's Team Select shows the party (party_sides.c): its keyboard entry stands for the host, pad
    slots 1..3 for the friends, on the sides the host's game has them (0, 'H', 'A'; [4] the keyboard). */
-static int g_mirror;
-static char g_mirror_side[RT_MAX_PADS + 1];
+static int g_mirror, g_own = -1;          /* g_own: this player's pad slot in the mirror */
+static char g_mirror_side[RT_MAX_PADS + 1], g_written[RT_MAX_PADS + 1], g_intent;
+/* The side this player moved its own icon to on its own screen (a mouse click on the arrows, ...):
+   the host's Team Select must make that move (party_sides.c); 0 none, else 'H', 'A' or 'C' (centre). */
+char rt_pads_take_intent(void) {
+    char i = g_intent;
+    g_intent = 0;
+    return i;
+}
+void rt_pads_mirror_own(int k) { g_own = k; }
 void rt_pads_mirror(int on, const char *sides) {
+    if (on && !g_mirror) memset(g_written, 1, sizeof g_written);   /* (nothing written yet: no intent) */
     g_mirror = on;
     if (sides) memcpy(g_mirror_side, sides, sizeof g_mirror_side);
 }
@@ -65,7 +74,11 @@ static void mirror_sides(const uint32_t *c, int n) {
     for (int e = 0; e < n && g_mirror; e++) {
         uint32_t t = rd32(c[e] + C_TYPE);
         int k = t == T_KEYBOARD ? RT_MAX_PADS : t == T_PAD ? rt_dinput_pad_slot(rd32(c[e] + C_DEVICE)) : -1;
-        if (k < 0 || side_of(c[e]) == g_mirror_side[k]) continue;
+        if (k < 0) continue;
+        char now = side_of(c[e]);
+        if (k == g_own && g_written[k] != 1 && now != g_written[k]) g_intent = now ? now : 'C';   /* moved here */
+        g_written[k] = g_mirror_side[k];
+        if (now == g_mirror_side[k]) continue;
         wr8(c[e] + C_SIDE, (uint8_t)g_mirror_side[k]);
         wr8(c[e] + C_SIDE + 1, 0);
     }

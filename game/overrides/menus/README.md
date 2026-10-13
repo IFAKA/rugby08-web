@@ -6,3 +6,5 @@ The party's screens live in the game's own front end (runtime/core/fe_screens.c,
 - `screen_load.c`: the registry's load (0x4EBAE0): the party's screen ids, which the registry does not know.
 - `screen_textures.c`: the texture step after a screen switch (0x4EBD60): the party's screens use the main menu's.
 - `party_action.c`: an unused developer callback (0x574380) that the party's buttons name as their X press.
+- `team_select.c`: Team Select's callbacks (captains, the host's CONTINUE/BACK; a friend's shows the host's).
+- `pause_replay.c`: the pause menu's REPLAY does nothing in a friend's game (its replay system shows the host).

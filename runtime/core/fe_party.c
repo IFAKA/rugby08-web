@@ -160,11 +160,11 @@ static void party_lines(uint32_t screen) {
 }
 
 void fe_party_present(uint32_t frame) {
-    (void)frame;
     ui_lobby_poll();
+    party_sides_present(frame);   /* (both also in a match: they check where the game is themselves) */
+    party_leave_present(frame);
     uint32_t g = rd32(GAME_PTR), st = g ? rd32(g + 0x90) : 0, fe = rd32(FE_PTR), screen = fe ? rd32(fe + 4) : 0;
     if (!st || rd32(st) != VT_FRONTEND || !screen) return;
-    party_sides_present(frame);
     float px, py;   /* the menus' cursor where the pointer is (the browser: mouse and touch) */
     uint32_t cur = rd32(fe + 0x31488);
     if (plat_pointer(&px, &py) && cur) {

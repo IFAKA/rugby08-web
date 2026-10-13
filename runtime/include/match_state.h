@@ -81,7 +81,10 @@ uint32_t ms_ball_va(void); /* BallManager* or 0 */
 #define MS_CAMERA_BYTES 64
 void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj);   /* game/overrides/match/camera_update.c */
 void ms_camera_last(uint8_t *out);        /* this game's view at the last Present */
-void ms_camera_host(const uint8_t *cam);  /* a friend shows this view (NULL: its own) */
+void ms_camera_event(uint32_t listener, uint32_t event);  /* the CameraManager hears a match event */
+void ms_camera_remote(uint32_t id, uint32_t param);       /* friend: the host's camera event ('C') */
+void ms_camera_manager(uint32_t manager);                 /* the CameraManager (its listener inside) */
+const char *ms_camera_name(void);                         /* the camera this game shows ("Side", "Scrum" ...) */
 
 /* match_measure.c: RT_MS_POS lines for tools/net/match_compare.py */
 float ms_time(void); /* match time (CRugby+0x58), the replay frames' time base */
@@ -95,6 +98,7 @@ void net_ha_frame_out(uint32_t frame_no, const uint8_t *head, uint32_t frame, ui
 const uint8_t *net_ha_newest(int *fresh);   /* friend: newest host head (96) + frame, or NULL */
 void net_ha_send(char type, uint32_t frame, const void *payload, size_t len);
 void net_ha_send_end(uint32_t frame);
+void net_ha_nudge(int dx, int frames);   /* friend: push its sent stick left/right (-1/1) for some frames */
 int net_ha_host_screen(void);
 /* friend: the host's front-end screen id ('M'; 0 not in the menus, -1 unknown) */ /* host: E with its last frame's sequence number */
 int net_ha_rx_recent(uint32_t frame, uint32_t within); /* a host frame arrived in the last `within` Presents */
@@ -102,6 +106,8 @@ int net_ha_rx_recent(uint32_t frame, uint32_t within); /* a host frame arrived i
 void net_ha_flow_setup(const uint8_t *setup);
 void net_ha_flow_end(void);
 void net_ha_flow_pause_request(void);
+void net_ha_flow_resume_request(void); /* host: a friend's RESUME ('Y') */
+int net_ha_flow_paused(void); /* this game's match is paused (its pause menu is open) */
 void net_ha_flow_host_paused(int paused);
 void net_ha_flow_present(uint32_t frame);
 

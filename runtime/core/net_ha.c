@@ -16,10 +16,12 @@
  *   'P' pad     friend -> host every Present: rt_pad_t
  *   'E' end     host -> friends: its match is over (u32: its last frame's sequence number: later ones
  *               that arrive are the old match's)        'Z' pause   friend -> host: it paused
+ *   'Y' resume  friend -> host: its RESUME (everyone's match goes on)
  *   'U' paused  host -> friends: u8 paused or not        (the party flow: net_ha_flow.c)
  *   'M' menu    host -> friends: u16 its front-end screen id when it changes (0: not in the menus; a
  *               friend's lobby says what the host is doing, fe_party.c)
  *   'T' sides   host -> friends: its Team Select (party_sides.c), on change and every second there
+ *   'C' camera  host -> friends: a match event its cameras heard (u32 id, u32 int; match_camera.c)
  * A key goes first, on request and every KEY_EVERY frames; a friend decodes the records after the last
  * key in order with its own game's decoder (the same tables in every game: RT_MS_STREAM_CHECK). */
 #include "netplay_int.h"
@@ -41,7 +43,31 @@ int rt_net_ha;   /* 1 host, 2 friend */
 static uint8_t g_rx[1 << 16];
 static int g_rx_n;
 static int g_want_key = 1, g_since_key;
-static rt_pad_t g_pad[RT_MAX_PADS];
+static rt_pad_t g_pad[RT_MAX_PADS], g_tap[RT_MAX_PADS];   /* g_tap: pressed since the game last read */
+static int g_nudge_dx, g_nudge_left;                     /* friend: stick pulses asked by party_sides.c */
+
+void net_ha_nudge(int dx, int frames) {
+    g_nudge_dx = dx;
+    g_nudge_left = frames;
+}
+
+static int16_t stronger(int16_t a, int16_t b) { return (a < 0 ? -a : a) >= (b < 0 ? -b : b) ? a : b; }
+
+static void merge(rt_pad_t *into, const rt_pad_t *p) {
+    into->buttons |= p->buttons;
+    into->hat |= p->hat;
+    into->lx = stronger(into->lx, p->lx), into->ly = stronger(into->ly, p->ly);
+    into->rx = stronger(into->rx, p->rx), into->ry = stronger(into->ry, p->ry);
+}
+
+/* A friend's pad as the host's game sees it this frame: the newest, plus whatever was pressed since the
+   last frame (a tap whose press and release both arrived between two frames is not lost). */
+static rt_pad_t pad_seen(int k) {
+    rt_pad_t p = g_pad[k];
+    merge(&p, &g_tap[k]);
+    memset(&g_tap[k], 0, sizeof g_tap[k]);
+    return p;
+}
 static uint32_t g_pad_at[RT_MAX_PADS];
 static uint32_t g_frame;
 
@@ -133,8 +159,14 @@ static void handle(const uint8_t *m) {
     case 'T':
         if (rt_net_ha == 2) party_sides_rx(m + HDR, len);
         break;
+    case 'C':
+        if (rt_net_ha == 2 && len == 8) ms_camera_remote(get32(m + HDR), get32(m + HDR + 4));
+        break;
     case 'Z':
         if (rt_net_ha == 1) net_ha_flow_pause_request();
+        break;
+    case 'Y':
+        if (rt_net_ha == 1) net_ha_flow_resume_request();
         break;
     case 'U':
         if (rt_net_ha == 2 && len == 1) net_ha_flow_host_paused(m[HDR]);
@@ -147,6 +179,7 @@ static void handle(const uint8_t *m) {
                          ((const rt_pad_t *)(m + HDR))->ly);
             memcpy(&g_pad[k], m + HDR, sizeof(rt_pad_t));
             g_pad_at[k] = g_frame;
+            merge(&g_tap[k], &g_pad[k]);   /* (kept until the game reads the pad: net_ha_present) */
         }
         break;
     }
@@ -162,8 +195,10 @@ static int msg_len(const uint8_t *m, int avail) {
     case 'E':
     case 'Z':
     case 'U':
+    case 'Y':
     case 'M':
-    case 'T': return avail < HDR ? HDR : HDR + (m[6] | m[7] << 8);
+    case 'T':
+    case 'C': return avail < HDR ? HDR : HDR + (m[6] | m[7] << 8);
     case 'I': return avail < 19 ? 19 : 19 + 6 * m[18];
     case 'H': return 14;
     case 'A':
@@ -215,14 +250,21 @@ void net_ha_present(uint32_t frame) {
         }
         rt_pads_party = ui_lobby_member_mask() & ~(1u << N.slot);
         for (int k = 0; k < RT_MAX_PADS; k++)
-            if (k != N.slot) rt_pads[k] = g_pad_at[k] && frame - g_pad_at[k] < PAD_STALE ? g_pad[k] : zero;
+            if (k != N.slot)   /* (paused: each player's menu is its own; friends' pads do not drive the host's) */
+                rt_pads[k] =
+                    g_pad_at[k] && frame - g_pad_at[k] < PAD_STALE && !net_ha_flow_paused() ? pad_seen(k) : zero;
         return;
     }
     rt_pads_party = ui_lobby_member_mask() & ~1u;   /* (a friend's Team Select shows the party: pad_attach.c) */
     rt_pads[N.slot] = N.local;
     net_ha_test_press(&N.local, net_ha_rx_phase(), frame);
     rt_pads[N.slot] = N.local;
-    send('P', frame, &N.local, sizeof N.local, NULL, 0);
+    rt_pad_t out = N.local;
+    if (g_nudge_left > 0) {   /* its Team Select icon moved here: the host's must follow (party_sides.c) */
+        g_nudge_left--;
+        if (!out.lx) out.lx = (int16_t)(g_nudge_dx * 32767);
+    }
+    send('P', frame, &out, sizeof out, NULL, 0);
     if (g_want_key) {
         send('K', frame, NULL, 0, NULL, 0);
         g_want_key = 0;

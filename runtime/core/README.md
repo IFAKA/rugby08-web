@@ -14,7 +14,8 @@
   following the host (launch, intro, end, pause).
 - The party in the game's own menus (pt.menu): `fe_xml.c` its screen files as a tree (binary .rfe in, XML out) ·
   `fe_screens.c` ONLINE in the main menu and the party's screens · `fe_party.c` what they do (keys, texts, the
-  menus' cursor at the browser's pointer) · `ui_lobby.c` parties on the relay · `ui_badge.c` the party badge
+  menus' cursor at the browser's pointer) · `party_sides.c` Team Select on everyone's screen · `party_leave.c`
+  leaving, the host ending the party, the messages everyone sees · `ui_lobby.c` parties on the relay · `ui_badge.c` the party badge
   (`ui_font.c` bitmap font, drawn by `render/webgl/overlay.cpp` at Present).
 - `interp.c` (+`interp_int.h`) Unicorn fallback for guest code without a lifted body.
 - `log.c` `rt_log`/`rt_trace`/`rt_fatal` · `trace.c` function-entry ring and crash dump · `aems.c` sound-bank code lookup · `png.c` PNG writer.

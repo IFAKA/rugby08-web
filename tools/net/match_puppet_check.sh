@@ -5,8 +5,8 @@
 # the friend (tests/replays/friend_my_rugby.txt, another menu route) loads both; a control friend loads
 # only the setup and plays its own match. Pass (tools/net/match_puppet_eval.py): over >= 3000 frames
 # what the friend's own recorder writes (every player's position and heading, the ball) is the host's
-# within 1 cm, the friend ends with the host's score, and at fixed match times its picture is much
-# closer to the host's than the control's is. One summary line; details in logs/match_puppet/.
+# within 1 cm and the friend ends with the host's score (pictures are reported, not judged: each player
+# has its own camera since pt.camera). One summary line; details in logs/match_puppet/.
 # RT_PADS=0: the original game's controllers (no virtual pads), as the reference replays were recorded.
 cd "$(dirname "$0")/../.." || exit 1
 D=logs/match_puppet

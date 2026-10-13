@@ -41,11 +41,12 @@ def relay(d):
 
 
 class Player:
-    def __init__(self, br, name, port, query=""):
+    def __init__(self, br, name, port, query="", env=""):
         self.name, self.lines = name, []
         self.page = br.new_context().new_page()
         self.page.on("console", lambda m: self.lines.append(m.text))
-        self.page.goto(f"http://127.0.0.1:{port}/index.html?log&env={ENV}{query}")
+        extra = "," + env if env else ""
+        self.page.goto(f"http://127.0.0.1:{port}/index.html?log&env={ENV}{extra}{query}")
 
     def wait(self, pat, secs):
         end = time.time() + secs
@@ -121,5 +122,8 @@ def join_room(p, code):
         return None
     for k in list(code) + ["Enter"]:
         p.key(k, 400)
-    ok = p.wait(f"ms: ui room {code} as player", 120) and wait_screen(p, PARTY)
+    joined = p.wait(f"ms: ui room {code} as player", 120)  # then its lobby, or at once the host's match
+    ok = joined and p.wait_for(
+        lambda: screen(p.lines) == PARTY or any("joining the host's match" in x for x in p.lines), 30
+    )
     return code if ok else None

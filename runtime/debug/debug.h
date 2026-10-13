@@ -20,4 +20,5 @@ void net_ha_test_press(rt_pad_t *local, int host_phase, uint32_t frame);   /* ne
 }
 #endif
 
+void dbg_test_options_frame(uint32_t frame); /* test_options.c: RT_TEST_CAMERA */
 #endif

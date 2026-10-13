@@ -128,25 +128,39 @@ Module.rtc = (function () {
     return false;
   };
 
-  // A binary game message ({u8 type, u8 slot, u32 frame, u16 len, payload}, net_ha.c): true when it
-  // went over the data channels (every peer it is for has them open).
-  R.send = function (bytes) {
-    if (R.off || R.me < 0) return false;
-    const label = bytes[0] === 70 ? 'frames' : bytes[0] === 80 ? 'fast' : 'rel'; // 'F' frame, 'P' pad
+  // The channel a game message goes on, or null for the relay: the setup, the host's menu screen and Team
+  // Select, a match's end are kept by the relay for players who join later (server/main.go dumpHA).
+  function label(type) {
+    if (type === 83 || type === 77 || type === 84 || type === 69) return null; // 'S' 'M' 'T' 'E'
+    return type === 70 ? 'frames' : type === 80 ? 'fast' : 'rel'; // 'F' frame, 'P' pad
+  }
+
+  // The open channels to everyone this message is for, or null (someone has none: the relay).
+  function channels(name) {
     const to = R.host ? R.members : [0];
-    if (!to.length) return false;
+    if (!to.length) return null;
     const chans = [];
     for (const s of to) {
       const p = R.peers[s];
-      const ch = p && p.open && p[label];
-      if (!ch || ch.readyState !== 'open') return false;
+      const ch = p && p.open && p[name];
+      if (!ch || ch.readyState !== 'open') return null;
       chans.push(ch);
     }
-    if (label === 'frames' && R.loss && Math.random() < R.loss) {
+    return chans;
+  }
+
+  // A binary game message ({u8 type, u8 slot, u32 frame, u16 len, payload}, net_ha.c): true when it
+  // went over the data channels.
+  R.send = function (bytes) {
+    if (R.off || R.me < 0) return false;
+    const name = label(bytes[0]);
+    const chans = name && channels(name);
+    if (!chans) return false;
+    if (name === 'frames' && R.loss && Math.random() < R.loss) {
       R.stats.dropped = (R.stats.dropped | 0) + 1;
       return true;
     }
-    for (const ch of chans) if (label !== 'fast' || ch.bufferedAmount < 1 << 16) ch.send(bytes); // (a congested pad channel drops)
+    for (const ch of chans) if (name !== 'fast' || ch.bufferedAmount < 1 << 16) ch.send(bytes); // (a congested pad channel drops)
     R.stats.dc++;
     return true;
   };

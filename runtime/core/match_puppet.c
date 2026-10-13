@@ -211,7 +211,6 @@ void ms_puppet_after_update(uint32_t rugby) {
     memcpy(&clock, h + 4, 4);
     wrf(ms_setup_va() + 0x18F0, clock);
     score(h);
-    ms_camera_host(h + 32);
     wrf(rugby + 0x58, fat(h + REC_HEAD, 0x116C));
     if (!g_hostbuf) g_hostbuf = gcalloc(FRAME_SIZE);
     if (g_hostbuf) memcpy(G2H(g_hostbuf), h + REC_HEAD, FRAME_SIZE);

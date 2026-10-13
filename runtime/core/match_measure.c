@@ -1,6 +1,7 @@
 /* match_measure.c -- numbers to compare two games playing the same match (host and friend, on.match_*):
  * tools/net/match_compare.py lines the host's and the friend's "ms: pos" lines up by match time and
  * reports where they first differ.
+ *   RT_MS_CAM=N  every N frames of a match: "ms: cam f F NAME eye X Y Z target X Y Z fov F ball X Y Z" (cm; ball m)
  *   RT_MS_POS=N  every N frames of a match: "ms: pos f F t T clock C score H-A phase P upd AVG/MAX us
  *                p X,Z X,Z ... (30 players, cm) ball X,Y,Z (cm)". upd is the host CPU time of
  *                CRugby::Update over the frames since the last line (game/overrides/match/rugby_update.c).
@@ -75,12 +76,27 @@ static void shot_at_time(void) {
     next++;
 }
 
+/* RT_MS_CAM=N: this game's own view (match_camera.c) and the ball, every N frames of a match. */
+static void cam_line(uint32_t frame) {
+    uint8_t v[MS_CAMERA_BYTES];
+    float f[16];
+    ms_ball_t b;
+    ms_camera_last(v);
+    memcpy(f, v, sizeof f);
+    if (!ms_ball(&b)) return;
+    rt_trace("ms: cam f %u %s eye %.0f %.0f %.0f target %.0f %.0f %.0f fov %.1f ball %.2f %.2f %.2f", frame,
+             ms_camera_name(), (double)f[0], (double)f[1], (double)f[2], (double)f[4], (double)f[5], (double)f[6],
+             (double)f[12], (double)b.pos[0], (double)b.pos[1], (double)b.pos[2]);
+}
+
 void ms_measure_frame(uint32_t frame) {
     shot_at_time();
-    static int every = -1;
+    static int every = -1, cam = -1;
     if (every < 0) {
-        const char *e = getenv("RT_MS_POS");
+        const char *e = getenv("RT_MS_POS"), *c = getenv("RT_MS_CAM");
         every = e ? atoi(e) : 0;
+        cam = c ? atoi(c) : 0;
     }
     if (every > 0 && frame % (uint32_t)every == 0 && ms_active()) pos_line(frame);
+    if (cam > 0 && frame % (uint32_t)cam == 0 && ms_active()) cam_line(frame);
 }

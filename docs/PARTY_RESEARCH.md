@@ -315,3 +315,31 @@ to (-0.5, 0.5] (FUN_00706F90, FUN_004AC5B0), actor time in ticks of 1/50 s.
 - Measure first (native probe on the controlled player): stick, camera yaw, actor +0x7C/+0x74/+0x6C/
   +0x10C, gait, stamina, task, state, the cache; fit K and the ramps; offline, run the model on
   recorded inputs against the host path delayed 3-8 frames and report the error (p50/p95) and snaps.
+
+## Personal settings
+
+Audit for pt.camera (static, 2026-10-13). **(C)** Every personal option lives in one options/profile object,
+**0x00A33320** (getter `FUN_006C5D60` via the protector slot [0x013835D4]; "changed, save" byte 0xA335F8), outside
+the match setup block 0x9B6830..0x9B8154: a friend's setup swap never carries it, each game reads its own.
+Exception: difficulty (options+0x270 bits 0-3) is copied into setup+0x190C by `FUN_004BFFE8` (the host's wins).
+
+| Setting | Changed by (callbacks) | Stored at (options+) | Read in the match by |
+|---|---|---|---|
+| Camera style (0 Truck, 1 Side, 2 Broadcast, 3 Classic; `FUN_00406350` strings) | MenuCameraSideline 0x577CA0, MenuCameraBroadcast 0x5778E0, MenuCameraClassic 0x577A20, ChangeCameraLeft/RightPress 0x575010/0x5754B0 | +0x230 bits 0-3 | CameraManager ctor `FUN_00406350` (start camera), event handler `FUN_00407810` (GEVENT 0x118 on change) |
+| Camera height/zoom (Truck/Side/Broadcast), custom (Classic), presets | ChangeCamera cases 3-6, `FUN_00574E90` | +0x24C/+0x24D; +0x252..+0x256; +0x234 bit0, +0x238, +0x240..+0x24A | CameraManager+0x214 points into them |
+| Auto zoom | GEVENT 0x119 | +0x238 bit7 | `FUN_00407810` ("Zoom ..." cameras) |
+| HUD radar / set-piece overlays, help popups | OnMainMenuGameOptions 0x576460, OnMainMenuDisplayOptions 0x579670, My Rugby display options | +0x25C bits 3, 4 | COverlayItemRadar/Ruck/Scrum/Maul vf1, `FUN_005879E0` |
+| Player names, quick-option indicator, player indicators, controls overlay | same menus (toggles 5, 9, 0xB, 0xF) | +0x25C bits 1-2, 7-8, 6, 5 | `FUN_0057BAD0`, `FUN_004229B0`, `FUN_0069BED0`, COverlayItemPlayerControls |
+| Five audio volumes | MyRugbySoundLeft/Right 0x50D9F0/0x50DCF0, in-game sound menu 0x78 | +0x21C..+0x224 shorts (buses 4,3,1,0,2) | applied at change (`FUN_0046FF60`) |
+| Video, screen centre | PC video options 0x50C6D0.., onScreenCentre* | +0x25C bits 9+, +0x262/+0x264, +0x218/+0x21A | renderer |
+| Vibration | (no PC writer found) | +0x258 bit0 | RumbleEventHandler |
+| Lineout throw control | My Rugby game options | +0x258 bit1 | LineOutState (the thrower's input) |
+| Game sliders (handling?, ?, fatigue rate), toggle, kick option | My Rugby game options | +0x22D/+0x22E/+0x22F, +0x259, +0x270 bits 4-5 | simulation: on a friend (a puppet) unused, the host's apply |
+
+- **Personal** (each player's own, in the match): camera style/height/zoom/presets, HUD and indicators, names, volumes,
+  video, vibration, controls overlay. **Shared** (the host's, setup block): teams, rosters, kits, stadium, weather and
+  conditions, half length, difficulty. Rule-like options outside the block (sliders, lineout control, kick option)
+  only act where the match is simulated: the host's.
+- The camera of a friend was the host's (match_camera.c re-applied the host's 16 floats); pt.camera removes that:
+  each game's own controller (`FUN_006E8260`) with its own options frames the puppeted match.
+- Not resolved: the labels of the five volume buses and of sliders +0x22D/+0x22E and toggle +0x259.

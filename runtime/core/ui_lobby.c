@@ -12,7 +12,7 @@
 const char *rt_net_url = "ws://127.0.0.1:8080/ws";   /* --net URL (net_join.c) */
 static int g_state, g_connected, g_members, g_host;
 static uint32_t g_mask;   /* bit k: room slot k has a member */
-static int g_slot = -1;
+static int g_slot = -1, g_ended;   /* g_ended: the relay closed the party (its host left) */
 static char g_code[16], g_err[96];
 
 static int field(const char *json, int n, const char *key, char *out, int cap) {   /* "key":"value" or :number */
@@ -39,6 +39,7 @@ static int send_json(const char *t, const char *room) {
         g_connected = 1;
     }
     char m[160];
+    g_ended = 0;
     snprintf(m, sizeof m, "{\"t\":\"%s\",\"room\":\"%s\",\"name\":\"%s\"}", t, room,
              rt_net_ha == 1 ? "host" : "player");
     net_tx_send(m, (int)strlen(m), 1);
@@ -69,6 +70,8 @@ void ui_lobby_text(const char *json, int n) {
         for (char *c = g_err; *c; c++) *c = (char)toupper((unsigned char)*c);   /* the menus' capitals */
         g_state = LOBBY_ERROR;
         rt_trace("ms: ui lobby error %s", g_err);
+    } else if (field(json, n, "t", v, sizeof v) && !strcmp(v, "ended")) {
+        g_ended = 1;
     } else if (field(json, n, "t", v, sizeof v) && !strcmp(v, "members")) {
         int c = 0;   /* one "slot" per member */
         uint32_t mask = 0;
@@ -113,4 +116,5 @@ const char *ui_lobby_error(void) { return g_err; }
 int ui_lobby_members(void) { return g_members; }
 uint32_t ui_lobby_member_mask(void) { return g_mask; }
 int ui_lobby_slot(void) { return g_slot; }
+int ui_lobby_ended(void) { return g_ended; }
 int ui_lobby_is_host(void) { return g_host; }

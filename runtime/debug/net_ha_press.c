@@ -4,7 +4,8 @@
  * have shown open play (phase Free, id 7) for 30 Presents in a row, hold the left stick right for N
  * Presents, once ("ms: net test press" lines).
  * RT_NET_HA_PAUSE=N: after that (or at the same open play if no press is asked for), press Esc (this
- * game pauses, so the host does: net_ha_flow.c), and N Presents later Cross (RESUME is highlighted).
+ * game pauses, so the host does: net_ha_flow.c), and N Presents later this game's own Cross (S: RESUME
+ * is highlighted; everyone resumes).
  * RT_NET_HA_MASH=N: tap Cross every N Presents while the host's frames arrive, as a player answering the
  * set-piece prompts of its side (the host's match waits for them), except around the test pause. */
 #include "debug.h"
@@ -31,9 +32,11 @@ static void test_pause(rt_pad_t *local, uint32_t frame) {
         plat_desk_apply(&(plat_desk_ev_t){ PLAT_DESK_KEY, 1, 41, 0 });
     }
     if (frame == at + 3) plat_desk_apply(&(plat_desk_ev_t){ PLAT_DESK_KEY, 0, 41, 0 });
-    if (frame >= at + (uint32_t)n && frame < at + (uint32_t)n + 5) local->buttons |= RT_PAD_CROSS;
-    if (frame == at + (uint32_t)n + 5) local->buttons &= (uint16_t)~RT_PAD_CROSS; /* released (replay runs keep it) */
-    if (frame == at + (uint32_t)n) rt_trace("ms: net test resume at frame %u", frame);
+    if (frame == at + (uint32_t)n) {   /* this game's own RESUME (S: Cross), which resumes everyone ('Y') */
+        rt_trace("ms: net test resume at frame %u", frame);
+        plat_desk_apply(&(plat_desk_ev_t){ PLAT_DESK_KEY, 1, 22, 0 });
+    }
+    if (frame == at + (uint32_t)n + 3) plat_desk_apply(&(plat_desk_ev_t){ PLAT_DESK_KEY, 0, 22, 0 });
 }
 
 void net_ha_test_press(rt_pad_t *local, int host_phase, uint32_t frame) {

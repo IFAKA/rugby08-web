@@ -28,7 +28,8 @@
 // byte 0 = 0 is a key frame, the room keeps the latest), 'E' the match is over (host; the room forgets
 // setup and key), 'U' paused or not (host), 'K' a key request, 'P' a pad and 'Z' a pause request
 // (friends), 'M' the host's front-end screen (u16 id; the room keeps the latest), 'T' its Team Select
-// (relayed on change and every second). A newcomer gets the
+// (relayed on change and every second), 'C' a match event the host's cameras heard (relayed), 'Y' a
+// friend's resume. When a party's host leaves, the room closes: {"t":"ended"} to everyone left. A newcomer gets the
 // room's log, then the kept screen, setup and key frame.
 package main
 
@@ -106,7 +107,7 @@ func msgLen(b []byte) int {
 		return 6
 	case 'W', 'R':
 		return 2
-	case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M', 'T':
+	case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M', 'T', 'C', 'Y':
 		if len(b) < haHeader {
 			return haHeader
 		}
@@ -514,7 +515,7 @@ func (c *client) game(b []byte) {
 			if r.pending[k] {
 				r.pending[k], r.from[k] = false, f
 			}
-		case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M', 'T':
+		case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M', 'T', 'C', 'Y':
 			if k != c.slot {
 				continue
 			}
@@ -552,6 +553,17 @@ func (c *client) leave() {
 		r.from[k], r.last[k] = -1, -1
 	}
 	log.Printf("room %s: %s (player %d) left", r.code, c.name, k+1)
+	if k == 0 && (r.setup != nil || r.menu != nil) { // a party's host: the party is over
+		for _, p := range r.slots {
+			if p != nil {
+				p.send(map[string]any{"t": "ended", "room": r.code})
+				p.room = nil
+			}
+		}
+		delete(rooms, r.code)
+		log.Printf("room %s: closed (its host left)", r.code)
+		return
+	}
 	empty := true
 	for _, p := range r.slots {
 		if p != nil {
