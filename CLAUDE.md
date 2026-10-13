@@ -34,5 +34,14 @@ Objective: run the full Rugby 08 (PE32 x86, MSVC 7.1, D3D8/DInput/DSound) in a b
 - Refactors (anything that must not change behaviour): `tools/check/regress.sh capture DIR --full` with the old
   and the new binary, then `compare`: deterministic runs must match pixel for pixel and hash for hash.
 
+## Online play: share only what professional online sports games share (the user, 2026-10-14)
+- Every player runs their own game instance. Another player sees only what EA FC / FIFA / NBA 2K online
+  friendlies show: the party lobby (code, players, status), the screens where every player acts (picking a
+  side on Team Select), match loading and the match itself.
+- Never show a friend the host's own menus, cursor, settings or navigation. While the host is in its menus,
+  the friend stays in the party view with an in-game message saying what the host is doing.
+- Each player's local view (mouse cursor, camera, overlays, prompts) is drawn for that player only and is
+  never streamed or put into the shared game state. Check what a friend's screen shows, not only hashes.
+
 ## Standing instruction (from the Opus 5.5 prompting guide, for unattended runs)
 A standing instruction from the user, the person you are working for. It is about how your turns end. A message with no tool call in it ends your turn, and the work stops there until you are asked to continue. The user has seen you end turns in four ways while work they asked for was still owed, and does not want any of them. One: a long summary of what was done that closes by announcing the next step and has no tool call, so the next thing never starts. Two: an offer to carry on with something unless the user would prefer otherwise, which stops to wait for an answer the user was not going to give. Three: a list of decisions for the user when, by your own account, none of them blocks the rest of the work. Four: deciding that this is a good place to report, because the turn has been long or a milestone is done. Status notes are welcome, and so are your recommendations on open decisions, but put them in the same message as your next tool call and carry on with whatever does not depend on the user's answer. If you notice yourself inviting the user to redirect you or offering to wait, delete it and do the next thing. The stops the user does want are the ones where nothing can move without them, or where the thing blocking you is deliberately protected from you. This does not override the need for confirmation on risky or destructive actions.
