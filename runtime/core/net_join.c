@@ -22,7 +22,6 @@ int rt_net_start(int argc, char **argv) {
         else if (!strcmp(argv[i], "--net-delay")) rt_net_cfg_delay = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--net-mode")) ha = !strcmp(argv[++i], "ha");
     }
-    if (getenv("RT_ONLINE") && !atoi(getenv("RT_ONLINE"))) rt_online = 0;
     if (url) rt_net_url = url;   /* the relay the Online screens use */
     if (!url || !room) return 0;
     if (net_tx_open(url)) rt_fatal("netplay: cannot connect to %s", url);

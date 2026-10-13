@@ -21,16 +21,14 @@ typedef struct {
 #define UI_PANEL  0xD0140C08u
 #define UI_CLEAR  0x00000000u
 
-extern int rt_online; /* the Online screens exist (default; RT_ONLINE=0: not) */
-
 /* ui_font.c */
 void ui_text(ui_image_t *im, int x, int y, int scale, const char *s, uint32_t rgba);
 int ui_text_width(const char *s, int scale);
 void ui_rect(ui_image_t *im, int x, int y, int w, int h, uint32_t rgba);
 
-/* ui_online.c */
-int ui_key(int scancode, int down);   /* 1: the screens took it (the game must not see it) */
-int ui_open(void);                    /* the screens are open (they take every key) */
+/* ui_badge.c (the party's screens are the game's own: fe_party.c) */
+int ui_key(int scancode, int down);   /* 1: typing a party code took it (the game must not see it) */
+int ui_open(void);                    /* (0: nothing of ours takes every key) */
 /* At every Present: 1 if there is something to draw; *img the image (w x h), *changed since the last */
 int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed);
 
@@ -46,6 +44,7 @@ const char *ui_lobby_code(void);
 const char *ui_lobby_error(void);
 int ui_lobby_members(void);
 uint32_t ui_lobby_member_mask(void); /* bit k: room slot k has a member */
+int ui_lobby_slot(void);             /* this player's room slot (0 = the host) */
 int ui_lobby_is_host(void);
 
 #ifdef __cplusplus

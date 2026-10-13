@@ -529,7 +529,7 @@
       ],
       "desc": "ONLINE in the game's main menu: CREATE PARTY (code, slots, CONTINUE, badge, LEAVE), JOIN PARTY (letter grid), friends' lobby; pad, mouse, keyboard and touch; the F2 overlay is gone.",
       "check": "/opt/homebrew/bin/python3 tools/net/party_menu_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.sides",

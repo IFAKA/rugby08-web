@@ -3,7 +3,8 @@
 
 Four pages of the web build (headless Chrome, muted, on a relay at a free port). The host plays its
 menus to PLAY NOW's Team Select alone: only its own devices are there (no virtual pads). It hosts a
-party there (the Online screens, F2) and three friends join from their menus: each one adds a
+party from its main menu (ONLINE, CREATE PARTY), back in Team Select three friends join (ONLINE,
+JOIN PARTY): each one adds a
 controller to the host's Team Select. Each player moves its own icon with its own keys (host Left,
 friends Right / Left / Right): all four take a side. The last friend closes its page: its controller
 goes, off its side. The host's "ms: controllers" trace lines are the game's own controller list (entry
@@ -17,8 +18,8 @@ import sys
 import time
 
 from playwright.sync_api import sync_playwright
-from web_party import ROOT, Player, host_room, join_room, open_online, relay, to_menus
-from web_route import TEAM_SELECT, browser, play_now, tap
+from web_party import MAIN, ROOT, Player, host_room, join_room, relay, to_menus
+from web_route import TEAM_SELECT, browser, play_now, screen, tap
 
 D = os.path.join(ROOT, "logs", "party_controllers")
 
@@ -62,12 +63,16 @@ def run(players, out):
     out.append(f"solo: {controllers(host)}")
     if [c[0] for c in solo] != ["K"]:
         return f"solo Team Select offers {solo}, not only the keyboard"
-    err = open_online(host)
-    if err:
-        return err
+    for _ in range(6):  # back to the main menu (Triangle), to make the party there
+        if screen(host.lines) == MAIN:
+            break
+        host.key("w", 2500)
     code = host_room(host)
     if not code:
-        return "no room"
+        return "no party"
+    err = play_now(host.page, host.lines, until=TEAM_SELECT)
+    if err:
+        return f"host, back to Team Select: {err}"
     for n, f in enumerate(friends, 1):
         err = to_menus(f)
         if err:

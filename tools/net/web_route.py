@@ -30,6 +30,23 @@ def screen(lines):
     return None
 
 
+def click(page, x, y):
+    """Click at a point of the game's 640x480 screen (the browser places the menus' cursor where the
+    pointer is: platform/sdl plat_pointer)."""
+    r = page.evaluate(
+        "(() => { const b = document.querySelector('canvas').getBoundingClientRect(); "
+        "return [b.left, b.top, b.width, b.height]; })()"
+    )
+    px, py = r[0] + x * r[2] / 640, r[1] + y * r[3] / 480
+    page.mouse.move(px - 4, py - 4)
+    page.wait_for_timeout(200)
+    page.mouse.move(px, py)
+    page.wait_for_timeout(400)
+    page.mouse.down()
+    page.wait_for_timeout(120)
+    page.mouse.up()
+
+
 def tap(page, key, hold=120):
     """A key held for a few frames: the game samples its keyboard once a frame."""
     page.keyboard.down(key)

@@ -56,6 +56,7 @@ uint8_t plat_vk_toggled(uint32_t vk); /* 1 while the Caps Lock / Num Lock (VK_CA
 uint8_t plat_vk_down(uint32_t vk); /* 1 while virtual key vk is held */
 uint8_t plat_dik_down(uint32_t dik); /* 1 while DirectInput key dik (set-1 scan | 0x80 extended) is held */
 void plat_mouse_delta(int *dx, int *dy, int *dwheel); /* motion since the last call */
+int plat_pointer(float *x, float *y); /* the browser's pointer in game units (640x480); 1 if it moved */
 uint8_t plat_mouse_buttons(void); /* bit 0 left, 1 right, 2 middle */
 uint32_t plat_vk_to_scancode(uint32_t vk); /* Win32 set-1 scan code, 0 if none */
 void plat_cursor_pos(int *x, int *y); /* screen coordinates */

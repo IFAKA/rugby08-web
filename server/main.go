@@ -27,7 +27,8 @@
 // 'S' the match setup (host, at launch; the room keeps the latest), 'F' a match frame (host; payload
 // byte 0 = 0 is a key frame, the room keeps the latest), 'E' the match is over (host; the room forgets
 // setup and key), 'U' paused or not (host), 'K' a key request, 'P' a pad and 'Z' a pause request
-// (friends). A newcomer gets the room's log, then the kept setup, then the kept key frame.
+// (friends), 'M' the host's front-end screen (u16 id; the room keeps the latest). A newcomer gets the
+// room's log, then the kept screen, setup and key frame.
 package main
 
 import (
@@ -81,6 +82,7 @@ type room struct {
 	pending [maxPlayers]bool  // waiting for a grant
 	setup   []byte            // host mode: the latest 'S' message, for newcomers
 	key     []byte            // host mode: the latest key 'F' message, for newcomers
+	menu    []byte            // host mode: the latest 'M' (the host's front-end screen), for newcomers
 }
 
 var (
@@ -103,7 +105,7 @@ func msgLen(b []byte) int {
 		return 6
 	case 'W', 'R':
 		return 2
-	case 'S', 'F', 'K', 'P', 'E', 'Z', 'U':
+	case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M':
 		if len(b) < haHeader {
 			return haHeader
 		}
@@ -324,7 +326,7 @@ func (r *room) pass(m []byte, skip int) {
 
 // dumpHA queues the room's kept setup and key frame for a newcomer (after its log).
 func (r *room) dumpHA(c *client) {
-	for _, m := range [][]byte{r.setup, r.key} {
+	for _, m := range [][]byte{r.menu, r.setup, r.key} {
 		if m != nil {
 			c.enqueue(2, m)
 		}
@@ -419,7 +421,7 @@ func (c *client) handle(req request) {
 			log.Printf("room %s: created", code)
 		}
 		if r == nil {
-			c.send(map[string]any{"t": "error", "msg": "There is no game with that code. Ask your friend for a new link."})
+			c.send(map[string]any{"t": "error", "msg": "No party with that code"})
 			return
 		}
 		slot := -1 // the creator is player 1; a newcomer takes the lowest free controller
@@ -430,7 +432,7 @@ func (c *client) handle(req request) {
 			}
 		}
 		if slot < 0 {
-			c.send(map[string]any{"t": "error", "msg": "That game is full (4 players)."})
+			c.send(map[string]any{"t": "error", "msg": "Party full"})
 			return
 		}
 		c.room, c.slot, c.name, c.caughtUp = r, slot, cleanName(req.Name, slot), creator
@@ -511,13 +513,15 @@ func (c *client) game(b []byte) {
 			if r.pending[k] {
 				r.pending[k], r.from[k] = false, f
 			}
-		case 'S', 'F', 'K', 'P', 'E', 'Z', 'U':
+		case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M':
 			if k != c.slot {
 				continue
 			}
 			switch {
 			case m[0] == 'S':
 				r.setup = m
+			case m[0] == 'M':
+				r.menu = m
 			case m[0] == 'F' && len(m) > haHeader && m[haHeader] == 0:
 				r.key = m
 			case m[0] == 'E': // the match is over: a newcomer must not be sent into it

@@ -6,11 +6,13 @@
 #include "ui.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 
 const char *rt_net_url = "ws://127.0.0.1:8080/ws";   /* --net URL (net_join.c) */
 static int g_state, g_connected, g_members, g_host;
 static uint32_t g_mask;   /* bit k: room slot k has a member */
+static int g_slot = -1;
 static char g_code[16], g_err[96];
 
 static int field(const char *json, int n, const char *key, char *out, int cap) {   /* "key":"value" or :number */
@@ -59,10 +61,12 @@ void ui_lobby_text(const char *json, int n) {
         g_state = LOBBY_IN;
         g_members = 1;
         g_mask = 1u << atoi(slot);
+        g_slot = atoi(slot);
         rt_trace("ms: ui room %s as player %d (%s)", g_code, atoi(slot) + 1, g_host ? "host" : "friend");
         rt_net_begin_ha(atoi(slot), g_host);
     } else if (field(json, n, "t", v, sizeof v) && !strcmp(v, "error")) {
         field(json, n, "msg", g_err, sizeof g_err);
+        for (char *c = g_err; *c; c++) *c = (char)toupper((unsigned char)*c);   /* the menus' capitals */
         g_state = LOBBY_ERROR;
         rt_trace("ms: ui lobby error %s", g_err);
     } else if (field(json, n, "t", v, sizeof v) && !strcmp(v, "members")) {
@@ -108,4 +112,5 @@ const char *ui_lobby_code(void) { return g_code; }
 const char *ui_lobby_error(void) { return g_err; }
 int ui_lobby_members(void) { return g_members; }
 uint32_t ui_lobby_member_mask(void) { return g_mask; }
+int ui_lobby_slot(void) { return g_slot; }
 int ui_lobby_is_host(void) { return g_host; }

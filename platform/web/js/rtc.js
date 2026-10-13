@@ -14,6 +14,16 @@
 Module.rtc = (function () {
   const R = { me: -1, host: false, members: [], peers: {}, ice: [], off: false };
   R.stats = { dc: 0, ws: 0, rx: 0, open: 0 };
+  // Transport latency (checks): when each frame ('F', by its sequence number) left the host and reached
+  // this page, before the game drains it at its next frame. One clock in every page of the machine.
+  R.times = { tx: {}, rx: {} };
+  R.mark = function (dir, b) {
+    if (b.length < 13 || b[0] !== 70) return;
+    const seq = b[9] | (b[10] << 8) | (b[11] << 16) | (b[12] << 24);
+    const t = R.times[dir];
+    if (t[seq] === undefined) t[seq] = performance.timeOrigin + performance.now();
+    if (seq % 4096 === 0) delete t[seq - 8192]; // (bounded)
+  };
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
   R.off = q.get('rtc') === '0';
   R.loss = parseFloat(q.get('rtcloss') || '0'); // test switch: drop this share of the frames
@@ -28,7 +38,9 @@ Module.rtc = (function () {
     ch.binaryType = 'arraybuffer';
     ch.onmessage = function (ev) {
       if (!Module.rugbyNet) return;
-      Module.rugbyNet.queue.push(new Uint8Array(ev.data));
+      const u8 = new Uint8Array(ev.data);
+      R.mark('rx', u8);
+      Module.rugbyNet.queue.push(u8);
       R.stats.rx++;
     };
     ch.onopen = function () {

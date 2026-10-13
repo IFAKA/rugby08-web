@@ -94,8 +94,10 @@ void net_ha_setup(const uint8_t *setup);    /* host, at the launch */
 void net_ha_frame_out(uint32_t frame_no, const uint8_t *head, uint32_t frame, uint32_t rec, uint32_t rec_len);
 const uint8_t *net_ha_newest(int *fresh);   /* friend: newest host head (96) + frame, or NULL */
 void net_ha_send(char type, uint32_t frame, const void *payload, size_t len);
-void net_ha_send_end(uint32_t frame); /* host: E with its last frame's sequence number */
-int net_ha_rx_recent(uint32_t frame, uint32_t within);   /* a host frame arrived in the last `within` Presents */
+void net_ha_send_end(uint32_t frame);
+int net_ha_host_screen(void);
+/* friend: the host's front-end screen id ('M'; 0 not in the menus, -1 unknown) */ /* host: E with its last frame's sequence number */
+int net_ha_rx_recent(uint32_t frame, uint32_t within); /* a host frame arrived in the last `within` Presents */
 /* net_ha_flow.c: friends follow the host into and out of its matches */
 void net_ha_flow_setup(const uint8_t *setup);
 void net_ha_flow_end(void);

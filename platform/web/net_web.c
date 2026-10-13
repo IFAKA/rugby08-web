@@ -11,6 +11,7 @@ EM_JS(int, js_net_send, (const void *p, int n, int text), {
     var net = Module.rugbyNet;
     if (!net || net.closed) return -1;
     var bytes = HEAPU8.slice(p, p + n);
+    if (!text && Module.rtc) Module.rtc.mark('tx', bytes);
     if (!text && Module.rtc && Module.rtc.send(bytes)) return 0;   /* peer to peer (js/rtc.js) */
     if (!text && Module.rtc) Module.rtc.stats.ws++;
     net.ws.send(text ? new TextDecoder().decode(bytes) : bytes);
@@ -45,7 +46,9 @@ EM_JS(void, js_net_connect, (void), {
                 if (Module.rtc.text(JSON.parse(ev.data))) return;
             } catch (e) {}
         }
-        net.queue.push(typeof ev.data === 'string' ? new TextEncoder().encode(ev.data) : new Uint8Array(ev.data));
+        var u8 = typeof ev.data === 'string' ? new TextEncoder().encode(ev.data) : new Uint8Array(ev.data);
+        if (typeof ev.data !== 'string' && Module.rtc) Module.rtc.mark('rx', u8);
+        net.queue.push(u8);
     };
     Module.rugbyNet = net;
 });

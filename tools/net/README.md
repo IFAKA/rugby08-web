@@ -8,11 +8,11 @@ docs/plans/2026-10-12-online-host-authoritative.md). `match_compare.py HOST.out 
 games' `ms: pos` lines (RT_MS_POS, runtime/core/match_measure.c) up by match time and reports where they
 first differ, including what a friend's own recorder wrote against the host frame. `match_net_check.sh`
 runs a host and a friend in host-authoritative mode over a local relay (`--net-mode ha`); `match_flow_check.sh`
-a party through two matches (join from the menus, pause from the friend, the ends); `ingame_ui_check.sh` a room
-made and joined from the in-game Online screens by a native and a browser friend (`ingame_ui_web.py`, Playwright).
+a party through two matches (join from the menus, pause from the friend, the ends).
 
 Browser party checks (headless Chrome with the real GPU, muted; system Python /opt/homebrew/bin/python3):
 `web_route.py` drives the menus by the traced front-end screen id, `web_party.py` the players (a page each, the
 relay on a free port, the Online screens). `web_soak.py` (pt.freeze: two pages in a party match for 10 minutes,
 the host's tab hidden), `party_controllers_check.py` (pt.controllers: solo = the real devices, friends add and
-remove controllers, four sides), `party_webrtc_check.py` (pt.webrtc: data channels, losses, latency vs the relay).
+remove controllers, four sides), `party_menu_check.py` (pt.menu: ONLINE in the game's menus by keyboard, mouse and
+pad), `party_webrtc_check.py` (pt.webrtc: data channels, losses, latency vs the relay).

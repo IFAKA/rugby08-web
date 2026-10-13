@@ -9,12 +9,13 @@ party whose host plays PLAY NOW and whose friend follows it into the match, samp
           frames go over a reliable channel, so only a path change loses one) so the friend's recovery
           runs: a frame missing for 30 later ones ends its chain until a key it asks for
 The latency of a frame is the friend's receive time minus the host's send time (the trace's "net tx" /
-"net rx" lines: one clock in both pages, performance.timeOrigin + now).
+"net rx" lines: one clock in both pages, performance.timeOrigin + now; that includes the friend's wait for
+its next frame) and on the wire (js/rtc.js marks: left the host's page, reached the friend's).
 
 Pass: in both sessions the friend follows the host into its match and shows its frames; with WebRTC
 both ends open the channels, >= 95 % of the host's game messages in the match go over them, the
 friend asks for keys after losses and keeps receiving (>= 85 % of the host's frames), and its latency
-p95 is no worse than the relay's (+2 ms). One line; details in logs/party_webrtc/.
+on the wire p95 is no worse than the relay's (+2 ms). One line; details in logs/party_webrtc/.
 
   tools/net/party_webrtc_check.py [--secs S]      (default 60)"""
 
@@ -71,11 +72,16 @@ def session(br, port, name, query, secs, out):
         s1 = host.page.evaluate(STATS)
         tx, rx = times(host.lines[n0:], "tx"), times(friend.lines, "rx")
         lat = [(rx[f] - t) / 1e6 for f, t in tx.items() if f in rx]
+        friend.page.wait_for_timeout(3000)  # (a frame lost at the end: the friend's 30-frame wait for it)
+        ttx, trx = host.page.evaluate("Module.rtc.times.tx"), friend.page.evaluate("Module.rtc.times.rx")
+        wire = [trx[k] - t for k, t in ttx.items() if k in trx]
         r = {
             "tx": len(tx),
             "rx": sum(1 for f in tx if f in rx),
             "p50": pct(lat, 0.5),
             "p95": pct(lat, 0.95),
+            "wire50": pct(wire, 0.5),
+            "wire95": pct(wire, 0.95),
             "dc": s1.get("dc", 0) - s0.get("dc", 0),
             "ws": s1.get("ws", 0) - s0.get("ws", 0),
             "dropped": s1.get("dropped", 0) - s0.get("dropped", 0),
@@ -98,8 +104,8 @@ def judge(rel, rtc):
         return f"webrtc: the friend received {rtc['rx']} of {rtc['tx']} host frames"
     if rtc["dropped"] and not rtc["asked"]:
         return f"webrtc: {rtc['dropped']} frames dropped but the friend never asked for a key"
-    if not rtc["p95"] <= rel["p95"] + 2:
-        return f"webrtc latency p95 {rtc['p95']:.1f} ms vs relay {rel['p95']:.1f} ms"
+    if not rtc["wire95"] <= rel["wire95"] + 2:
+        return f"webrtc transport latency p95 {rtc['wire95']:.1f} ms vs relay {rel['wire95']:.1f} ms"
     return None
 
 
@@ -122,8 +128,10 @@ def main(argv):
                 f"FAIL ({err})"
                 if err
                 else (
-                    f"ok (webrtc: {rtc['dc']}/{rtc['dc'] + rtc['ws']} messages peer to peer, latency p50 {rtc['p50']:.1f} "
-                    f"p95 {rtc['p95']:.1f} ms vs relay {rel['p50']:.1f}/{rel['p95']:.1f}; {rtc['dropped']} frames dropped, "
+                    f"ok (webrtc: {rtc['dc']}/{rtc['dc'] + rtc['ws']} messages peer to peer, transport p50 "
+                    f"{rtc['wire50']:.2f} p95 {rtc['wire95']:.2f} ms vs relay {rel['wire50']:.2f}/{rel['wire95']:.2f}, "
+                    f"in the game p50 {rtc['p50']:.0f} p95 {rtc['p95']:.0f} ms vs {rel['p50']:.0f}/{rel['p95']:.0f}; "
+                    f"{rtc['dropped']} frames dropped, "
                     f"{rtc['asked']} key requests, {rtc['rx']}/{rtc['tx']} frames shown)"
                 )
             )

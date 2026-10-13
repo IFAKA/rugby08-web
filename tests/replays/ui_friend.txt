@@ -1,7 +1,0 @@
-# on.ingame_ui friend: at the main menu open the Online screens (F2), JOIN A GAME (Down,
-# Return); tools/net/ingame_ui_check.sh appends the host's code (letters from 9020), Return and F2.
-8100 click 320 240
-8400 tap Return
-8900 tap F2
-8940 tap Down
-8960 tap Return

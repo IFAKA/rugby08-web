@@ -17,6 +17,8 @@
  *   'E' end     host -> friends: its match is over (u32: its last frame's sequence number: later ones
  *               that arrive are the old match's)        'Z' pause   friend -> host: it paused
  *   'U' paused  host -> friends: u8 paused or not        (the party flow: net_ha_flow.c)
+ *   'M' menu    host -> friends: u16 its front-end screen id when it changes (0: not in the menus; a
+ *               friend's lobby says what the host is doing, fe_party.c)
  * A key goes first, on request and every KEY_EVERY frames; a friend decodes the records after the last
  * key in order with its own game's decoder (the same tables in every game: RT_MS_STREAM_CHECK). */
 #include "netplay_int.h"
@@ -24,6 +26,7 @@
 #include "../debug/debug.h"
 #include "ui.h"
 #include "net_ha_int.h"
+#include "fe_party.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -43,6 +46,9 @@ static uint32_t g_frame;
 
 static uint32_t g_seq_out;                  /* host: the next frame's sequence number */
 static uint32_t g_key_asked;                /* friend: Present of its last key request */
+static int g_host_screen = -1;              /* friend: the host's front-end screen ('M') */
+
+int net_ha_host_screen(void) { return rt_net_ha == 2 ? g_host_screen : -1; }
 
 static uint64_t now_ns(void) {
     struct timespec ts;
@@ -120,6 +126,9 @@ static void handle(const uint8_t *m) {
             g_want_key = 1, g_key_asked = g_frame;
         break;
     case 'K': g_want_key = 1; break;
+    case 'M':
+        if (rt_net_ha == 2 && len == 2) g_host_screen = m[HDR] | m[HDR + 1] << 8;
+        break;
     case 'Z':
         if (rt_net_ha == 1) net_ha_flow_pause_request();
         break;
@@ -148,7 +157,8 @@ static int msg_len(const uint8_t *m, int avail) {
     case 'P':
     case 'E':
     case 'Z':
-    case 'U': return avail < HDR ? HDR : HDR + (m[6] | m[7] << 8);
+    case 'U':
+    case 'M': return avail < HDR ? HDR : HDR + (m[6] | m[7] << 8);
     case 'I': return avail < 19 ? 19 : 19 + 6 * m[18];
     case 'H': return 14;
     case 'A':
@@ -191,6 +201,13 @@ void net_ha_present(uint32_t frame) {
     net_ha_flow_present(frame);
     if (rt_net_ha == 1) {   /* the host's own pad 0 is its game controller (pads.c); friends' pads in */
         static const rt_pad_t zero;
+        static int sent = -1;
+        int scr = fe_screen_id(), menu = fe_in_menus() ? scr : 0;
+        if (menu != sent || frame % 300 == 0) {   /* (again now and then: a friend that just joined) */
+            uint8_t v[2] = { (uint8_t)menu, (uint8_t)(menu >> 8) };
+            send('M', frame, v, 2, NULL, 0);
+            sent = menu;
+        }
         rt_pads_party = ui_lobby_member_mask() & ~(1u << N.slot);
         for (int k = 0; k < RT_MAX_PADS; k++)
             if (k != N.slot) rt_pads[k] = g_pad_at[k] && frame - g_pad_at[k] < PAD_STALE ? g_pad[k] : zero;
