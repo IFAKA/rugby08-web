@@ -583,7 +583,7 @@
       ],
       "desc": "Each player drives their own controller; solo shows only its own; joiners plugged / leavers unplugged at the same frame everywhere; Team Select is the game's own, 4 players take sides.",
       "check": "/opt/homebrew/bin/python3 tools/net/ls_controls_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ls.match",
