@@ -4,6 +4,7 @@
  * menus, so the match's CameraManager starts with it. Each match traces "ms: cam style N" once. */
 #include "rt.h"
 #include "debug.h"
+#include "../core/own_camera.h"
 #include <stdlib.h>
 
 #define OPTIONS  0x00A33320u
@@ -18,7 +19,10 @@ void dbg_test_options_frame(uint32_t frame) {
     if (want == -2) want = getenv("RT_TEST_CAMERA") ? atoi(getenv("RT_TEST_CAMERA")) : -1;
     uint32_t g = rd32(GAME_PTR), st = g ? rd32(g + 0x90) : 0, vt = st ? rd32(st) : 0;
     uint32_t v = rd32(OPTIONS + O_CAMERA);
-    if (want >= 0 && vt == VT_FRONT) wr32(OPTIONS + O_CAMERA, (v & ~0xFu) | ((uint32_t)want & 0xFu));
+    if (want >= 0 && vt == VT_FRONT && (v & 0xFu) != (uint32_t)want) {
+        wr32(OPTIONS + O_CAMERA, (v & ~0xFu) | ((uint32_t)want & 0xFu));
+        own_camera_adopt();   /* (this player's own setting, as if chosen with its controller) */
+    }
     if (vt == VT_MATCH && last_vt != VT_MATCH) rt_trace("ms: cam style %u at frame %u", v & 0xFu, frame);
     last_vt = vt;
 }

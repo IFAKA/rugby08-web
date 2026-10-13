@@ -11,6 +11,7 @@
 #include "rt.h"
 #include "plat.h"
 #include "match_state.h"
+#include "own_camera.h"
 #include <string.h>
 
 #define C_STATE    0x54u        /* controller: the 16 floats applied last */
@@ -50,6 +51,7 @@ static int forwarded(uint32_t id) {
 }
 
 void ms_camera_event(uint32_t listener, uint32_t event) {
+    own_camera_options();   /* (this player's camera settings, before the camera hears of a change) */
     g_listener = listener;
     uint32_t id = event ? rd32(event + 4) : 0xFFFFFFFFu;
     if (rt_net_ha == 1 && event && forwarded(id)) {
@@ -94,6 +96,7 @@ int ms_camera_directed(void) {
 }
 
 void ms_camera_manager(uint32_t manager) {   /* its event listener: the sub-object with vtable 0x8CCC88 */
+    own_camera_before();
     g_manager = manager;
     if (g_listener || !manager) return;
     for (uint32_t off = 0; off < 0x40; off += 4)
@@ -123,6 +126,7 @@ void ms_camera_last(uint8_t *out) {
    instead, as FUN_006E8260's tail applies a view (0x006E8436..0x006E848D). */
 void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj) {
     static uint32_t s;
+    own_camera_after();
     if (!g_host) {
         g_cam = cam, g_proj = proj;
         memcpy(g_last, G2H(ctrl + C_STATE), MS_CAMERA_BYTES);

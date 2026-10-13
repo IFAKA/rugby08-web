@@ -592,7 +592,8 @@
       ],
       "desc": "A full PLAY NOW match in a party: every screen shows the same match (identical frames: overlays, cutscenes, referee), own view per player (POV), pause from anyone, a friend's presses act.",
       "check": "/opt/homebrew/bin/python3 tools/net/ls_match_check.py",
-      "passes": false
+      "passes": true,
+      "notes": "2026-10-13: ok (2 pages: 390 hashes, 481 pictures equal; friend pauses/resumes both; own view only on its screen). Earlier runs saw 1-4 of ~240 pictures differ in cutscenes (game camera equal): not reproduced in this run, still watched."
     },
     {
       "id": "ls.leave",

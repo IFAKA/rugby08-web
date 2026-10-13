@@ -8,7 +8,9 @@ Three pages (headless Chrome, muted, relay on a free port): the host and two fri
                  the match goes on, the two games stay in sync;
   host leaves    the host closes its page: the room goes on with the second friend (the server hands the
                  room on), whose match goes on (match time advances, nobody waited for), the host's
-                 keyboard off its side, and the party's code still joins.
+                 keyboard off its side, and the party's code still joins: a newcomer during the match is
+                 told it comes in when the match ends (a match replays slower than it is played), and
+                 does when it ends (every game quits it at match time QUIT_AT, RT_MS_QUIT_AT).
 One line; details in logs/ls_leave/."""
 
 import os
@@ -22,10 +24,11 @@ from web_route import BACKEND, TEAM_SELECT, browser, play_now, screen
 sys.path.insert(0, os.path.dirname(__file__))
 from ls_controls_check import controllers  # noqa: E402
 from ls_match_check import phases, play  # noqa: E402
-from ls_party_check import create, in_sync, join  # noqa: E402
+from ls_party_check import create, in_sync, join, to_join, type_code  # noqa: E402
 
 D = os.path.join(ROOT, "logs", "ls_leave")
 REASSIGN = (0x25E, 0x98, 0x99)
+QUIT_AT = "RT_MS_QUIT_AT=240"  # every game (the same match time: in step) leaves the match then
 
 
 def match_time(p):
@@ -72,7 +75,7 @@ def into_match(host, f1, f2, out):
 
 
 def run(br, port, out):
-    host, f1, f2 = (Player(br, n, port) for n in ("host", "friend1", "friend2"))
+    host, f1, f2 = (Player(br, n, port, env=QUIT_AT) for n in ("host", "friend1", "friend2"))
     players = [host, f1, f2]
     try:
         err = into_match(host, f1, f2, out)
@@ -101,13 +104,29 @@ def run(br, port, out):
         err = goes_on([f2], 30, out, "after the host left")
         if err:
             return err
-        newcomer = Player(br, "newcomer", port)
+        newcomer = Player(br, "newcomer", port, env=QUIT_AT)
         players.append(newcomer)
         err = to_menus(newcomer)
-        r = err or join(newcomer, code)
-        out.append(f"newcomer: {r}")
-        if not r.startswith("caught up"):
-            return f"the party's code no longer joins after the host left: {r}"
+        if err:
+            return f"newcomer: {err}"
+        err = to_join(newcomer)
+        if err:
+            return f"newcomer: {err}"
+        type_code(newcomer, code)
+        n = len(newcomer.lines)
+        newcomer.key("Enter", 1000)
+        for _ in range(400):  # the friend plays on (its set pieces wait for it) while the newcomer joins
+            if any("caught up at frame" in x for x in newcomer.lines[n:]):
+                break
+            if [x for x in f2.lines if "ms: game state" in x][-1].split()[3] == BACKEND.split()[-1]:
+                play([f2], 1.5)
+            else:
+                f2.page.wait_for_timeout(1500)
+        told = any("ms: joining: the party is in a match" in x for x in newcomer.lines[n:])
+        joined = any("caught up at frame" in x for x in newcomer.lines[n:])
+        out.append(f"newcomer during the match: told it joins after the match {told}, joined after it {joined}")
+        if not told or not joined:
+            return "a newcomer during the match was not told, or did not join after it"
         play([f2, newcomer], 15)
         return None if in_sync([f2, newcomer], out, "newcomer") else "the newcomer is not in sync"
     finally:

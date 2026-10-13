@@ -87,17 +87,23 @@ int ui_catchup(int w, int h, const uint8_t **img) {
         last = -1;
     }
     if (!im.px) return 0;
-    if (last != rt_net_progress) {
+    /* a match being played replays slower than it is played: whoever joins during one comes in when it
+       ends (as online sports games do), and is told so */
+    uint32_t g = rd32(0x00A7ED28u), st = g ? rd32(g + 0x90) : 0;
+    int match = st && rd32(st) == 0x008CC6F0u && rt_net_progress >= 90;
+    if (last != rt_net_progress + 1000 * match) {
         char line[48];
-        last = rt_net_progress;
+        last = rt_net_progress + 1000 * match;
         ui_rect(&im, 0, 0, w, h, 0xFF000000u);
         const char *t = "JOINING THE PARTY";
         ui_text(&im, (w - ui_text_width(t, 4)) / 2, h / 2 - 70, 4, t, UI_WHITE);
-        snprintf(line, sizeof line, "CATCHING UP WITH THE GAME: %d PERCENT", last);
+        if (match) rt_trace("ms: joining: the party is in a match");
+        if (match) snprintf(line, sizeof line, "THE PARTY IS IN A MATCH: YOU JOIN WHEN IT ENDS");
+        else snprintf(line, sizeof line, "CATCHING UP WITH THE GAME: %d PERCENT", rt_net_progress);
         ui_text(&im, (w - ui_text_width(line, 2)) / 2, h / 2 - 10, 2, line, UI_GOLD);
         int bw = w * 2 / 3, bx = (w - bw) / 2, by = h / 2 + 30;
         ui_rect(&im, bx, by, bw, 14, 0xFF303030u);
-        ui_rect(&im, bx, by, bw * last / 100, 14, UI_GOLD);
+        ui_rect(&im, bx, by, bw * rt_net_progress / 100, 14, UI_GOLD);
     }
     *img = (const uint8_t *)im.px;
     return 1;

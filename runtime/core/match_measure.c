@@ -84,9 +84,15 @@ static void cam_line(uint32_t frame) {
     ms_camera_last(v);
     memcpy(f, v, sizeof f);
     if (!ms_ball(&b)) return;
-    rt_trace("ms: cam f %u %s eye %.0f %.0f %.0f target %.0f %.0f %.0f fov %.1f ball %.2f %.2f %.2f", frame,
-             ms_camera_name(), (double)f[0], (double)f[1], (double)f[2], (double)f[4], (double)f[5], (double)f[6],
-             (double)f[12], (double)b.pos[0], (double)b.pos[1], (double)b.pos[2]);
+    /* the direction the sticks are read against (HumanMove 0x6BE760: atan2 of BackendState+0x64 -> +0x190) */
+    uint32_t be = rd32(0x009B65ECu), y = be ? rd32(be + 0x64) : 0;
+    float r[4] = { 0 };
+    if (y) memcpy(r, G2H(y + 0x190), sizeof r);
+    rt_trace("ms: cam f %u %s eye %.0f %.0f %.0f target %.0f %.0f %.0f fov %.1f ball %.2f %.2f %.2f ref %08X %.3f %.3f "
+             "%.3f %.3f",
+             frame, ms_camera_name(), (double)f[0], (double)f[1], (double)f[2], (double)f[4], (double)f[5],
+             (double)f[6], (double)f[12], (double)b.pos[0], (double)b.pos[1], (double)b.pos[2], y, (double)r[0],
+             (double)r[1], (double)r[2], (double)r[3]);
 }
 
 void ms_measure_frame(uint32_t frame) {

@@ -104,6 +104,7 @@ void det_on_frame(det_frame_fn fn);   /* called first at each det_frame, in regi
 double det_period_ms(void);          /* virtual ms the last Present advanced (pacers); -1 outside det mode */
 void det_frame(uint32_t frame);       /* Present */
 uint64_t det_hash(void);
+void det_hash_skip(int slot, uint32_t lo, uint32_t hi); /* det_hash.c: [lo,hi) is each game's own (0,0: none) */
 void det_pages_at(uint32_t frame);    /* det_hash.c: the RT_DET_PAGES dump at that frame */
 void det_hash_frame(uint32_t frame);   /* det_hash.c: per-frame diagnosis switches (det_frame calls it) */
 int det_hash_step(uint32_t frame, uint32_t parts, uint32_t every,

@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static uint64_t hash_range(uint64_t h, uint32_t lo, uint32_t hi) {
+static uint64_t hash_words(uint64_t h, uint32_t lo, uint32_t hi) {
     const uint64_t *p = (const uint64_t *)G2H(lo);
     for (uint32_t n = (hi - lo) / 8; n; n--, p++) {
         h ^= *p;
@@ -14,6 +14,27 @@ static uint64_t hash_range(uint64_t h, uint32_t lo, uint32_t hi) {
         h ^= h >> 29;
     }
     return h;
+}
+
+/* Memory each player's game keeps its own (its camera: runtime/core/own_camera.c): left out of the
+   hash. Registered at the same frames in every game (from game state), so every hash skips alike. */
+#define NSKIP 16
+static uint32_t g_skip[NSKIP][2];
+static int g_nskip;
+void det_hash_skip(int slot, uint32_t lo, uint32_t hi) {
+    if (slot < 0 || slot >= NSKIP) return;
+    g_skip[slot][0] = lo & ~7u;
+    g_skip[slot][1] = (hi + 7) & ~7u;
+    if (slot >= g_nskip) g_nskip = slot + 1;
+}
+static uint64_t hash_range(uint64_t h, uint32_t lo, uint32_t hi) {
+    for (int i = 0; i < g_nskip && lo < hi; i++) {
+        uint32_t a = g_skip[i][0], b = g_skip[i][1];
+        if (b <= lo || a >= hi || a == b) continue;
+        if (a > lo) h = hash_range(h, lo, a);   /* (the part before, against the other ranges too) */
+        lo = b < hi ? b : hi;
+    }
+    return lo < hi ? hash_words(h, lo, hi) : h;
 }
 uint32_t rt_heap_top(void); /* heap.c */
 uint64_t det_hash(void) {
@@ -83,7 +104,7 @@ void det_hash_frame(uint32_t frame) {
         for (int r = 0; r < 3; r++)
             for (uint32_t a = ranges[r][0]; a < ranges[r][1]; a += 0x10000) {
                 uint32_t e = a + 0x10000 < ranges[r][1] ? a + 0x10000 : ranges[r][1];
-                rt_log("det: page %08X %016llX", a, (unsigned long long)hash_range(0, a, e));
+                rt_log("det: page %08X %016llX", a, (unsigned long long)hash_words(0, a, e));
             }
         /* RT_DET_DUMP=ADDR[:ADDR...]: those 64 KiB pages' bytes in the log ("det: dump ADDR hex", 32
          * bytes a line, all-zero lines skipped), so two runs (native, browser) can be diffed */
