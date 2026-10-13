@@ -36,6 +36,8 @@ static void ls_toasts(uint32_t frame) {
 }
 
 int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) {
+    const char *msg = plat_page_message();   /* the page's news: a join refused, a lost connection */
+    if (msg) party_toast(frame, msg);
     if (ls_on()) ls_toasts(frame);
     const char *toast = party_toast_text(frame);
     int ls = ls_on() && count(ls_members()) > 1;
@@ -69,5 +71,33 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
         }
     }
     *img = (const uint8_t *)g_img.px;
+    return 1;
+}
+
+/* Joining a party: the game catches up with the party's session without drawing it (netplay.c); this
+   screen is drawn instead now and then, opaque, with how far it got. */
+int ui_catchup(int w, int h, const uint8_t **img) {
+    static ui_image_t im;
+    static int last = -1;
+    if (w <= 0 || h <= 0) return 0;
+    if (im.w != w || im.h != h) {
+        free(im.px);
+        im = (ui_image_t){ w, h, calloc((size_t)w * (size_t)h, 4) };
+        last = -1;
+    }
+    if (!im.px) return 0;
+    if (last != rt_net_progress) {
+        char line[48];
+        last = rt_net_progress;
+        ui_rect(&im, 0, 0, w, h, 0xFF000000u);
+        const char *t = "JOINING THE PARTY";
+        ui_text(&im, (w - ui_text_width(t, 4)) / 2, h / 2 - 70, 4, t, UI_WHITE);
+        snprintf(line, sizeof line, "CATCHING UP WITH THE GAME: %d PERCENT", last);
+        ui_text(&im, (w - ui_text_width(line, 2)) / 2, h / 2 - 10, 2, line, UI_GOLD);
+        int bw = w * 2 / 3, bx = (w - bw) / 2, by = h / 2 + 30;
+        ui_rect(&im, bx, by, bw, 14, 0xFF303030u);
+        ui_rect(&im, bx, by, bw * last / 100, 14, UI_GOLD);
+    }
+    *img = (const uint8_t *)im.px;
     return 1;
 }

@@ -60,7 +60,7 @@ def steps(br, port, out, players):
     out.append(f"host: {menu_fps} fps in the menus, {match_fps} fps in the match")
     if menu_fps < 55 or match_fps < 55:
         return f"too slow in lockstep (menus {menu_fps} fps, match {match_fps} fps)"
-    code = host.page.evaluate("document.getElementById('code').textContent")
+    code = host.page.evaluate("Module.rugbyRoom || ''")
     friend = Player(br, "friend", port, query=f"&room={code}")
     players.append(friend)
     t0 = time.time()

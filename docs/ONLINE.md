@@ -1,39 +1,40 @@
 # Playing Rugby 08 online
 
-Online is part of the game: everyone plays in their own game, in their own menus, and when the host
-starts a match the friends' games go into it. One game, the host's, plays the match; the friends see it
-and play their players with their own controllers. Up to 4 players, the game's own limit.
+Online is part of the game, as in sports games' online modes: every player runs their own game and
+every game plays the same match from everyone's button presses (lockstep). So every screen shows
+everything the game does (penalty options, kick aim, banners, cutscenes, replays, the referee), and
+each player drives their own controller. Up to 4 players, the game's own limit.
 
 ## How it works
-- The host's game plays the match. Each friend's game sends its pad to the host, where it is one more
-  controller (Team Select gives it a side, as on a couch), and shows the host's match as it happens: the
-  host sends every match frame, compressed by the game's own replay coder (~380 bytes a frame).
-- When the host starts a match, every friend's game goes into it from whatever menu it is in, with the
-  host's teams, kits and stadium; when the host's match ends, everyone is back in their own menus.
-- Pausing: a friend's Esc pauses the host's match and everyone's; whoever paused drives the pause menu.
-- Nothing is replayed to join: a friend can join at any time, even during a match.
-- Code: `runtime/core/net_ha.c` (messages), `net_ha_flow.c` (the party), `match_puppet.c` (a friend's
-  game showing the host's match), `ui_online.c` (the screens); design in docs/MATCH_STATE.md and
-  docs/plans/2026-10-12-online-host-authoritative.md.
+- Every game is a session from the moment it starts, with its room open on the server (offline it is
+  simply the plain game). Only presses travel; each game simulates everything itself, in deterministic
+  mode (runtime/core/det.c), and the games compare state hashes every 2 s.
+- Joining: the friend's game is rebuilt by replaying the room's presses from the start, fast and
+  without drawing (a "JOINING THE PARTY" screen with its progress), then it plays along. Nobody waits
+  for it meanwhile: the server tells it where the others are and it sends empty presses until it is in.
+- Leaving, or a connection that stops for 3 s: that player's controller is unplugged at the same frame
+  in every game and the AI takes their player; the others play on (the host leaving too).
+- Data a game reads from its own machine rather than from presses (the stadium shadow map it draws and
+  reads back) is read by one game and shared ('X', runtime/core/net_external.c).
+- Code: runtime/core/netplay.c, net_frame.c, net_external.c, ls_party.c (the party screens),
+  server/main.go; plan: docs/plans/2026-10-13-lockstep-party.md.
 
 ## In the game
-- **F2** opens **ONLINE**: **HOST A GAME** gives your room code; **JOIN A GAME**: type a friend's code,
-  Return. F2 again closes the screens; a corner badge shows the room and how many are in it. In the room
-  screen, **LEAVE** goes back to playing alone. Keys pressed while the screens are open never reach the
-  game.
-- Then everyone moves their controller to a side in the host's **Team Select**, like on a couch.
-- Friends answer their side's set-piece prompts with their pad (the host's match waits for them).
-- Every game has the Online screens, the browser version and the Mac app alike. The game finds its
-  controllers once, when it starts, so friends' controllers exist from the start: Team Select shows
-  three idle pad icons even when you play alone.
+- Main menu **ONLINE** > **CREATE PARTY** shows your party's code. **JOIN PARTY**: type or pick your
+  friend's code; your game becomes your friend's (it catches up first). **LEAVE PARTY**: back to your
+  own game. Messages ("NO PARTY WITH THAT CODE", "PLAYER 2 JOINED", a lost connection) appear in the game.
+- Everyone shares the menus, as on one couch. In **Team Select** each player moves their own controller
+  to a side. The host plays with keyboard and mouse (controller 1) or a game controller; friends with
+  their keyboard (arrows, S, A, D, Space, Esc...) or a game controller.
+- Pause: Start / Esc pauses for everyone.
 
 ## Run it on your machine (testing)
 ```sh
-./init.sh build-web && ./init.sh build-native   # the browser build (build/web) and the Mac app
+./init.sh build-web
 cd server && go run . -addr :8090 -dir ../build/web
 ```
-Open http://localhost:8090 in two windows (or one window and `build/native/rugby08 --net
-ws://127.0.0.1:8090/ws`): F2 → HOST A GAME in one, F2 → JOIN A GAME and the code in the other.
+Open http://localhost:8090 in two windows: ONLINE > CREATE PARTY in one, ONLINE > JOIN PARTY and the
+code in the other. Every game's log goes to `logs/play/` (one file per page load) for reading back.
 
 ## Run it for your friends (your own server)
 Browsers only run this game over **HTTPS** (or on localhost), so the server needs a certificate for
@@ -44,15 +45,9 @@ go build -o rugby08-server ./server
   -cert /etc/letsencrypt/live/YOUR.DOMAIN/fullchain.pem -key /etc/letsencrypt/live/YOUR.DOMAIN/privkey.pem
 ```
 Upload `build/web/` (including `build/web/data/`, the packaged game files) next to the server binary.
-Friends open your address and type the password once. Nothing else is contacted: the page, the game
-data and the game traffic all come from your server.
+Friends open your address and type the password once. Nothing else is contacted.
 
 ## Limits
-- The Mac app talks plain `ws://` only: against an HTTPS server it cannot connect yet (it needs TLS:
-  a library such as OpenSSL), so for now it plays online on a local network, or everyone uses browsers.
-- A friend's game shows the host's cutscenes as a held picture and not the host's in-match overlays
-  driven by its match logic (set-piece banners, penalty options, kick aim, scrum power bars): the match
-  is to move to lockstep (every game plays it, as sports games do online); half time and full time have
-  been checked only through a quit.
-- The older lockstep mode (every game plays the whole match from the presses) is still in the page
-  behind `?panel`, for its checks.
+- Joining takes longer the longer the party's session has run (the game replays it at ~4x speed).
+- The camera is the game's, shared (in lockstep it is part of the game; a personal view is to come).
+- Browsers only (the Mac app talks plain ws:// and is a test tool).

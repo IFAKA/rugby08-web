@@ -85,6 +85,17 @@ int net_tx_recv(void *buf, int cap, int wait_ms) {
 }
 void net_tx_status(int kind, int value) { js_net_status(kind, value); }
 int net_tx_delay(void) { return js_net_delay(); }
+// clang-format off
+EM_JS(int, js_net_hint, (int which), {   /* the server's hints for a game catching up (the page keeps them) */
+    var v = which ? Module.rugbyFront : Module.rugbyGrant;
+    return v === undefined ? -1 : v | 0;
+});
+// clang-format on
+int net_tx_hints(int64_t *grant, int64_t *front) {
+    *grant = js_net_hint(0);
+    *front = js_net_hint(1);
+    return *grant >= 0 || *front >= 0;
+}
 
 /* The lockstep session's room (the page's, platform/web/shell.html): its code, joining another room (the
    page reloads into it and catches up), leaving for a fresh own game. */
@@ -92,6 +103,13 @@ int net_tx_delay(void) { return js_net_delay(); }
 EM_JS(void, js_session_code, (char *out, int cap), { stringToUTF8(Module.rugbyRoom || '', out, cap); });
 EM_JS(void, js_session_join, (const char *code), { if (Module.rugbyJoin) Module.rugbyJoin(UTF8ToString(code)); });
 EM_JS(void, js_session_leave, (void), { if (Module.rugbyLeave) Module.rugbyLeave(); });
+EM_JS(int, js_page_message, (char *out, int cap), {   /* a message for the game to show, once */
+    var m = Module.rugbyMessage || '';
+    Module.rugbyMessage = '';
+    if (!m) return 0;
+    stringToUTF8(m, out, cap);
+    return 1;
+});
 // clang-format on
 const char *plat_session_code(void) {
     static char c[16];
@@ -100,3 +118,7 @@ const char *plat_session_code(void) {
 }
 void plat_session_join(const char *code) { js_session_join(code); }
 void plat_session_leave(void) { js_session_leave(); }
+const char *plat_page_message(void) {
+    static char m[96];
+    return js_page_message(m, sizeof m) ? m : NULL;
+}

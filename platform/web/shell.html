@@ -5,74 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Rugby 08</title>
     <style>
-      :root { --bg:#0b1410; --panel:rgba(16,30,23,.96); --line:#2a4535; --text:#eef5f0; --dim:#9db3a5; --accent:#3fbf6f; --warn:#e8b14a; --bad:#e5604d; }
-      * { box-sizing: border-box; }
-      html, body { margin:0; height:100%; background:#000; color:var(--text); font:15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow:hidden; }
+      html, body { margin:0; height:100%; background:#000; color:#eef5f0; font:15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow:hidden; }
       #stage { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
-      canvas.emscripten { display:block; max-width:100vw; max-height:100vh; outline:none; background:#000; }
+      canvas.emscripten { display:block; outline:none; background:#000; }
       [hidden] { display:none !important; }
-      .cover { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.82); z-index:20; }
-      .card { width:min(440px, 92vw); background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:26px; box-shadow:0 20px 60px rgba(0,0,0,.6); }
-      h1 { margin:0 0 6px; font-size:26px; } h2 { margin:0 0 10px; font-size:19px; }
-      .sub { color:var(--dim); margin:0 0 16px; font-size:14px; }
-      .bar { height:8px; background:#0c1712; border-radius:99px; overflow:hidden; margin:14px 0 4px; }
-      .bar > div { height:100%; width:0; background:var(--accent); transition:width .3s; }
-      button { padding:10px 14px; border-radius:9px; border:1px solid var(--line); background:#1a2e24; color:var(--text); font-size:14px; cursor:pointer; }
-      button:hover { border-color:var(--accent); }
-      button.primary { background:var(--accent); border-color:var(--accent); color:#06120b; font-weight:600; }
-      button.wide { width:100%; padding:13px; font-size:15px; margin-top:8px; }
-      input { width:100%; padding:9px 11px; border-radius:9px; border:1px solid var(--line); background:#0c1712; color:var(--text); font-size:14px; }
-      label { display:block; font-size:12px; color:var(--dim); margin:12px 0 5px; text-transform:uppercase; letter-spacing:.5px; }
-      #friends-btn { position:fixed; top:12px; right:12px; z-index:15; background:rgba(10,20,15,.78); backdrop-filter:blur(6px); border-radius:99px; padding:8px 14px; font-weight:600; }
-      #panel { position:fixed; top:56px; right:12px; width:min(340px, 92vw); z-index:15; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:0 14px 40px rgba(0,0,0,.55); }
-      #panel .row { display:flex; gap:8px; } #panel .row input { flex:1; }
-      .code { flex:1; font:700 30px/1.2 ui-monospace, monospace; letter-spacing:6px; text-align:center; padding:6px; border:1px dashed var(--line); border-radius:9px; }
-      #join-code { font:700 20px ui-monospace, monospace; letter-spacing:4px; text-transform:uppercase; text-align:center; }
-      #pads { display:flex; gap:8px; } #pads span { flex:1; text-align:center; padding:8px 0; border:1px solid var(--line); border-radius:8px; font-size:13px; }
-      #pads span.on { border-color:var(--accent); color:var(--accent); } #pads span.off { color:var(--dim); border-style:dashed; }
-      #pads span.me { font-weight:700; }
-      .hint { color:var(--dim); font-size:12.5px; margin-top:12px; }
-      kbd { background:#0c1712; border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:11px; }
-      .pill { position:fixed; left:50%; transform:translateX(-50%); background:rgba(10,20,15,.88); border:1px solid var(--line); padding:8px 16px; border-radius:99px; z-index:14; font-size:14px; }
-      #badge { top:14px; } #toast { bottom:18px; }
+      #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; font-size:18px; color:#9db3a5; z-index:20; }
       #output { display:none; }
       #fps { position:fixed; top:8px; left:10px; z-index:15; font:bold 14px ui-monospace, monospace; color:#3fbf6f; text-shadow:0 0 3px #000, 0 0 3px #000; pointer-events:none; }
     </style>
   </head>
   <body>
+    <!-- The page only hosts the game and its fps counter: everything else (the party, joining, messages)
+         is drawn inside the game (runtime/core/fe_party.c, ls_party.c, ui_badge.c). The loading line
+         shows only before the game draws its first frame. -->
     <div id="stage"><canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas></div>
-
-    <button id="friends-btn" hidden>🌐 Online</button>
-    <div id="panel" hidden>
-      <label id="code-label">Your code</label>
-      <div class="row"><div class="code" id="code">······</div><button class="primary" id="copy">Copy</button></div>
-      <div class="hint" id="code-hint">Friends type this code in their game to play with you. Tell them early: joining takes longer the longer you have played.</div>
-      <div id="join-box">
-        <label for="join-code">Join a friend</label>
-        <div class="row"><input id="join-code" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false"><button class="primary" id="join-btn">Join</button></div>
-        <div class="hint">Your screen switches to your friend's game.</div>
-      </div>
-      <label>Controllers</label>
-      <div id="pads"></div>
-      <button class="wide" id="leave" hidden>Back to my own game</button>
-      <div class="hint">Controller 1 (the host) plays with keyboard and mouse, as in the original game. Friends: <kbd>←↑→↓</kbd> run · <kbd>S</kbd> pass/accept · <kbd>A</kbd>/<kbd>D</kbd> pass · <kbd>Space</kbd> sprint · <kbd>Esc</kbd> pause — or a gamepad. Everyone picks a side in Team Select.</div>
-    </div>
-
     <div id="fps"></div>
-    <div class="pill" id="badge" hidden></div>
-    <div class="pill" id="toast" hidden></div>
-
-    <div class="cover" id="cover">
-      <div class="card">
-        <h1 id="cover-title">Rugby 08</h1>
-        <p class="sub" id="cover-text">Loading the game…</p>
-        <div class="bar" id="cover-bar" hidden><div></div></div>
-        <button class="primary wide" id="cover-btn" hidden></button>
-      </div>
-    </div>
+    <div id="loading">Loading Rugby 08…</div>
     <textarea id="output"></textarea>
 
     <script type="text/javascript">
+      // The game fills the window (its aspect kept): the canvas keeps the game's resolution, its CSS size scales.
+      function fit() {
+        var c = document.getElementById('canvas'), w = c.width, h = c.height;
+        if (!w || !h) return;
+        var s = Math.min(innerWidth / w, innerHeight / h), cw = Math.floor(w * s) + 'px', ch = Math.floor(h * s) + 'px';
+        if (c.style.width !== cw || c.style.height !== ch) { c.style.width = cw; c.style.height = ch; }
+      }
+      addEventListener('resize', fit);
+      setInterval(fit, 500);   // (the game sets its resolution when it starts, and may change it)
       // fps: shown game frames per second (Module.rtFrames is bumped by IDirect3DDevice8::Present)
       (() => {
         var el = document.getElementById('fps'), last = { t: performance.now(), n: 0 };
@@ -96,32 +56,50 @@
           var byPage = pageExit; pageExit = false;
           if (byPage || !document.hasFocus() || document.visibilityState !== 'visible') return;
           setTimeout(() => {   // the browser delivered the key itself (some do): nothing to add
-            if (performance.now() - lastEsc < 300 || !document.getElementById('panel').hidden) return;
+            if (performance.now() - lastEsc < 300) return;
             key('keydown'); setTimeout(() => key('keyup'), 100);   // held a few frames: the game polls once a frame
           }, 50);
         });
       })();
+      // The game's log goes to the server's machine (server/playlog.go: logs/play/), so a play test can be
+      // read back afterwards; also in the console with ?log.
+      var playLog = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), lines: [] };
+      function logLine(s) { playLog.lines.push(new Date().toISOString().slice(11, 23) + ' ' + s); }
+      function flushLog(beacon) {
+        if (!playLog.lines.length) return;
+        var body = playLog.lines.join('\n') + '\n', url = '/log?id=' + playLog.id;
+        playLog.lines = [];
+        if (beacon && navigator.sendBeacon) navigator.sendBeacon(url, body);
+        else fetch(url, { method: 'POST', body, keepalive: body.length < 60000 }).catch(() => {});
+      }
+      setInterval(() => flushLog(false), 3000);
+      addEventListener('pagehide', () => flushLog(true));
+      logLine('page: ' + navigator.userAgent + ' ' + location.href);
+      addEventListener('error', (e) => logLine('page error: ' + e.message + ' ' + (e.error && e.error.stack || '')));
+      addEventListener('unhandledrejection', (e) => logLine('page error: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
       var $ = (id) => document.getElementById(id);
       var q = new URLSearchParams(location.search);
       var LOG = q.has('log');
-      var net = null, me = { slot: -1, creator: false }, members = [], room = '', rtt = 0, catching = false, started = false;
-      var joinCode = q.get('room') || sessionStorage.getItem('rugbyJoin') || '';   // the friend's game to join (Join box, kept across a reload)
+      var net = null, me = { slot: -1, creator: false }, members = [], room = '', rtt = 0, started = false;
+      var joinCode = q.get('room') || sessionStorage.getItem('rugbyJoin') || '';   // the friend's game to join (kept across a reload)
+      var pendingJoin = null;   // a JOIN PARTY code being checked with the server
 
-      function cover(title, text, pct, button, action) {
-        $('cover').hidden = false;
-        $('cover-title').textContent = title; $('cover-text').textContent = text;
-        $('cover-bar').hidden = pct == null; if (pct != null) $('cover-bar').firstChild.style.width = pct + '%';
-        $('cover-btn').hidden = !button; $('cover-btn').textContent = button || ''; $('cover-btn').onclick = action;
+      // A message for the game to show (runtime/core/ui_badge.c), kept across a reload.
+      function say(text) { logLine('page: message ' + text); Module.rugbyMessage = text; sessionStorage.setItem('rugbyMessage', text); }
+      // This page again, as its own game (no room to join) or into a room.
+      function reload(join) {
+        sessionStorage.removeItem('rugbyRetry');
+        if (join) sessionStorage.setItem('rugbyJoin', join); else sessionStorage.removeItem('rugbyJoin');
+        location.replace(location.pathname + location.search.replace(/([?&])room=[^&]*&?/, '$1').replace(/[?&]$/, ''));
       }
-      function toast(text) { var t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(t.timer); t.timer = setTimeout(() => t.hidden = true, 3500); }
-      function ownGame() { sessionStorage.removeItem('rugbyJoin'); sessionStorage.removeItem('rugbyRetry'); location.replace(location.pathname + location.search.replace(/([?&])room=[^&]*&?/, '$1').replace(/[?&]$/, '')); }
 
       var Module = {
         noInitialRun: true,
-        print(...args) { if (LOG) console.log(args.join(' ')); },
+        print(...args) { var s = args.join(' '); logLine(s); if (LOG) console.log(s); },
         printErr(...args) { Module.print(...args); },
         canvas: $('canvas'),
-        setStatus(text) { if (!started && text) $('cover-text').textContent = text.replace(/\(.*\)/, '').trim() || 'Loading the game…'; },
+        rugbyMessage: sessionStorage.getItem('rugbyMessage') || '',
+        setStatus(text) { if (!started && text) $('loading').textContent = text.replace(/\(.*\)/, '').trim() || 'Loading Rugby 08…'; },
         onRuntimeInitialized() {
           if (q.has('solo')) { play([]); return; }   // offline, no server (checks, direct links)
           // every game is a lockstep session with its room open from frame 0 (docs/plans/2026-10-13-lockstep-party.md):
@@ -129,59 +107,45 @@
           connect();
         },
         onExit(code) {
-          if (code === 3 && room) {   // this copy fell out of sync: rebuild it by joining again
+          if (code === 3 && room) {   // this copy fell out of step: rebuild it by joining again
             var tries = +(sessionStorage.getItem('rugbyRetry') || 0);
             if (tries < 2) { sessionStorage.setItem('rugbyRetry', tries + 1); sessionStorage.setItem('rugbyJoin', room); location.reload(); return; }
-            cover('Could not stay in sync', "Your game kept disagreeing with your friend's. Try a different browser (everyone on the same one works best), or play on your own.",
-                  null, 'Play on your own', ownGame);
+            say('YOUR GAME COULD NOT STAY IN STEP WITH THE PARTY');
+            reload('');
             return;
           }
-          if (code === 4) { cover('Removed from the game', 'You are no longer in this game.', null, 'Play on your own', ownGame); return; }
-          cover('The game closed', '', null, 'Start again', () => location.reload());
+          if (code === 4) { say('YOU LEFT THE PARTY'); reload(''); return; }
+          location.reload();   // the game closed: start it again
         },
-        // the game's netplay status (runtime/core/netplay.c): 0 running, 1 waiting for slot, 2 catching up %, 3 offline
+        // the game's netplay status (runtime/core/netplay.c): 0 running, 1 waiting, 2 catching up %, 3 offline.
+        // The game shows them itself (ui_badge.c); the server hears how far a joiner got.
         rugbyNetStatus(kind, value) {
-          if (kind === 2) {
-            catching = true;
-            cover("Joining your friend's game…", 'Catching up with everything that happened so far.', value);
-            send({ t: 'progress', pct: value });
-          } else if (kind === 0) {
-            $('badge').hidden = true;
-            if (catching) {
-              catching = false; $('cover').hidden = true; $('canvas').focus();
-              send({ t: 'progress', pct: 100 });
-              sessionStorage.removeItem('rugbyRetry');
-              toast("You're in! You are controller " + (me.slot + 1) + ' — pick your side in Team Select.');
-            }
-          } else if (kind === 1) {
-            var m = members.find(m => m.slot === value);
-            $('badge').textContent = m && m.joining ? 'A friend is joining… ' + m.pct + '%' : 'Waiting for controller ' + (value + 1) + '…';
-            $('badge').hidden = false;
-          } else if (kind === 3) {
-            $('badge').hidden = true; $('cover').hidden = true; $('friends-btn').hidden = $('panel').hidden = true;
-            toast('Connection lost — you keep playing offline.');
-          }
+          if (kind === 2) send({ t: 'progress', pct: value });
+          else if (kind === 0) { send({ t: 'progress', pct: 100 }); sessionStorage.removeItem('rugbyRetry'); }
+          else if (kind === 3) say('CONNECTION LOST: YOU PLAY ON YOUR OWN');
         },
         rugbyNetDelay() {   // my input delay in frames: my trip to the server plus the slowest friend's, plus slack
           var others = members.filter(m => m.slot !== me.slot).map(m => m.rtt || 80);
           if (!others.length) return 1;
           return Math.max(2, Math.min(20, Math.ceil(((rtt || 80) / 2 + Math.max(...others) / 2) / 16.7) + 1));
         },
-        rugbyToast: toast,
         // the game's JOIN PARTY / LEAVE PARTY (runtime/core/ls_party.c): play in that room / a fresh own game
         rugbyJoin(code) {
-          if (!code || code === room) return;
-          sessionStorage.setItem('rugbyJoin', code); sessionStorage.removeItem('rugbyRetry');
-          location.replace(location.pathname + location.search.replace(/([?&])room=[^&]*&?/, '$1').replace(/[?&]$/, ''));
+          if (!code) return;
+          if (code === room) { say("THAT IS YOUR OWN PARTY: GIVE THE CODE TO YOUR FRIENDS"); return; }
+          pendingJoin = code;
+          if (!net || net.closed) { say('CANNOT REACH THE GAME SERVER'); return; }
+          send({ t: 'peek', room: code });   // the server answers whether it can be joined
         },
-        rugbyLeave() { ownGame(); },
+        rugbyLeave() { reload(''); },
       };
-      $('canvas').addEventListener('webglcontextlost', (e) => { e.preventDefault(); Module.onExit(0); }, false);
+      $('canvas').addEventListener('webglcontextlost', (e) => { e.preventDefault(); location.reload(); }, false);
 
       function play(args) {
         started = true;
-        if (!catching) $('cover').hidden = true;
+        $('loading').hidden = true;
         $('canvas').focus();
+        sessionStorage.removeItem('rugbyMessage');
         Module.callMain(args);
       }
       function send(m) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); }
@@ -189,7 +153,6 @@
       // ---- the room (server/main.go): this game is open to friends from the start ----
       function connect() {
         var join = joinCode, auto = q.get('net') === 'auto';   // net=auto (checks): join ROOM, creating it if missing
-        if (join) { catching = true; cover('Joining your friend\'s game…', 'Connecting…', 0); } else cover('Rugby 08', 'Starting…');
         var ws;
         try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); }
         catch (e) { play([]); return; }
@@ -197,7 +160,7 @@
         net = { ws, queue: [], closed: false };
         var opened = false;
         var fallback = setTimeout(() => { if (!opened) { ws.close(); offline(); } }, 4000);
-        function offline() { if (started) return; net = null; catching = false; if (join && !auto) cover("Can't reach the game server", 'Check your connection, or play on your own.', null, 'Play on your own', ownGame); else play([]); }
+        function offline() { if (started) return; net = null; if (join) say('CANNOT REACH THE GAME SERVER'); play([]); }
         ws.onopen = () => {
           opened = true; clearTimeout(fallback);
           ws.send(JSON.stringify(join ? { t: 'join', room: join, auto } : { t: 'host' }));
@@ -207,59 +170,27 @@
         ws.onmessage = (ev) => {
           if (typeof ev.data !== 'string') { net.queue.push(new Uint8Array(ev.data)); return; }   // game messages: netplay.c
           var m = JSON.parse(ev.data);
-          if (m.t === 'error') { catching = false; cover("Can't join", m.msg, null, 'Play on your own', ownGame); ws.close(); return; }
+          if (m.t === 'error' && !started) { say(m.msg.toUpperCase()); reload(''); return; }   // could not join: own game
+          if (m.t === 'error') { say(m.msg.toUpperCase()); return; }   // e.g. dropped for a stalled connection
+          if (m.t === 'peek') {   // the answer for JOIN PARTY
+            if (m.ok && pendingJoin) reload(pendingJoin); else say((m.msg || 'No party with that code').toUpperCase());
+            pendingJoin = null;
+          }
           if (m.t === 'joined') {
             me = { slot: m.slot, creator: m.creator }; room = m.room;
-            if (m.creator) catching = false;   // (net=auto: the first one in creates the room)
-            $('code').textContent = room;
-            Module.rugbyRoom = room;   /* the game's ONLINE screens show it (runtime/core/ls_party.c) */
+            logLine('page: in room ' + room + ' as player ' + (m.slot + 1) + (m.creator ? ' (created it)' : ' (joining)'));
+            Module.rugbyRoom = room;   // the game's ONLINE screens show it (runtime/core/ls_party.c)
             Module.rugbyNet = net;
             play(['--net-session', m.slot + ',' + (m.creator ? 1 : 0)]);
             setInterval(() => send({ t: 'ping', ts: performance.now() }), 2000);
             send({ t: 'ping', ts: performance.now() });
           }
-          if (m.t === 'members') {
-            var before = members; members = m.players; render();
-            if (started && before.length) {
-              members.forEach(p => { if (p.slot !== me.slot && !before.find(b => b.slot === p.slot)) toast('A friend is joining your game…'); });
-              before.forEach(b => { if (b.slot !== me.slot && !members.find(p => p.slot === b.slot)) toast('Controller ' + (b.slot + 1) + ' left — unplugged.'); });
-              members.forEach(p => { var b = before.find(b => b.slot === p.slot); if (b && b.joining && !p.joining && p.slot !== me.slot) toast('A friend joined as controller ' + (p.slot + 1) + '.'); });
-            }
-          }
+          if (m.t === 'members') members = m.players;
+          if (m.t === 'granted') Module.rugbyGrant = m.from;   // catching up: the server's hints (netplay.c)
+          if (m.t === 'front') Module.rugbyFront = m.frame;
           if (m.t === 'pong') { var r = performance.now() - m.ts; rtt = rtt ? Math.round(rtt * 0.7 + r * 0.3) : Math.round(r); send({ t: 'rtt', rtt }); }
         };
       }
-      function render() {
-        var host = me.creator || !joinCode;
-        $('code-label').textContent = host ? 'Your code' : 'Game code';
-        $('code-hint').textContent = host ? 'Friends type this code in their game to play with you. Tell them early: joining takes longer the longer you have played.'
-                                          : 'Friends can join this game with this code too.';
-        $('join-box').hidden = !host; $('leave').hidden = host;
-        $('friends-btn').textContent = '🌐 Online · ' + members.length + '/4';
-        var pads = $('pads'); pads.innerHTML = '';
-        for (var k = 0; k < 4; k++) {
-          var p = members.find(p => p.slot === k), sp = document.createElement('span');
-          sp.className = (p ? 'on' : 'off') + (k === me.slot ? ' me' : '');
-          sp.textContent = '🎮 ' + (k + 1) + (k === me.slot ? ' (you)' : p && p.joining ? ' ' + (p.pct || 0) + '%' : '');
-          pads.appendChild(sp);
-        }
-      }
-      function joinFriend() {
-        var c = $('join-code').value.trim().toUpperCase();
-        if (c.length < 4) { $('join-code').focus(); return; }
-        if (c === room) { toast("That's your own code — give it to your friends."); return; }
-        sessionStorage.setItem('rugbyJoin', c); sessionStorage.removeItem('rugbyRetry');
-        location.replace(location.pathname + (LOG ? '?log' : ''));
-      }
-
-      $('friends-btn').onclick = () => { $('panel').hidden = !$('panel').hidden; if ($('panel').hidden) $('canvas').focus(); };
-      $('copy').onclick = () => navigator.clipboard.writeText(room).then(() => { $('copy').textContent = 'Copied ✓'; setTimeout(() => $('copy').textContent = 'Copy', 2000); });
-      $('join-btn').onclick = joinFriend;
-      $('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') joinFriend(); });
-      $('leave').onclick = ownGame;
-      // typing in the panel must not reach the game
-      ['keydown', 'keyup', 'keypress'].forEach(t => $('panel').addEventListener(t, e => { e.stopPropagation(); if (e.key === 'Escape' && t === 'keydown') { $('panel').hidden = true; $('canvas').focus(); } }));
-      $('canvas').addEventListener('mousedown', () => { $('panel').hidden = true; });
     </script>
     {{{ SCRIPT }}}
   </body>

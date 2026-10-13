@@ -33,6 +33,7 @@
 
 int rt_net;   /* a netplay session is running */
 int rt_ff;    /* fast-forward (catching up): no drawing, no sound */
+int rt_net_progress;   /* catching up: percent done (the game shows it: ui_badge.c) */
 net_state_t N = { .delay = 4, .my_from = -1 };
 
 rt_pad_t *rt_net_local_pad(void) { return &N.local; }
@@ -101,9 +102,9 @@ void net_handle(const uint8_t *m) {
     }
     case 'A':
         add_event(k, f, 1);
-        if (k == N.slot) {
+        if (k == N.slot) {   /* (the server may have told this game already: net_hint) */
             N.my_from = f;
-            N.next_send = f;
+            if (N.next_send < (int64_t)f) N.next_send = f;
         }
         break;
     case 'D':
@@ -168,15 +169,40 @@ static void go_offline(void) {
     net_tx_status(3, 0);
 }
 
+/* The server's hints to a game catching up (JSON, ahead of the stream it has not replayed yet): the frame
+   its slot plays from ("granted") and how far the others have sent inputs ("front"), so it can send idle
+   inputs that far and nobody waits for it. The page passes them on (net_tx_hints); natively they come
+   as text in the stream. */
+static void hint(int64_t grant, int64_t front) {
+    if (grant >= 0 && N.my_from < 0) {
+        N.my_from = grant;
+        if (N.next_send < grant) N.next_send = grant;
+        rt_trace("netplay: plays from frame %lld (told ahead)", (long long)grant);
+    }
+    if (front > N.front) N.front = front;
+}
+static void hint_json(const char *s, int n) {
+    char b[160];
+    snprintf(b, sizeof b, "%.*s", n < 159 ? n : 159, s);
+    const char *p;
+    if (strstr(b, "\"granted\"") && (p = strstr(b, "\"from\":"))) hint(atoll(p + 7), -1);
+    if (strstr(b, "\"front\"") && (p = strstr(b, "\"frame\":"))) hint(-1, atoll(p + 8));
+}
+
 void net_pump(int wait_ms) {
-    while (!N.offline && consume() && N.rx_n < (int)sizeof N.rx - (1 << 20) - 64) {   /* (room for an 'X') */
+    int64_t g, f;
+    if (net_tx_hints(&g, &f)) hint(g, f);
+    while (!N.offline) {
+        consume();   /* (it may stop at a message for a frame too far ahead: reading goes on, for the hints) */
+        if (N.rx_n >= (int)sizeof N.rx - (1 << 20) - 64) return;   /* (room for an 'X') */
         int n = net_tx_recv(N.rx + N.rx_n, (int)sizeof N.rx - N.rx_n, wait_ms);
         if (n < 0) {
             go_offline();
             return;
         }
         if (n == 0) return;
-        if (N.rx[N.rx_n] != '{') N.rx_n += n;   /* text (lobby JSON) is the page's business */
+        if (N.rx[N.rx_n] == '{') hint_json((const char *)N.rx + N.rx_n, n);   /* text: lobby JSON */
+        else N.rx_n += n;
         wait_ms = 0;
     }
 }

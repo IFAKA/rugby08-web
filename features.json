@@ -574,7 +574,7 @@
       ],
       "desc": "The ONLINE screens drive lockstep: CREATE PARTY shows this session's code and roster, JOIN PARTY reloads into the host's session with a catch-up screen, LEAVE PARTY back to an own game; 3 pages, identical frames and hashes.",
       "check": "/opt/homebrew/bin/python3 tools/net/ls_party_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ls.controls",

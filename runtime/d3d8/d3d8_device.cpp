@@ -160,7 +160,13 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     d3d8_debug_present(s->frame, (int)o->w, (int)o->h);   // runtime/debug/frames.cpp
     if (!rt_ff)
         plat_gl_swap(); // web: also yields the frame to the browser (platform/web); catching up: not shown nor paced
-    else if (s->frame % 16 == 0) plat_frame_yield(); // catching up (netplay): let the page breathe (input, network)
+    else if (s->frame % 16 == 0) {   // catching up (netplay): the joining screen, and the page breathes
+        const uint8_t *img;
+        if (ui_catchup((int)o->w, (int)o->h, &img)) {
+            d3d9w_overlay_draw(img, (int)o->w, (int)o->h, 1);
+            plat_gl_swap();
+        } else plat_frame_yield();
+    }
     return D3D_OK_;
 }
 

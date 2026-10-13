@@ -16,6 +16,8 @@
 //	-> {"t":"ping","ts":X}  <- {"t":"pong","ts":X}    -> {"t":"rtt","rtt":MS}
 //	-> {"t":"name","name":N}                          -> {"t":"progress","pct":P}  (catching up)
 //	<- {"t":"error","msg":M}
+//	-> {"t":"peek","room":C}  <- {"t":"peek","ok":bool[,"msg":M]}  (can C be joined?)
+//	-> {"t":"stall","slot":S}  a player's input stopped coming: the server drops it
 //
 // Game messages (binary, netplay.c): 'I' inputs and 'H' state hashes from each player and 'A' join
 // grants from the room's authority are logged and relayed in one order to everyone else; the server
@@ -47,9 +49,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const maxPlayers = 4
@@ -386,6 +391,7 @@ type request struct {
 	TS   any             `json:"ts"`
 	RTT  int             `json:"rtt"`
 	Pct  int             `json:"pct"`
+	Slot int             `json:"slot"`
 	To   *int            `json:"to"`
 	Data json.RawMessage `json:"data"`
 }
@@ -457,6 +463,30 @@ func (c *client) handle(req request) {
 			log.Printf("room %s: %s joins as player %d (log %d bytes)", r.code, c.name, slot+1, len(r.log))
 		}
 		r.members()
+	case "peek": // JOIN PARTY asks first: can that room be joined? (the page reloads into it only then)
+		r := rooms[strings.ToUpper(strings.TrimSpace(req.Room))]
+		free := false
+		for k := 0; r != nil && k < maxPlayers; k++ {
+			free = free || (r.slots[k] == nil && r.from[k] < 0)
+		}
+		switch {
+		case r == nil:
+			c.send(map[string]any{"t": "peek", "ok": false, "msg": "No party with that code"})
+		case !free:
+			c.send(map[string]any{"t": "peek", "ok": false, "msg": "Party full"})
+		default:
+			c.send(map[string]any{"t": "peek", "ok": true})
+		}
+	case "stall": // a player's input stopped coming: drop it so nobody waits (its game is told it left)
+		r := c.room
+		if r == nil || req.Slot < 0 || req.Slot >= maxPlayers || req.Slot == c.slot {
+			return
+		}
+		if p := r.slots[req.Slot]; p != nil && !r.pending[req.Slot] {
+			log.Printf("room %s: player %d stalled (reported by player %d): dropped", r.code, req.Slot+1, c.slot+1)
+			p.send(map[string]any{"t": "error", "msg": "Your connection was too slow: you left the game"})
+			p.conn.Close()
+		}
 	case "signal":
 		c.signal(req)
 	case "ping":
@@ -523,6 +553,9 @@ func (c *client) game(b []byte) {
 			}
 			if r.pending[k] {
 				r.pending[k], r.from[k] = false, f
+			}
+			if p := r.slots[k]; p != nil && !p.caughtUp { // told at once, ahead of the log it replays
+				p.send(map[string]any{"t": "granted", "from": f})
 			}
 		case 'S', 'F', 'K', 'P', 'E', 'Z', 'U', 'M', 'T', 'C', 'Y':
 			if k != c.slot {
@@ -631,7 +664,17 @@ func main() {
 	cert := flag.String("cert", "", "TLS certificate file (HTTPS; browsers allow the game's threads only on HTTPS or localhost)")
 	key := flag.String("key", "", "TLS private key file")
 	stun := flag.Int("stun", 0, "answer STUN on this UDP port (WebRTC peers behind NAT find their public address)")
+	go frontHints()
+	logDir := flag.String("logdir", "", "where the players' game logs go (default: DIR/../../logs/play)")
 	flag.Parse()
+	playLogDir = *logDir
+	if playLogDir == "" {
+		playLogDir = filepath.Join(*dir, "..", "..", "logs", "play")
+	}
+	if err := os.MkdirAll(playLogDir, 0o755); err != nil {
+		log.Printf("play logs off: %v", err)
+		playLogDir = ""
+	}
 	if *stun > 0 {
 		stunPort = *stun
 		go serveSTUN(net.JoinHostPort("", strconv.Itoa(*stun)))
@@ -645,6 +688,10 @@ func main() {
 				http.Error(w, "password required", http.StatusUnauthorized)
 				return
 			}
+		}
+		if r.URL.Path == "/log" { // the players' game logs (playlog.go)
+			servePlayLog(w, r)
+			return
 		}
 		if r.URL.Path == "/ws" {
 			serveWS(w, r)
@@ -661,4 +708,26 @@ func main() {
 		log.Fatal(http.ListenAndServeTLS(*addr, *cert, *key, handler))
 	}
 	log.Fatal(http.ListenAndServe(*addr, handler))
+}
+
+// frontHints: every 200 ms each game still catching up hears how far the others' inputs go ("front"), so
+// it can send idle inputs that far (runtime/core/netplay.c hint) and nobody waits for it.
+func frontHints() {
+	for range time.Tick(200 * time.Millisecond) {
+		roomsMu.Lock()
+		for _, r := range rooms {
+			front := int64(-1)
+			for k, p := range r.slots {
+				if p != nil && p.caughtUp && r.last[k] > front {
+					front = r.last[k]
+				}
+			}
+			for _, p := range r.slots {
+				if p != nil && !p.caughtUp && front >= 0 {
+					p.send(map[string]any{"t": "front", "frame": front})
+				}
+			}
+		}
+		roomsMu.Unlock()
+	}
 }

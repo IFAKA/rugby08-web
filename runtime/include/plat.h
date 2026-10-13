@@ -111,15 +111,16 @@ int rt_net_begin(int slot, int creator);
 extern int rt_net_cfg_delay; /* --net-delay D (net_join.c; 0: default) */
 extern const char *rt_net_room; /* --net-room CODE (net_join.c) */
 rt_pad_t *rt_net_local_pad(void);
-int rt_net_active(int k);
+int rt_net_active(int k);   /* lockstep: room slot k plays at the frame being resolved */
 int rt_net_slot(void);      /* lockstep: this player's room slot */
 int rt_net_external_source(void);                       /* net_external.c: this game reads its machine */
 void rt_net_external_put(const void *data, uint32_t len); /* ... and shares what it read */
 void rt_net_external_get(void *data, uint32_t len);     /* ... or gets the bytes another game read */
 const char *plat_session_code(void);      /* lockstep: this session's room code ("": none) */
 void plat_session_join(const char *code); /* lockstep: play in that room instead (the page reloads) */
-void plat_session_leave(void);
-/* lockstep: leave for a fresh own game (the page reloads) */ /* lockstep: room slot k plays at the frame being resolved */
+void plat_session_leave(void);           /* lockstep: leave for a fresh own game (the page reloads) */
+const char *plat_page_message(void);     /* a message for the game to show (the page: join errors...), or NULL */
+extern int rt_net_progress;              /* lockstep: catching up, percent done */
 /* Host-authoritative mode (runtime/core/net_ha.c, --net-mode ha) */
 extern int rt_net_ha; /* 1 host, 2 friend */
 int rt_net_begin_ha(int slot, int creator);
@@ -130,7 +131,9 @@ int net_tx_open(const char *url); /* 0 = connected */
 int net_tx_send(const void *data, int len, int text);
 void net_tx_close(void);
 int net_tx_recv(void *buf, int cap, int wait_ms); /* >0 length, 0 none, -1 closed */
-int net_tx_delay(void); /* this player's input delay in frames (0: no preference) */
+int net_tx_delay(void);
+int net_tx_hints(int64_t *grant, int64_t *front);
+/* lockstep: the server's hints the page holds (1: some) */ /* this player's input delay in frames (0: no preference) */
 void net_tx_status(int kind, int value); /* for the page: 0 running, 1 waiting for slot value,
                                                      2 catching up value %, 3 connection lost (offline) */
 

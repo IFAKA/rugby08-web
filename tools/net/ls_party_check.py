@@ -48,15 +48,40 @@ def create(host):
     return host.page.evaluate("Module.rugbyRoom || ''")
 
 
-def join(friend, code):
+def to_join(friend):
     for k in ("ArrowDown", "s"):
         friend.key(k)
     if not wait_screen(friend, ONLINE, 30):
         return "no ONLINE screen"
     friend.key("ArrowDown")
     friend.key("s", 3000)  # JOIN PARTY
-    if not wait_screen(friend, JOIN, 30):
-        return "no JOIN screen"
+    return None if wait_screen(friend, JOIN, 30) else "no JOIN screen"
+
+
+def type_code(friend, code):
+    for c in code:
+        friend.key(f"Key{c}" if c.isalpha() else f"Digit{c}", 400)
+
+
+def wrong_code(friend):
+    """A code nobody has: the game says so on its JOIN screen (no page message) and stays."""
+    err = to_join(friend)
+    if err:
+        return err
+    type_code(friend, "ZZZZZZ")
+    friend.key("Enter", 1000)
+    if not friend.wait("party toast NO PARTY WITH THAT CODE", 30):
+        return "a wrong code was not told in the game"
+    for _ in range(6):
+        friend.key("Backspace", 300)
+    return None
+
+
+def join(friend, code, on_join=False):
+    if not on_join:
+        err = to_join(friend)
+        if err:
+            return err
     for c in code:
         friend.key(f"Key{c}" if c.isalpha() else f"Digit{c}", 400)
     n = len(friend.lines)
@@ -80,8 +105,12 @@ def run(br, port, out):
         if not code:
             return "CREATE PARTY did not show the party screen with a code"
         out.append(f"host: party {code}")
+        err = wrong_code(friends[1])
+        if err:
+            return f"friend2: {err}"
+        out.append("friend2: a wrong code is told in the game")
         for f in friends:
-            r = join(f, code)
+            r = join(f, code, on_join=f is friends[1])
             out.append(f"{f.name}: {r}")
             if not r.startswith("caught up"):
                 return f"{f.name}: {r}"
@@ -89,8 +118,8 @@ def run(br, port, out):
             if screen(f.lines) != screen(host.lines):
                 return f"{f.name} shows screen {screen(f.lines)}, the host {screen(host.lines)}"
         host.page.wait_for_timeout(15000)
-        if not any(re.search(rf"party badge PARTY {code} 3/4", x) for x in host.lines):
-            return "the host's badge does not count 3 players"
+        if not host.wait("party toast PLAYER 3 JOINED", 30) or not host.wait("party toast PLAYER 2 JOINED", 1):
+            return "the host was not told in the game that players 2 and 3 joined"
         if not in_sync(players, out, "three players"):
             return "the three games are not in sync"
         f1 = friends[0]
@@ -110,7 +139,10 @@ def run(br, port, out):
     finally:
         for p in players:
             open(os.path.join(D, p.name + ".log"), "w").write("\n".join(p.lines))
-            p.page.screenshot(path=os.path.join(D, p.name + ".png"))
+            try:
+                p.page.screenshot(path=os.path.join(D, p.name + ".png"), timeout=10000)
+            except Exception as e:  # (a page that hangs must not hide the result)
+                out.append(f"{p.name}: no screenshot ({e.__class__.__name__})")
 
 
 def main():

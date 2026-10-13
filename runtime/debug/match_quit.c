@@ -51,7 +51,6 @@ void ms_quit_frame(uint32_t frame) {
     static float at = -2;
     static uint32_t rugby_done, last_vt;   /* the match (CRugby*) already quit; the Game's state */
     if (at == -2) at = getenv("RT_MS_QUIT_AT") ? (float)atof(getenv("RT_MS_QUIT_AT")) : -1;
-    if (at < 0) return;
     uint32_t g = rd32(GAME_PTR), st = g ? rd32(g + 0x90) : 0, vt = st ? rd32(st) : 0;
     if (vt != last_vt) rt_trace("ms: game state %08X at frame %u", vt, frame);
     static long pages = -2;   /* RT_DET_PAGES_MATCH=N: the page hashes N frames into the first match */
@@ -66,7 +65,8 @@ void ms_quit_frame(uint32_t frame) {
     if (screen != last_screen)
         rt_trace("ms: fe screen %08X (vt %08X, id %04X) at frame %u (match time %.2f)", screen,
                  screen ? rd32(screen) : 0, screen ? rd16(screen + 4) : 0, frame, (double)ms_time());
-    last_screen = screen;
+    last_screen = screen;   /* (the state and screen traces: always, every play log has them) */
+    if (at < 0) return;
     relaunch(frame, g, vt);
     uint32_t r = rd32(RUGBY_PTR);
     if (!ms_active() || r == rugby_done || ms_time() < at) return;

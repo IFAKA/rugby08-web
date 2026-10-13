@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +48,11 @@ int net_tx_open(const char *url) {   /* ws://host:port/path */
         return -1;
     }
     freeaddrinfo(ai);
+#ifdef SO_NOSIGPIPE   /* a server that closes the connection (a dropped player) must not kill the game */
+    int one = 1;
+    setsockopt(g_fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+#endif
+    signal(SIGPIPE, SIG_IGN);
     char req[512];
     int n = snprintf(req, sizeof req,
                      "GET %s HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
@@ -72,10 +78,15 @@ void net_tx_status(int kind, int value) {
     (void)value;
 }
 int net_tx_delay(void) { return 0; }
+int net_tx_hints(int64_t *grant, int64_t *front) {   /* natively they come as text in the stream */
+    *grant = *front = -1;
+    return 0;
+}
 /* The lockstep session's room: natively the --net-room code; joining and leaving are the page's. */
 const char *plat_session_code(void) { return rt_net_room ? rt_net_room : ""; }
 void plat_session_join(const char *code) { (void)code; }
 void plat_session_leave(void) {}
+const char *plat_page_message(void) { return NULL; }
 
 int net_tx_send(const void *data, int len, int text) {
     uint8_t h[14];

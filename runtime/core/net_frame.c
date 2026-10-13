@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static void check_hashes(uint32_t frame) {
     uint32_t k = (frame / NET_HASH_EVERY) % HRING;
@@ -51,12 +52,14 @@ static void read_local(uint32_t frame) {
 }
 
 /* One 'I' message: this player's pad for frame f, and (the host) its keyboard and mouse since the last. */
-static void send_input(int64_t f) {
+static void send_input(int64_t f, int idle) {
     plat_desk_ev_t d[NDESK];
-    int nd = N.slot == DESK_SLOT ? plat_desk_take(d, NDESK) : 0;
+    int nd = N.slot == DESK_SLOT && !idle ? plat_desk_take(d, NDESK) : 0;
+    rt_pad_t pad = N.local;
+    if (idle) memset(&pad, 0, sizeof pad), pad.spare = N.slot != DESK_SLOT;   /* plugged in, nothing pressed */
     uint8_t m[19 + 6 * NDESK] = { 'I', (uint8_t)N.slot };
     put32(m + 2, (uint32_t)f);
-    memcpy(m + 6, &N.local, sizeof N.local);
+    memcpy(m + 6, &pad, sizeof pad);
     m[18] = (uint8_t)nd;
     for (int i = 0; i < nd; i++) {
         uint8_t *e = m + 19 + 6 * i;
@@ -67,7 +70,12 @@ static void send_input(int64_t f) {
         e[4] = (uint8_t)d[i].y;
         e[5] = (uint8_t)((uint16_t)d[i].y >> 8);
     }
-    net_store_input(N.slot, (uint32_t)f, &N.local, nd, d);
+    if (!idle || f < (int64_t)N.frame + RING - 16) net_store_input(N.slot, (uint32_t)f, &pad, nd, d);
+    if (idle) {   /* (far ahead of this game's frame: stored when it gets there, wait_inputs) */
+        if (!N.idle_hi) N.idle_lo = f;
+        N.idle_hi = f;
+        N.idle_pad = pad;
+    }
     net_tx_send(m, 19 + 6 * nd, 0);
     N.next_send = f + 1;
 }
@@ -80,6 +88,8 @@ static void admit(uint32_t frame) {
         int64_t j = N.next_send;
         if ((int64_t)N.max_seen + 1 > j) j = (int64_t)N.max_seen + 1;
         if ((int64_t)frame + N.delay + 1 > j) j = (int64_t)frame + N.delay + 1;
+        /* a little ahead: the newcomer, told at once (net_hint), sends idle inputs while it catches up */
+        if ((int64_t)frame + 300 > j) j = (int64_t)frame + 300;
         net_send_grant(k, (uint32_t)j);
         net_handle((const uint8_t[6]){ 'A', (uint8_t)k, (uint8_t)j, (uint8_t)(j >> 8), (uint8_t)(j >> 16),
                                        (uint8_t)(j >> 24) });
@@ -108,12 +118,32 @@ static int missing(uint32_t frame) {   /* the first active player without an inp
     return -1;
 }
 
+static uint64_t wall_ms(void) {   /* (only to decide when to report a stall, never game state) */
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+}
+
+/* A player whose input stops coming would stop everyone: after STALL_MS the server is told, and it
+   drops that player (its 'D' reaches every game at the same frame; the AI takes over its player). */
+#define STALL_MS 3000
 static void wait_inputs(uint32_t frame) {
     uint32_t waited = 0;
+    uint64_t since = 0;
+    if (N.idle_hi && frame >= N.idle_lo && frame <= N.idle_hi && !net_have_input(N.slot, frame))
+        net_store_input(N.slot, frame, &N.idle_pad, 0, NULL);   /* the idle input sent while catching up */
     for (;;) {
         net_roster_at(frame);
         int who = missing(frame);
         if (who < 0 || N.offline) break;
+        if (!rt_ff && waited == 20) since = wall_ms();
+        if (since && wall_ms() - since > STALL_MS) {
+            char m[48];
+            int n = snprintf(m, sizeof m, "{\"t\":\"stall\",\"slot\":%d}", who);
+            net_tx_send(m, n, 1);
+            rt_trace("netplay: player %d stalled at frame %u: reported", who + 1, frame);
+            since = wall_ms();
+        }
         net_pump(waited ? 5 : 0);
         if (++waited == 20 && !rt_ff) net_tx_status(1, who);   /* ~0.1 s late: the page shows who we wait for */
         if (waited % 2000 == 0) rt_trace("netplay: waiting for player %d at frame %u", who + 1, frame);
@@ -154,7 +184,8 @@ static void catch_up(uint32_t frame) {
     int ff = !N.offline && (N.my_from < 0 || (int64_t)frame < N.my_from || N.max_seen > frame + 2u * N.delay + 60);
     if (ff && frame % 30 == 0) {
         uint32_t target = N.my_from > (int64_t)frame ? (uint32_t)N.my_from : N.max_seen;
-        net_tx_status(2, target > frame ? (int)((uint64_t)frame * 100 / target) : 99);
+        rt_net_progress = target > frame ? (int)((uint64_t)frame * 100 / target) : 99;
+        net_tx_status(2, rt_net_progress);
     }
     if (rt_ff && !ff) {
         rt_trace("netplay: caught up at frame %u", frame);
@@ -169,8 +200,13 @@ void net_frame(uint32_t frame) {
     N.frame = frame;
     read_local(frame);
     net_pump(0);
-    if (N.my_from >= 0 && !N.offline)   /* my input for every frame up to frame + delay, each once */
-        for (int64_t f = N.next_send; f <= (int64_t)frame + N.delay; f++) send_input(f);
+    if (N.my_from >= 0 && !N.offline) {   /* my input for every frame up to frame + delay, each once */
+        int64_t own = (int64_t)frame + N.delay, upto = own;
+        /* catching up: idle inputs as far as the others have gone, so nobody waits for this game */
+        if (rt_ff && (int64_t)N.max_seen + N.delay > upto) upto = (int64_t)N.max_seen + N.delay;
+        if (rt_ff && N.front + N.delay + 30 > upto) upto = N.front + N.delay + 30;
+        for (int64_t f = N.next_send; f <= upto; f++) send_input(f, f > own);
+    }
     if (N.auth && !N.offline) admit(frame);
     exchange_hash(frame);
     wait_inputs(frame);
