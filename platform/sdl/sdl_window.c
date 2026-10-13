@@ -90,12 +90,23 @@ void plat_window_move(int x, int y, int w, int h, int move, int size) {
         g_gy = y;
     }
     if (!g_win) return;
+#ifdef __EMSCRIPTEN__
+    /* The browser: the window is the canvas, sized by the device to its back buffer (plat_gl_set_size),
+       as a fullscreen mode is on Windows. The game's desktop-sized window (1920x1080, y CW_USEDEFAULT)
+       put the pointer in coordinates the game's 640x480 mouse clamps away: the cursor went astray. */
+    return;
+#endif
     if (size && w > 0 && h > 0) SDL_SetWindowSize(g_win, w, h);
     if (move) SDL_SetWindowPosition(g_win, x, y);
 }
 
 void plat_window_rect(int *x, int *y, int *w, int *h) {
     int px = 0, py = 0, pw = 800, ph = 600;
+#ifdef __EMSCRIPTEN__
+    /* The browser: the canvas, at the screen's origin, sized only by the game (its window, then its
+       device's back buffer): the same in every game of a party, so lockstep needs nothing else. */
+    if (g_win) SDL_GetWindowSize(g_win, &pw, &ph);
+#else
     if (det_on()) {
         px = g_gx;
         py = g_gy;
@@ -105,6 +116,7 @@ void plat_window_rect(int *x, int *y, int *w, int *h) {
         SDL_GetWindowPosition(g_win, &px, &py);
         SDL_GetWindowSize(g_win, &pw, &ph);
     }
+#endif
     if (x) *x = px;
     if (y) *y = py;
     if (w) *w = pw;

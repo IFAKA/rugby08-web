@@ -5,6 +5,7 @@
 #include <emscripten.h>
 #include <emscripten/html5.h>
 #include <GLES3/gl3.h>
+#include "plat.h"
 #include <cstdio>
 #include <cstdlib>
 #include <map>
