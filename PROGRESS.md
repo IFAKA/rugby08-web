@@ -475,3 +475,9 @@ Next: `./init.sh next` shows what to fix.
 - Cause: the canvas was resized to the 640x480 back buffer behind SDL's back, and the game's 1920x1080 desktop window (y CW_USEDEFAULT) kept the SDL window that size: the pointer came in 1920x1080 coordinates, the game's mouse clamps to 640x480 (cursor stuck in the top-left third); SetCursorPos got y = INT_MIN.
 - Fix (web only, native unchanged): the device sizes the window (plat_gl_set_size), plat_window_move leaves the canvas alone, plat_window_rect is (0,0, canvas) also in lockstep.
 - Proof: headless probe (pointer at 5 game points, 470x595 portrait page): cursor tip within 4 px of the pointer at all 5; clicks at 320,239 for the canvas centre (was 959,540).
+
+## 2026-10-14 — ls.joinview PASS: joining shows the party screen, "(YOU)" on each player's row (branch online-ha)
+- A joiner never sees a black screen: on JOIN PARTY accepted (server peek now gives the slot and players) its own game shows that party's screen with its row and a 0% bar; the page keeps a JPEG of it across the reload (platform/web/join_view.c, shell.html); while catching up the picture is drawn with the live bar, and once the replay is on the party screen its own frames are drawn (d3d8 ff_drawn: one frame in 16).
+- "(YOU)" on this player's roster row in every game. Learned: the FE text setter 0x83BAB0 frees/allocates in a block heap (0xAA2620) by length, so per-player text is lockstep-safe only if every game's row is as long and set at the same frames: rows padded to 24, setter driven by the shared text.
+- The front end is 640x480 drawn 4:3 centred in a 16:9 back buffer (overlay mapping in ui_badge.c catchup_row).
+- Next: rugby08-72's friend lobby view (ui_party_view.c) reuses catchup_row/backdrop; ls_party_check rerun on this build.

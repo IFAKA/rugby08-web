@@ -136,16 +136,18 @@ static uint32_t find(uint32_t head, int id) {
     return 0;
 }
 
-static void set_text(uint32_t screen, int id, const char *s) {
+/* A line's text: the game's setter runs when SHARED (what every game shows there) changes and writes S,
+   this game's own wording of it (as long: the game's string heap takes the same room in every game). */
+static void set_shown(uint32_t screen, int id, const char *shared, const char *s) {
     static uint32_t buf;
     static char last[FE_PARTY_LINES][64];
     static uint32_t last_screen;
     if (screen != last_screen) memset(last, 0, sizeof last), last_screen = screen;
-    if (id < 0 || id >= FE_PARTY_LINES || !strcmp(last[id], s)) return;
-    if (id == 2) rt_trace("ms: party status %s", s);
+    if (id < 0 || id >= FE_PARTY_LINES || !strcmp(last[id], shared)) return;
+    if (id >= 2) rt_trace(id == 2 ? "ms: party status %s" : "ms: party row %s", s);
     uint32_t w = find(screen + 0x10, INFO_WINDOW), b = w ? find(w + 0xA0, id) : 0;
     if (!b || (!buf && !(buf = gcalloc(64)))) return;
-    snprintf(last[id], sizeof last[id], "%s", s);
+    snprintf(last[id], sizeof last[id], "%s", shared);
     snprintf(G2H(buf), 64, "%s", s[0] ? s : " ");
     uint32_t sv = g_ecx;
     g_ecx = b + BTN_TEXT;
@@ -153,16 +155,37 @@ static void set_text(uint32_t screen, int id, const char *s) {
     g_ecx = sv;
 }
 
-static void ls_lines(uint32_t screen) {   /* lockstep: the code and the roster, the same in every game */
-    char l[64];
-    uint32_t mask = ls_members();
+static void set_text(uint32_t screen, int id, const char *s) { set_shown(screen, id, s, s); }
+
+/* JOIN PARTY accepted (lockstep): this game shows that party's screen until the page reloads into it
+   (platform/web/join_view.c); SLOT, PLAYERS, CODE (16) as the server said, when not NULL. */
+static int previewing(int *slot, uint32_t *players, char *code) {
+    int s;
+    uint32_t p;
+    char c[16];
+    return ls_on() && plat_join_preview(slot ? slot : &s, players ? players : &p, code ? code : c, 16);
+}
+
+int fe_party_joining(int *slot) { return previewing(slot, NULL, NULL); }
+
+/* lockstep: the code and the roster, the same in every game but for "(YOU)" on this player's row (also
+   while it catches up, before the session it replays has it). Rows padded alike in every game. */
+static void ls_lines(uint32_t screen) {
+    char l[64], all[64], mine[64], pc[16];
+    uint32_t mask = ls_members(), was;
+    int slot = rt_net_slot();
+    if (previewing(&slot, &was, pc)) mask = was | 1u << slot;   /* (before the reload: no game state shared) */
+    const char *code = previewing(NULL, NULL, NULL) ? pc : ls_code();
     set_text(screen, 0, " ");
-    set_text(screen, 1, ls_code()[0] ? ls_code() : "......");
-    set_text(screen, 2, ls_code()[0] ? "GIVE THIS CODE TO YOUR FRIENDS" : "PLAYING OFFLINE");
-    for (int k = 0; k < 4; k++) {
-        if (!(mask >> k & 1)) snprintf(l, sizeof l, "%d  WAITING...", k + 1);
-        else snprintf(l, sizeof l, "%d  PLAYER %d%s", k + 1, k + 1, k == 0 ? " (HOST)" : "");
-        set_text(screen, 3 + k, l);
+    set_text(screen, 1, code[0] ? code : "......");
+    set_text(screen, 2, code[0] ? "GIVE THIS CODE TO YOUR FRIENDS" : "PLAYING OFFLINE");
+    for (int k = 0; k < 4; k++) {   /* (the longest: "1  PLAYER 1 (HOST) (YOU)", 24) */
+        int in = mask >> k & 1, me = k == slot && (in || rt_ff);
+        snprintf(l, sizeof l, "PLAYER %d%s", k + 1, k == 0 ? " (HOST)" : "");
+        snprintf(all, sizeof all, "%d  %-21s", k + 1, in ? l : "WAITING...");
+        strcat(l, " (YOU)");
+        snprintf(mine, sizeof mine, "%d  %-21s", k + 1, l);
+        set_shown(screen, 3 + k, all, me ? mine : all);
     }
 }
 
@@ -210,7 +233,7 @@ void fe_party_present(uint32_t frame) {
     int id = rd16(screen + 4);
     static uint32_t asked;   /* the JOIN screen we already moved on from (the switch takes frames) */
     if (id == FE_SCR_JOIN) {
-        if (ui_lobby_state() == LOBBY_IN) {
+        if (ui_lobby_state() == LOBBY_IN || previewing(NULL, NULL, NULL)) {
             if (asked != screen) fe_go(FE_SCR_PARTY);
             asked = screen;
             return;
@@ -222,7 +245,11 @@ void fe_party_present(uint32_t frame) {
         set_text(screen, 0, " ");
         set_text(screen, 1, shown);
         set_text(screen, 2, g_status[0] ? g_status : "TYPE OR PICK YOUR FRIEND'S CODE");
-    } else if (id == FE_SCR_PARTY) party_lines(screen);
+    } else if (id == FE_SCR_PARTY) {
+        party_lines(screen);
+        static int settled;   /* the party being joined: its screen, once in place, is kept by the page */
+        if (previewing(NULL, NULL, NULL) && ++settled == 60) plat_join_snapshot();
+    }
 }
 
 /* The keyboard on JOIN PARTY: letters and digits of the code, Backspace (the game sees none of them). */

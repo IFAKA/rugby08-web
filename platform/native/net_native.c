@@ -86,6 +86,15 @@ int net_tx_hints(int64_t *grant, int64_t *front) {   /* natively they come as te
 const char *plat_session_code(void) { return rt_net_room ? rt_net_room : ""; }
 void plat_session_join(const char *code) { (void)code; }
 void plat_session_leave(void) {}
+int plat_join_preview(int *slot, uint32_t *players, char *code, int cap) {
+    (void)slot, (void)players, (void)code, (void)cap;
+    return 0;
+}
+void plat_join_snapshot(void) {}
+int plat_join_backdrop(uint8_t *rgba, int w, int h) {
+    (void)rgba, (void)w, (void)h;
+    return 0;
+}
 const char *plat_page_message(void) { return NULL; }
 
 int net_tx_send(const void *data, int len, int text) {

@@ -3,6 +3,7 @@
 // and answers Get* from the shadow.
 #pragma once
 #include "d3d8_int.hpp"
+#include "plat.h"
 #include <map>
 
 static_assert(sizeof(D3DMATRIX) == 64, "D3DMATRIX");
@@ -27,6 +28,7 @@ struct DevState {
     float psc[8][4] = {}; // pixel shader constants (ps.1.x: 8 registers)
     uint32_t pshader = 0; // SetPixelShader handle
     uint32_t frame = 0;
+    bool ff_drawn = false; // catching up (netplay): this frame is drawn all the same (ui_catchup shows it)
 };
 
 bool d3d8_pov_pre(const uint32_t *a); // d3d8_pov.cpp: this player's camera around a draw
@@ -34,6 +36,7 @@ void d3d8_pov_post(const uint32_t *a, bool set);
 
 static inline DevState *S(const uint32_t *a) { return d3d8_obj(a[0])->dev; }
 static inline IDirect3DDevice9 *D(const uint32_t *a) { return dev9(d3d8_obj(a[0])); }
+static inline bool hidden(const uint32_t *a) { return rt_ff && !S(a)->ff_drawn; }   // catching up: not drawn
 static inline void addref(uint32_t g) {
     if (g) {
         Obj *o = d3d8_obj(g);

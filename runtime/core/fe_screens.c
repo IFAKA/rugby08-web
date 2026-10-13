@@ -132,6 +132,19 @@ static void grid(fe_node *items, const fe_node *like) {   /* JOIN: the code's le
                       n + (j + 1) % 3, -1));
 }
 
+#define INFO_Y  112   /* the info lines' window: under the panel's logo */
+#define ITEMS_Y 252   /* the PARTY screen's buttons */
+static int line_y(int i) { return i < 2 ? 0 : i == 2 ? 34 : 54 + 20 * (i - 3); }
+
+/* Where the PARTY screen's info line I and its buttons are, in the front end's 640 x 480 (ui_badge.c). */
+void fe_party_layout(int i, int *x, int *y, int *buttons_y) {
+    fe_node *items = g_menu ? fe_find(g_menu, "Window", "0") : NULL;
+    const char *xp = items ? fe_get(items, "xPos") : NULL;
+    *x = xp ? atoi(xp) : 0;
+    *y = INFO_Y + line_y(i);
+    *buttons_y = ITEMS_Y;
+}
+
 /* Our screen id's XML (malloc'd), or NULL. */
 char *fe_party_screen_xml(int id, size_t *len) {
     if (!g_menu || (id != FE_SCR_ONLINE && id != FE_SCR_PARTY && id != FE_SCR_JOIN)) return NULL;
@@ -148,7 +161,7 @@ char *fe_party_screen_xml(int id, size_t *len) {
     items->child = NULL;
     fe_node *info = fe_add(s, items, fe_clone(items));   /* the info lines: a window of their own */
     fe_set(info, "ID", "3");
-    fe_set(info, "yPos", "112.000000");   /* under the panel's logo */
+    snprintf(v, sizeof v, "%d.000000", INFO_Y), fe_set(info, "yPos", v);
     g_back = id == FE_SCR_JOIN ? FE_SCR_ONLINE : FE_SCR_MAIN;
     const char *const *menu = fe_party_items(id);
     int n = 0;
@@ -157,13 +170,12 @@ char *fe_party_screen_xml(int id, size_t *len) {
         fe_set(items, "yPos", "168.000000");
         grid(items, play);
     } else {
-        fe_set(items, "yPos", id == FE_SCR_ONLINE ? "120.000000" : "252.000000");
+        snprintf(v, sizeof v, "%d.000000", id == FE_SCR_ONLINE ? 120 : ITEMS_Y), fe_set(items, "yPos", v);
         for (int i = 0; i < n; i++)
             fe_add(items, NULL, button(play, i, 0, STEP * i, 220, menu[i], (i + n - 1) % n, (i + 1) % n, i, i, i));
     }
     if (id != FE_SCR_ONLINE)
-        for (int i = 0; i < FE_PARTY_LINES; i++)
-            fe_add(info, NULL, line(play, i, i < 2 ? 0 : i == 2 ? 34 : 54 + 20 * (i - 3), i == 1 ? 28 : 16, " "));
+        for (int i = 0; i < FE_PARTY_LINES; i++) fe_add(info, NULL, line(play, i, line_y(i), i == 1 ? 28 : 16, " "));
     fe_free(play);
     g_back = 0;
     char *x = fe_to_xml(s, len);

@@ -11,6 +11,7 @@
 #include <string.h>
 
 static ui_image_t g_img;
+static void catchup_row(ui_image_t *im, int slot, int pct, const char *t);
 
 int ui_key(int sc, int down) { return fe_party_key(sc, down); }
 int ui_open(void) { return 0; }
@@ -47,12 +48,13 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     char you[32] = "", role[64] = "";   /* in a party: which player this is; the host's or a pauser's turn */
     int rk = ls ? ls_roles_banner(role, sizeof role) : 0;
     if (ls) snprintf(you, sizeof you, "YOU: PLAYER %d", rt_net_slot() + 1);
-    if (w <= 0 || h <= 0 || (!badge && !toast && !ls)) return 0;
+    int jslot, join = fe_party_joining(&jslot) && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY;
+    if (w <= 0 || h <= 0 || (!badge && !toast && !ls && !join)) return 0;
     static char last[256];
     char b[48], all[256];
     if (ls) snprintf(b, sizeof b, "PARTY %s %d/4", ls_code(), count(ls_members()));
     else snprintf(b, sizeof b, "PARTY %s %d/4", ui_lobby_code(), ui_lobby_members());
-    snprintf(all, sizeof all, "%s|%s|%s|%d%s", badge ? b : "", toast ? toast : "", you, rk, role);
+    snprintf(all, sizeof all, "%s|%s|%s|%d%s|%d", badge ? b : "", toast ? toast : "", you, rk, role, join);
     *changed = strcmp(all, last) != 0 || g_img.w != w || g_img.h != h;
     if (g_img.w != w || g_img.h != h) {
         free(g_img.px);
@@ -62,6 +64,7 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     if (*changed) {
         snprintf(last, sizeof last, "%s", all);
         memset(g_img.px, 0, (size_t)w * (size_t)h * 4);
+        if (join) catchup_row(&g_img, jslot, 0, "JOINING THE PARTY...");   /* until the page reloads */
         if (rk) {   /* another player's turn: the screen dimmed (or covered) and whose turn it is */
             ui_rect(&g_img, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xE8000000u : 0x90000000u);
             int sc = ui_text_width(role, 3) + 24 <= w - 16 ? 3 : 2;   /* (fits the screen) */
@@ -94,9 +97,45 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     return 1;
 }
 
+/* Joining, on the party screen (the game's own frame, or the page's picture of it): this player's row
+   filling up, the buttons covered by what is going on (front-end units: 640 x 480, drawn 4:3 centred). */
+static void catchup_row(ui_image_t *im, int slot, int pct, const char *t) {
+    int x0, y, by, sc = im->w >= 960 ? 3 : 2;
+    float k = (float)im->w * 3 < (float)im->h * 4 ? (float)im->w / 640.f : (float)im->h / 480.f;
+    float ox = ((float)im->w - 640.f * k) / 2, oy = ((float)im->h - 480.f * k) / 2;
+    fe_party_layout(3 + slot, &x0, &y, &by);
+    int bx = (int)(ox + (float)(x0 + 205) * k), bw = (int)(120.f * k), bh = (int)(8.f * k);
+    int ry = (int)(oy + (float)(y + 9) * k) - bh / 2;
+    char pc[8];
+    snprintf(pc, sizeof pc, "%d%%", pct);
+    ui_rect(im, bx - 2, ry - 2, bw + 4, bh + 4, UI_PANEL);
+    ui_rect(im, bx, ry, bw * pct / 100, bh, UI_GOLD);
+    ui_text(im, bx + bw + 8, ry + bh / 2 - 7 * sc / 2, sc, pc, UI_GOLD);
+    int px = (int)(ox + (float)(x0 - 8) * k), py = (int)(oy + (float)(by - 4) * k);
+    int pw = ui_text_width(t, sc) + 24, ph = (int)(48.f * k);
+    ui_rect(im, px, py, pw, ph, 0xF4000000u);
+    ui_text(im, px + 12, py + ph / 2 - 7 * sc / 2, sc, t, UI_GOLD);
+    rt_trace("ms: joining on the party screen %d%% %s", pct, t);
+}
+
+/* The page's picture of the party's screen, taken before the reload (platform/web/join_view.c), W x H:
+   NULL none (not joining from the game's JOIN PARTY, or not decoded yet). */
+static const uint32_t *backdrop(int w, int h) {
+    static ui_image_t bd;
+    static int ok;
+    if (bd.w != w || bd.h != h) {
+        free(bd.px);
+        bd = (ui_image_t){ w, h, malloc((size_t)w * (size_t)h * 4) };
+        ok = 0;
+    }
+    if (bd.px && !ok) ok = plat_join_backdrop((uint8_t *)bd.px, w, h);
+    return ok ? bd.px : NULL;
+}
+
 /* Joining a party: the game catches up with the party's session without drawing it (netplay.c); this
-   screen is drawn instead now and then, opaque, with how far it got. */
-int ui_catchup(int w, int h, const uint8_t **img) {
+   screen is shown now and then: over the party screen when the game is there (DRAWN), else opaque, with
+   how far it got. */
+int ui_catchup(int w, int h, int drawn, const uint8_t **img) {
     static ui_image_t im;
     static int last = -1;
     if (w <= 0 || h <= 0) return 0;
@@ -110,10 +149,21 @@ int ui_catchup(int w, int h, const uint8_t **img) {
        ends (as online sports games do), and is told so */
     uint32_t g = rd32(0x00A7ED28u), st = g ? rd32(g + 0x90) : 0;
     int match = st && rd32(st) == 0x008CC6F0u && rt_net_progress >= 90;
-    if (last != rt_net_progress + 1000 * match) {
+    const uint32_t *bd = drawn ? NULL : backdrop(w, h);
+    int key = rt_net_progress + 1000 * match + 2000 * drawn + 4000 * !!bd;
+    if (last != key) {
         char line[48];
-        last = rt_net_progress + 1000 * match;
-        ui_rect(&im, 0, 0, w, h, 0xFF000000u);
+        last = key;
+        *img = (const uint8_t *)im.px;
+        if (drawn || bd) {   /* the party's screen: the game's (drawn) or the page's picture of it */
+            if (bd) memcpy(im.px, bd, (size_t)w * (size_t)h * 4);
+            else memset(im.px, 0, (size_t)w * (size_t)h * 4);
+            catchup_row(&im, rt_net_slot(), rt_net_progress,
+                        match ? "THE PARTY IS IN A MATCH: YOU JOIN AFTER IT" : "CATCHING UP WITH THE PARTY...");
+            return 1;
+        }
+        ui_rect(&im, 0, 0, w, h, 0xFF000000u);   /* (no picture of the party's screen: a black one) */
+        rt_trace("ms: joining on a black screen %d%%", rt_net_progress);
         const char *t = "JOINING THE PARTY";
         ui_text(&im, (w - ui_text_width(t, 4)) / 2, h / 2 - 70, 4, t, UI_WHITE);
         if (match) rt_trace("ms: joining: the party is in a match");

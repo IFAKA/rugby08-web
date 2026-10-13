@@ -2,4 +2,6 @@
 
 `platform.c` arena (1 GiB), the per-frame yield to the browser (JSPI) · `shell.html` the page (emcc --shell-file)
 · `js/gamefs.js` Game Files as lazy chunks · `js/audio.js` AudioWorklet output · `js/errors.js` page errors.
+`net_web.c` the party's transport and room · `join_view.c` joining shows the party's screen from the start (a
+picture of it kept across the reload into the room, drawn while catching up).
 Served locally by `tools/serve.py` (COOP/COEP for SharedArrayBuffer). Nothing is deployed.

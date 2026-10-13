@@ -93,6 +93,7 @@
       function reload(join) {
         sessionStorage.removeItem('rugbyRetry');
         if (join) sessionStorage.setItem('rugbyJoin', join); else sessionStorage.removeItem('rugbyJoin');
+        if (!join) sessionStorage.removeItem('rugbyBackdrop');
         location.replace(location.pathname + location.search.replace(/([?&])room=[^&]*&?/, '$1').replace(/[?&]$/, ''));
       }
 
@@ -124,7 +125,7 @@
         // The game shows them itself (ui_badge.c); the server hears how far a joiner got.
         rugbyNetStatus(kind, value) {
           if (kind === 2) send({ t: 'progress', pct: value });
-          else if (kind === 0) { send({ t: 'progress', pct: 100 }); sessionStorage.removeItem('rugbyRetry'); }
+          else if (kind === 0) { send({ t: 'progress', pct: 100 }); sessionStorage.removeItem('rugbyRetry'); sessionStorage.removeItem('rugbyBackdrop'); }
           // offline: alone, play on; in a party, back to an own game (the party went on without this one)
           else if (kind === 3 && partyEver) { say('YOU LOST THE CONNECTION TO THE PARTY'); reload(''); }
           else if (kind === 3) say('CONNECTION LOST: YOU PLAY ON YOUR OWN');
@@ -148,6 +149,27 @@
         },
         rugbyLeave() { reload(''); },
       };
+      // Joining a party shows its party screen from the start (platform/web/join_view.c): JOIN PARTY accepted,
+      // the game draws that party's screen, the page keeps a picture of it (or reloads anyway after 4 s), and
+      // after the reload gives it back to the game while it catches up (and shows it while the page loads).
+      function preview(code, m) {
+        Module.rugbyPreview = { room: code, slot: m.slot | 0, players: m.players | 0 };
+        var go = setTimeout(() => reload(code), 4000);
+        Module.rugbySnapshot = () => {
+          Module.rugbySnapshot = null;
+          clearTimeout(go);
+          try { sessionStorage.setItem('rugbyBackdrop', $('canvas').toDataURL('image/jpeg', 0.85)); }
+          catch (e) { logLine('page: no picture of the party ' + e); }
+          reload(code);
+        };
+      }
+      var backdrop = joinCode && sessionStorage.getItem('rugbyBackdrop');
+      if (backdrop) {
+        Module.rugbyBackdrop = new Image();
+        Module.rugbyBackdrop.src = backdrop;
+        $('loading').textContent = '';
+        $('loading').style.background = '#000 url(' + backdrop + ') center / contain no-repeat';
+      }
       $('canvas').addEventListener('webglcontextlost', (e) => { e.preventDefault(); location.reload(); }, false);
 
       function play(args) {
@@ -183,7 +205,7 @@
           if (m.t === 'error' && !started) { say(m.msg.toUpperCase()); reload(''); return; }   // could not join: own game
           if (m.t === 'error') { say(m.msg.toUpperCase()); return; }   // e.g. dropped for a stalled connection
           if (m.t === 'peek') {   // the answer for JOIN PARTY
-            if (m.ok && pendingJoin) reload(pendingJoin); else say((m.msg || 'No party with that code').toUpperCase());
+            if (m.ok && pendingJoin) preview(pendingJoin, m); else say((m.msg || 'No party with that code').toUpperCase());
             pendingJoin = null;
           }
           if (m.t === 'joined') {

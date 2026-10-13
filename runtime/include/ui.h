@@ -25,7 +25,8 @@ typedef struct {
 void ui_text(ui_image_t *im, int x, int y, int scale, const char *s, uint32_t rgba);
 int ui_text_width(const char *s, int scale);
 void ui_rect(ui_image_t *im, int x, int y, int w, int h, uint32_t rgba);
-int ui_catchup(int w, int h, const uint8_t **img);   /* ui_badge.c: the joining screen (opaque) */
+int ui_catchup(int w, int h, int drawn,
+               const uint8_t **img); /* ui_badge.c: the joining screen (DRAWN: over the game) */
 
 /* ui_badge.c (the party's screens are the game's own: fe_party.c) */
 int ui_key(int scancode, int down);   /* 1: typing a party code took it (the game must not see it) */

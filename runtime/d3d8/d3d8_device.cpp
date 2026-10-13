@@ -142,15 +142,15 @@ HLE_D3D(IDirect3DDevice8, Reset) {
 HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     Obj *o = d3d8_obj(a[0]);
     DevState *s = o->dev;
-    if (!rt_ff)   // (RT_PIX: the game's picture, before the local overlays)
-        dev9(o)->Present(nullptr, nullptr, nullptr, nullptr), d3d8_debug_pixels(s->frame + 1, (int)o->w, (int)o->h);
+    const uint8_t *img;
+    int changed;
+    bool drawn = !rt_ff || s->ff_drawn;   // catching up: only the frames the joining screen shows the game in
+    if (drawn) dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
+    if (!rt_ff) d3d8_debug_pixels(s->frame + 1, (int)o->w, (int)o->h);   // (RT_PIX: before the local overlays)
     fe_party_present(s->frame);   // the party's screens (game state: also while catching up, lockstep)
-    {   // the in-game Online screens (runtime/core/ui_online.c), before screenshots see the frame
-        const uint8_t *img;
-        int changed;
-        if (!rt_ff && ui_present(s->frame, (int)o->w, (int)o->h, &img, &changed))
-            d3d9w_overlay_draw(img, (int)o->w, (int)o->h, changed);
-    }
+    // the party's overlays (runtime/core/ui_badge.c), before screenshots see the frame
+    if (!rt_ff && ui_present(s->frame, (int)o->w, (int)o->h, &img, &changed))
+        d3d9w_overlay_draw(img, (int)o->w, (int)o->h, changed);
     s->frame++;
     plat_replay_tick(s->frame);
     net_ha_present(s->frame);   // host-authoritative online play: friends' pads in, this player's out
@@ -163,12 +163,12 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     if (!rt_ff)
         plat_gl_swap(); // web: also yields the frame to the browser (platform/web); catching up: not shown nor paced
     else if (s->frame % 16 == 0) {   // catching up (netplay): the joining screen, and the page breathes
-        const uint8_t *img;
-        if (ui_catchup((int)o->w, (int)o->h, &img)) {
+        if (ui_catchup((int)o->w, (int)o->h, drawn, &img)) {
             d3d9w_overlay_draw(img, (int)o->w, (int)o->h, 1);
             plat_gl_swap();
         } else plat_frame_yield();
-    }
+    }   // the party screen, while catching up: the next frame shown is drawn (over it: the joining screen)
+    s->ff_drawn = rt_ff && (s->frame + 1) % 16 == 0 && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY;
     return D3D_OK_;
 }
 
@@ -241,7 +241,7 @@ HLE_D3D(IDirect3DDevice8, BeginScene) { return D(a)->BeginScene() == D3D_OK ? D3
 HLE_D3D(IDirect3DDevice8, EndScene) { return D(a)->EndScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_; }
 
 HLE_D3D(IDirect3DDevice8, Clear) { // (this, Count, D3DRECT*, Flags, Color, float Z, Stencil)
-    if (rt_ff) return D3D_OK_;
+    if (hidden(a)) return D3D_OK_;
     std::vector<D3DRECT> r(a[1]);
     for (uint32_t i = 0; i < a[1] && a[2]; i++) {
         uint32_t p = a[2] + 16 * i;
@@ -257,23 +257,23 @@ HLE_D3D(IDirect3DDevice8, Clear) { // (this, Count, D3DRECT*, Flags, Color, floa
 // ---- draws -----------------------------------------------------------------------------------
 // This player's camera: d3d8_pov.cpp (d3d8_pov_pre / d3d8_pov_post around each draw).
 HLE_D3D(IDirect3DDevice8, DrawPrimitive) {
-    bool p = !rt_ff && d3d8_pov_pre(a); // catching up (netplay): nothing is drawn
-    if (!rt_ff) D(a)->DrawPrimitive((D3DPRIMITIVETYPE)a[1], a[2], a[3]);
+    bool p = !hidden(a) && d3d8_pov_pre(a);
+    if (!hidden(a)) D(a)->DrawPrimitive((D3DPRIMITIVETYPE)a[1], a[2], a[3]);
     d3d8_pov_post(a, p);
     return D3D_OK_;
 }
 
 HLE_D3D(IDirect3DDevice8, DrawIndexedPrimitive) { // (this, type, minIndex, numVertices, startIndex, primCount)
-    bool p = !rt_ff && d3d8_pov_pre(a); // catching up (netplay): nothing is drawn
-    if (!rt_ff) D(a)->DrawIndexedPrimitive((D3DPRIMITIVETYPE)a[1], (INT)S(a)->base_vertex, a[2], a[3], a[4], a[5]);
+    bool p = !hidden(a) && d3d8_pov_pre(a);
+    if (!hidden(a)) D(a)->DrawIndexedPrimitive((D3DPRIMITIVETYPE)a[1], (INT)S(a)->base_vertex, a[2], a[3], a[4], a[5]);
     d3d8_pov_post(a, p);
     return D3D_OK_;
 }
 
 HLE_D3D(IDirect3DDevice8, DrawPrimitiveUP) { // (this, type, primCount, data, stride)
     DevState *s = S(a);
-    bool p = !rt_ff && d3d8_pov_pre(a); // catching up (netplay): nothing is drawn
-    if (!rt_ff) D(a)->DrawPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], G2H(a[3]), a[4]);
+    bool p = !hidden(a) && d3d8_pov_pre(a);
+    if (!hidden(a)) D(a)->DrawPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], G2H(a[3]), a[4]);
     d3d8_pov_post(a, p);
     release(s->stream[0]);
     s->stream[0] = 0;
@@ -284,8 +284,8 @@ HLE_D3D(IDirect3DDevice8, DrawPrimitiveUP) { // (this, type, primCount, data, st
 HLE_D3D(IDirect3DDevice8,
         DrawIndexedPrimitiveUP) { // (this, type, minIndex, numVerts, primCount, idx, idxFmt, verts, stride)
     DevState *s = S(a);
-    bool p = !rt_ff && d3d8_pov_pre(a); // catching up (netplay): nothing is drawn
-    if (!rt_ff)
+    bool p = !hidden(a) && d3d8_pov_pre(a);
+    if (!hidden(a))
         D(a)->DrawIndexedPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], a[3], a[4], G2H(a[5]), (D3DFORMAT)a[6], G2H(a[7]),
                                      a[8]);
     d3d8_pov_post(a, p);

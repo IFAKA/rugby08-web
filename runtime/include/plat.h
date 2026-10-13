@@ -120,6 +120,10 @@ void rt_net_external_get(void *data, uint32_t len);     /* ... or gets the bytes
 const char *plat_session_code(void);      /* lockstep: this session's room code ("": none) */
 void plat_session_join(const char *code); /* lockstep: play in that room instead (the page reloads) */
 void plat_session_leave(void);           /* lockstep: leave for a fresh own game (the page reloads) */
+/* joining a party: its screen from the start (platform/web/join_view.c; native: none) */
+int plat_join_preview(int *slot, uint32_t *players, char *code, int cap); /* 1: joining that room as SLOT */
+void plat_join_snapshot(void);                     /* the frame just drawn is that party's screen: keep it */
+int plat_join_backdrop(uint8_t *rgba, int w, int h); /* while catching up: the kept picture, W x H RGBA */
 const char *plat_page_message(void);     /* a message for the game to show (the page: join errors...), or NULL */
 extern int rt_net_progress;              /* lockstep: catching up, percent done */
 /* Host-authoritative mode (runtime/core/net_ha.c, --net-mode ha) */

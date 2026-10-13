@@ -606,6 +606,16 @@
       "notes": "2026-10-13: ok (Side vs Truck: 162 hashes equal, 97/100 pictures differ, the friend's Up runs within 35 degrees of its own look)."
     },
     {
+      "id": "ls.joinview",
+      "deps": [
+        "ls.party"
+      ],
+      "desc": "Joining shows the party screen, not a black one: while catching up the joiner's game draws the party screen now and then with its own row filling up (buttons covered: catching up); every game writes (YOU) on its own row (rows as long in every game, so the game's string heap stays alike); hashes equal.",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_joinview_check.py",
+      "passes": true,
+      "notes": "2026-10-14: ok (0% party view before the reload, picture then live frames while catching up, never black; 130 hashes equal)."
+    },
+    {
       "id": "ls.leave",
       "deps": [
         "ls.match"

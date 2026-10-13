@@ -16,7 +16,7 @@
 //	-> {"t":"ping","ts":X}  <- {"t":"pong","ts":X}    -> {"t":"rtt","rtt":MS}
 //	-> {"t":"name","name":N}                          -> {"t":"progress","pct":P}  (catching up)
 //	<- {"t":"error","msg":M}
-//	-> {"t":"peek","room":C}  <- {"t":"peek","ok":bool[,"msg":M]}  (can C be joined?)
+//	-> {"t":"peek","room":C}  <- {"t":"peek","ok":bool[,"msg":M][,"slot":S,"players":MASK]}  (can C be joined?)
 //	-> {"t":"stall","slot":S}  a player's input stopped coming: the server drops it
 //
 // Game messages (binary, netplay.c): 'I' inputs and 'H' state hashes from each player and 'A' join
@@ -474,9 +474,16 @@ func (c *client) handle(req request) {
 		r.members()
 	case "peek": // JOIN PARTY asks first: can that room be joined? (the page reloads into it only then)
 		r := rooms[strings.ToUpper(strings.TrimSpace(req.Room))]
-		free := false
+		free, slot, players := false, -1, 0 // the slot a join takes now (as "join" picks it), who plays there
 		for k := 0; r != nil && k < maxPlayers; k++ {
-			free = free || (r.slots[k] == nil && r.from[k] < 0)
+			open := r.slots[k] == nil && r.from[k] < 0
+			if open && slot < 0 {
+				slot = k
+			}
+			if !open {
+				players |= 1 << k
+			}
+			free = free || open
 		}
 		switch {
 		case r == nil:
@@ -486,7 +493,7 @@ func (c *client) handle(req request) {
 		case !free:
 			c.send(map[string]any{"t": "peek", "ok": false, "msg": "Party full"})
 		default:
-			c.send(map[string]any{"t": "peek", "ok": true})
+			c.send(map[string]any{"t": "peek", "ok": true, "slot": slot, "players": players})
 		}
 	case "stall": // a player's input stopped coming: drop it so nobody waits (its game is told it left)
 		r := c.room
