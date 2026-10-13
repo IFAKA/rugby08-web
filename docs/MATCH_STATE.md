@@ -124,10 +124,14 @@ controller+0x54. A friend re-applies the host's 16 floats after its own step
   does nothing. FUN_00575F90 is the menu's resume.
 
 ## Controllers: enumeration
-The game enumerates DirectInput devices once, at boot (frame 5: CPCControlMgr vf7 0x0081F1A0 -> FUN_0081F300
--> FUN_007ACD70 EnumDevices); controllers that appear later are not seen. Calling vf7 again from a Present
-hook crashed (null in FUN_00871EE0): not a safe rebuild. So the 4 virtual pads exist from boot (Team
-Select shows 3 idle pad icons; RT_PADS=N overrides).
+The game enumerates DirectInput devices once, at boot: CPCControlMgr's constructor (FUN_0081F110) runs
+INPUT_init FUN_00890B70 (EnumDevices, guarded to run once); vf7 0x0081F1A0 (`Enumerate(csv)`, boot call
+`vf7("data/controltypes.csv")`) only builds controller objects from that frozen device table
+(FUN_0081F300). Controllers that appear later are not seen; calling vf7 again from a Present hook
+crashed (strlen of its missing csv argument) and would duplicate controllers anyway. The game's own
+hot-plug signal is each controller's attached flag (CControl+0x2580): docs/PARTY_RESEARCH.md
+"Controller hot-plug". So the 4 virtual pads exist from boot (Team Select shows 3 idle pad icons;
+RT_PADS=N overrides).
 
 ## Controllers
 CRugbyTeam+0xC0..+0xCC CPlayerControl*[4] (one per human on that side, 0 = none).

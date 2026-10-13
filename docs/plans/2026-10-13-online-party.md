@@ -86,7 +86,7 @@ direct (one hop, no TCP head-of-line), then host input delay (equal feel), then 
   Unverified fix ideas from the investigation: `git stash list` → "freeze investigation (unverified)"
   (audio stall logging, short key taps remembered on slow pages). Find the root cause first.
 - **Phantom controllers**: `rt_pad_count()` defaults to 4 (runtime/core/pads.c) because the game
-  enumerates DirectInput once at boot (CPCControlMgr vf7 0x0081F1A0 → EnumDevices; calling vf7 again from
+  enumerates DirectInput once at boot (INPUT_init FUN_00890B70 → EnumDevices, once; calling CPCControlMgr vf7 again from
   Present crashed in FUN_00871EE0). Solo Team Select shows 3 idle pads; must go (pt.controllers). The
   reference checks pin RT_PADS=0.
 - Team Select assigns only controller entries 1..4 (FUN_0081A5A0); with the keyboard first a 4th player

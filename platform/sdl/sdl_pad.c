@@ -11,16 +11,19 @@
 #ifdef __EMSCRIPTEN__
 /* The browser: this player's held keys straight from the page (KeyboardEvent.code), not SDL's key
    state, which a page that got focus before SDL registered its handlers never updated (a friend's
-   keys did not reach its controller in 4 of 5 drop-in runs). Cleared when the page loses focus. */
+   keys did not reach its controller in 4 of 5 drop-in runs). Sampled once per frame, so a press is
+   also remembered until the next sample: a tap shorter than a frame (a slow page: two games in one
+   machine, a movie waiting for its data) still reaches the pad once. Cleared when the page loses focus. */
 // clang-format off
 EM_JS(int, js_key_held, (const char *code), {
     if (!Module.rtKeys) {
-        const k = Module.rtKeys = new Set();
-        addEventListener('keydown', e => k.add(e.code), true);
+        const k = Module.rtKeys = new Set(), t = Module.rtTaps = new Set();
+        addEventListener('keydown', e => { k.add(e.code); t.add(e.code); }, true);
         addEventListener('keyup', e => k.delete(e.code), true);
-        addEventListener('blur', () => k.clear());
+        addEventListener('blur', () => { k.clear(); t.clear(); });
     }
-    return document.hasFocus() && Module.rtKeys.has(UTF8ToString(code)) ? 1 : 0;
+    const c = UTF8ToString(code), tapped = Module.rtTaps.delete(c);
+    return document.hasFocus() && (Module.rtKeys.has(c) || tapped) ? 1 : 0;
 });
 // clang-format on
 static const char *web_code(SDL_Scancode sc) {

@@ -18,7 +18,7 @@ def main(port, code, out):
         br = p.chromium.launch(
             channel="chrome",
             headless=True,
-            args=["--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--mute-audio"],
+            args=["--mute-audio"],
         )
         page = br.new_page()
         page.on("console", lambda m: lines.append(m.text))

@@ -14,8 +14,10 @@ void rt_platform_init(int argc, char **argv) {
    it, wait for the display's next refresh at or near the slot (requestAnimationFrame: the frame is
    drawn and composited in step with the screen, at 60 Hz on 120 Hz screens too). Behind it (or
    ms <= 0), come back at once through a MessageChannel: emscripten_sleep(0) is a setTimeout, which
-   browsers stretch to 4 ms when nested, twice a frame before. A hidden tab gets no animation
-   frames: a timer keeps its game (and its friends' netplay) running. */
+   browsers stretch to 4 ms when nested, twice a frame before. A hidden tab (another tab in front, a
+   minimized window) gets no animation frames and its timers fire once a second or less: a worker's
+   timer paces it instead (browsers throttle neither a worker's timers nor its messages), so the game
+   and a party's match keep their pace with the page out of view. */
 // clang-format off
 EM_ASYNC_JS(void, js_frame_wait, (double ms), {
     if (!Module.rtYield) {
@@ -25,6 +27,13 @@ EM_ASYNC_JS(void, js_frame_wait, (double ms), {
                                   q.push(r);
                                   ch.port2.postMessage(0);
                               });
+        const src = 'onmessage = e => setTimeout(() => postMessage(0), e.data)', tq = [];
+        const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+        w.onmessage = () => tq.shift()();
+        Module.rtTimer = ms => new Promise(r => {
+                                   tq.push(r);
+                                   w.postMessage(ms);
+                               });
     }
     if (ms < 1) {
         await Module.rtYield();
@@ -32,7 +41,7 @@ EM_ASYNC_JS(void, js_frame_wait, (double ms), {
     }
     const due = performance.now() + ms;   /* (emscripten_get_now counts from another origin with threads) */
     if (document.hidden) {
-        await new Promise(r => setTimeout(r, due - performance.now()));
+        await Module.rtTimer(due - performance.now());
         return;
     }
     while (performance.now() < due - 4) await new Promise(r => requestAnimationFrame(r));

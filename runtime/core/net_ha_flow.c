@@ -31,6 +31,8 @@
 #define VT_CUTSCENE 0x008CD20Cu
 #define FE_PTR      0x013834E8u   /* the front end: +4 its current screen, whose +4 is the screen id */
 #define SCR_PAUSED  0x0071u
+#define SCR_TITLE   0x0002u   /* "Click to Continue": the menus' packages are not loaded yet */
+#define G_QUEUED    0x94u     /* Game+0x8C is its state machine: +8 a queued state (the launch's busy test) */
 #define SC_ESCAPE   41        /* SDL scancode */
 
 static uint8_t g_setup[MS_SETUP_BYTES];
@@ -122,9 +124,14 @@ static void friend_step(uint32_t frame, uint32_t vt) {
         if (g_launch && vt == VT_BACKEND) g_launch = g_tried = 0;   /* in: done */
         return;
     }
+    /* The game launches only from its menus: from the title screen the loading state's package
+       unload later reads names that were never set (wasm out-of-bounds in stricmp, measured). And a
+       launch under way (a queued state: the front end plays its way out first) is not repeated. */
+    uint32_t game = rd32(GAME_PTR), fe = rd32(FE_PTR), screen = fe ? rd32(fe + 4) : 0;
+    if (!game || !screen || rd16(screen + 4) == SCR_TITLE || rd32(game + G_QUEUED)) return;
     rt_trace("ms: flow frame %u: joining the host's match", frame);
     ms_setup_offer(g_setup);
-    uint32_t game = rd32(GAME_PTR), zero = 0, sv = g_ecx;
+    uint32_t zero = 0, sv = g_ecx;
     g_ecx = game;
     guest_callv(0x004049C0u, 1, &zero);
     g_ecx = sv;

@@ -493,7 +493,7 @@
       ],
       "desc": "The game keeps running when its tab is not visible (it stops today: requestAnimationFrame pacing, user-observed), so the host switching tabs never stops a party's match; the automated browser tests (background pages) become reliable. Pass: a background tab keeps running; two pages, menus into a match, 10 minutes, no freeze.",
       "check": "/opt/homebrew/bin/python3 tools/net/web_soak.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.research",

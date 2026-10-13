@@ -80,17 +80,21 @@ static void *pacer(void *arg) {
 
 #ifdef __EMSCRIPTEN__
 /* Browser output: the mixer runs on the pacer thread (never on the busy main thread) and writes
- * into a ring in shared memory; an AudioWorklet drains it. ctl: [0] frames written, [1] frames
- * read, [2] 1 once the AudioContext is running (browsers keep it suspended until a user gesture;
- * until then the pacer runs on the wall clock, as the headless pacer does; also while a running
- * context drains nothing). */
+ * into a ring in shared memory; an AudioWorklet drains it (js/audio.js). ctl: [0] frames written,
+ * [1] frames read (only the worklet writes it), [2] 1 once the AudioContext is running (browsers keep
+ * it suspended until a user gesture; until then the pacer runs on the wall clock, as the headless
+ * pacer does; also while a running context drains nothing). Whatever was written while nobody read
+ * (seconds before the first click) is dropped by the worklet, not played: draining it at the
+ * device's pace would hold DirectSound's play cursor still for as long, and the game restores a
+ * device whose cursor does not move, over and over until its COM objects run out. */
 #include <emscripten.h>
 enum { RING_FRAMES = 16384, RING_TARGET = 3072 };
 static float g_ring[RING_FRAMES * 2];
 static int32_t g_ctl[4];
 
 static void web_audio_init(void) {
-    MAIN_THREAD_ASYNC_EM_ASM(Module.rtAudioInit($0, $1, $2, $3), g_ring, RING_FRAMES, g_ctl, PLAT_AUDIO_RATE);
+    MAIN_THREAD_ASYNC_EM_ASM(Module.rtAudioInit($0, $1, $2, $3, $4), g_ring, RING_FRAMES, g_ctl, PLAT_AUDIO_RATE,
+                             RING_TARGET);
 }
 
 static void web_pacer(void) {
@@ -99,17 +103,19 @@ static void web_pacer(void) {
     uint64_t due = SDL_GetPerformanceCounter(), hz = SDL_GetPerformanceFrequency();
     int32_t last_rd = -1;
     uint64_t rd_moved = due;
+    int was_stalled = 0;
     for (;;) {
         int running = __atomic_load_n(&g_ctl[2], __ATOMIC_ACQUIRE);
         int32_t wr = __atomic_load_n(&g_ctl[0], __ATOMIC_ACQUIRE), rd = __atomic_load_n(&g_ctl[1], __ATOMIC_ACQUIRE);
         uint64_t t_now = SDL_GetPerformanceCounter();
         if (rd != last_rd) last_rd = rd, rd_moved = t_now;
         /* a context that says it runs but drains nothing (muted headless pages, a busy machine, an audio
-           device going away) must not stop the game's sound clock: DirectSound's play cursor would
-           freeze and the game would restore its device over and over. Then the wall clock paces, and the
-           pacer drains the ring itself until the worklet reads again. */
-        if (running && t_now - rd_moved > hz / 4) running = 0;
-        if (running && wr - rd >= RING_TARGET) {      /* the device clock paces the mixer */
+           device going away) must not stop the game's sound clock either: the wall clock paces then */
+        int stalled = running && t_now - rd_moved > hz / 4;
+        if (stalled != was_stalled)
+            rt_log("audio: the browser's output %s", stalled ? "drains nothing: the wall clock paces" : "drains again");
+        was_stalled = stalled;
+        if (running && !stalled && wr - rd >= RING_TARGET) {   /* the device clock paces the mixer */
             struct timespec t = { 0, 2000000 };
             nanosleep(&t, NULL);
             due = SDL_GetPerformanceCounter();
@@ -122,9 +128,7 @@ static void web_pacer(void) {
             g_ring[j + 1] = buf[2 * i + 1];
         }
         __atomic_store_n(&g_ctl[0], wr + BLOCK, __ATOMIC_RELEASE);
-        if (running) continue;
-        if (__atomic_load_n(&g_ctl[2], __ATOMIC_ACQUIRE) && wr + BLOCK - rd > RING_TARGET)   /* stalled sink */
-            __atomic_store_n(&g_ctl[1], wr + BLOCK - RING_TARGET, __ATOMIC_RELEASE);
+        if (running && !stalled) continue;
         due += hz * BLOCK / PLAT_AUDIO_RATE;
         uint64_t now = SDL_GetPerformanceCounter();
         if (due > now) {

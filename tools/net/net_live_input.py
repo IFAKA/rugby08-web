@@ -29,7 +29,7 @@ try:
         br = p.chromium.launch(
             channel="chrome",
             headless=True,
-            args=["--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--mute-audio"],
+            args=["--mute-audio"],
         )
         pages = []
         for i in range(2):
