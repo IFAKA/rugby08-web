@@ -520,7 +520,7 @@
       ],
       "desc": "Party traffic over WebRTC data channels between browsers (frames unordered/unreliable, setup and flow reliable); the server only signals and relays as fallback; latency measured.",
       "check": "/opt/homebrew/bin/python3 tools/net/party_webrtc_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.menu",

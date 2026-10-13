@@ -44,6 +44,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -369,13 +370,15 @@ func (r *room) setAuth() {
 }
 
 type request struct {
-	T    string `json:"t"`
-	Room string `json:"room"`
-	Name string `json:"name"`
-	Auto bool   `json:"auto"`
-	TS   any    `json:"ts"`
-	RTT  int    `json:"rtt"`
-	Pct  int    `json:"pct"`
+	T    string          `json:"t"`
+	Room string          `json:"room"`
+	Name string          `json:"name"`
+	Auto bool            `json:"auto"`
+	TS   any             `json:"ts"`
+	RTT  int             `json:"rtt"`
+	Pct  int             `json:"pct"`
+	To   *int            `json:"to"`
+	Data json.RawMessage `json:"data"`
 }
 
 func cleanName(n string, slot int) string {
@@ -432,7 +435,7 @@ func (c *client) handle(req request) {
 		}
 		c.room, c.slot, c.name, c.caughtUp = r, slot, cleanName(req.Name, slot), creator
 		r.slots[slot] = c
-		c.send(map[string]any{"t": "joined", "room": r.code, "slot": slot, "creator": creator})
+		c.send(map[string]any{"t": "joined", "room": r.code, "slot": slot, "creator": creator, "stun": stunPort})
 		if !creator {
 			r.dump(c)
 			r.dumpHA(c)
@@ -445,6 +448,8 @@ func (c *client) handle(req request) {
 			log.Printf("room %s: %s joins as player %d (log %d bytes)", r.code, c.name, slot+1, len(r.log))
 		}
 		r.members()
+	case "signal":
+		c.signal(req)
 	case "ping":
 		c.send(map[string]any{"t": "pong", "ts": req.TS})
 	case "rtt":
@@ -599,7 +604,12 @@ func main() {
 	password := flag.String("password", "", "require this password (HTTP basic auth, any user name)")
 	cert := flag.String("cert", "", "TLS certificate file (HTTPS; browsers allow the game's threads only on HTTPS or localhost)")
 	key := flag.String("key", "", "TLS private key file")
+	stun := flag.Int("stun", 0, "answer STUN on this UDP port (WebRTC peers behind NAT find their public address)")
 	flag.Parse()
+	if *stun > 0 {
+		stunPort = *stun
+		go serveSTUN(net.JoinHostPort("", strconv.Itoa(*stun)))
+	}
 	files := http.FileServer(http.Dir(*dir))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if *password != "" {

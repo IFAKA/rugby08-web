@@ -148,9 +148,9 @@ if(EMSCRIPTEN)
     -sSUPPORT_LONGJMP=wasm -fwasm-exceptions
     --profiling-funcs   # function names in the wasm: a crash's stack names the guest function
     --pre-js=${ROOT}/platform/web/js/gamefs.js --pre-js=${ROOT}/platform/web/js/audio.js
-    --pre-js=${ROOT}/platform/web/js/errors.js --shell-file=${ROOT}/platform/web/shell.html
+    --pre-js=${ROOT}/platform/web/js/errors.js --pre-js=${ROOT}/platform/web/js/rtc.js --shell-file=${ROOT}/platform/web/shell.html
     --preload-file=${ROOT}/Rugby08_unpacked.exe@/Rugby08_unpacked.exe)
-  set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/js/gamefs.js ${ROOT}/platform/web/js/audio.js
+  set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/js/gamefs.js ${ROOT}/platform/web/js/audio.js ${ROOT}/platform/web/js/rtc.js
     ${ROOT}/platform/web/js/errors.js ${ROOT}/platform/web/shell.html)
   add_custom_command(TARGET rugby08 POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:rugby08>/rugby08.html $<TARGET_FILE_DIR:rugby08>/index.html)
 endif()

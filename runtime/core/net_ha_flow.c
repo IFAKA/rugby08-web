@@ -145,7 +145,7 @@ void net_ha_flow_present(uint32_t frame) {
     uint32_t vt = state_vt();
     if (rt_net_ha == 1 && last == VT_BACKEND && vt != VT_BACKEND) {
         rt_trace("ms: flow frame %u: match over", frame);
-        net_ha_send('E', frame, NULL, 0);
+        net_ha_send_end(frame);
     }
     if (rt_net_ha == 2) friend_step(frame, vt);
     pause_step(frame);

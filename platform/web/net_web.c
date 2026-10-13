@@ -1,5 +1,6 @@
-/* net_web.c -- netplay transport (plat.h net_tx_*) in the browser: the lobby (platform/web/shell.html)
- * owns the WebSocket (Module.rugbyNet); the game sends through it and drains its message queue. The
+/* net_web.c -- netplay transport (plat.h net_tx_*) in the browser: the WebSocket (Module.rugbyNet) to the
+ * page's server, and for a party's game messages the peer-to-peer data channels (js/rtc.js) when they
+ * are open; the game sends through them and drains one message queue. The
  * game loop runs on the page's main thread under JSPI, so waiting is emscripten_sleep (the browser
  * delivers WebSocket messages meanwhile). */
 #include "plat.h"
@@ -10,6 +11,8 @@ EM_JS(int, js_net_send, (const void *p, int n, int text), {
     var net = Module.rugbyNet;
     if (!net || net.closed) return -1;
     var bytes = HEAPU8.slice(p, p + n);
+    if (!text && Module.rtc && Module.rtc.send(bytes)) return 0;   /* peer to peer (js/rtc.js) */
+    if (!text && Module.rtc) Module.rtc.stats.ws++;
     net.ws.send(text ? new TextDecoder().decode(bytes) : bytes);
     return 0;
 });
@@ -37,6 +40,11 @@ EM_JS(void, js_net_connect, (void), {
     ws.onopen = () => { net.open = true; };
     ws.onclose = () => { net.closed = true; };
     ws.onmessage = (ev) => {
+        if (typeof ev.data === 'string' && Module.rtc) {   /* lobby JSON: the peer layer reads it first */
+            try {
+                if (Module.rtc.text(JSON.parse(ev.data))) return;
+            } catch (e) {}
+        }
         net.queue.push(typeof ev.data === 'string' ? new TextEncoder().encode(ev.data) : new Uint8Array(ev.data));
     };
     Module.rugbyNet = net;
@@ -46,6 +54,7 @@ EM_JS(int, js_net_ready, (void), {
     return !net || net.closed ? -1 : net.open ? 1 : 0;
 });
 EM_JS(void, js_net_close, (void), {
+    if (Module.rtc) Module.rtc.leave();
     if (Module.rugbyNet && Module.rugbyNet.ws) Module.rugbyNet.ws.close();
     Module.rugbyNet = null;
 });
