@@ -37,7 +37,7 @@
 int rt_net;   /* a netplay session is running */
 int rt_ff;    /* fast-forward (catching up): no drawing, no sound */
 int rt_net_progress;   /* catching up: percent done (the game shows it: ui_badge.c) */
-net_state_t N = { .delay = 4, .my_from = -1, .since = -1 };
+net_state_t N = { .delay = 4, .my_from = -1, .since = -1, .slack_min = 1 << 30 };
 
 rt_pad_t *rt_net_local_pad(void) { return &N.local; }
 int rt_net_slot(void) { return N.slot; }
@@ -96,6 +96,8 @@ void net_handle(const uint8_t *m) {
         }
         net_store_input(k, f, &p, nd, d);
         if (f > N.max_seen) N.max_seen = f;
+        if (k != N.slot && N.joined && !rt_ff && (int32_t)(f - N.frame) < N.slack_min)
+            N.slack_min = (int32_t)(f - N.frame);   /* (how early it came: net_frame.c tunes the delay) */
         break;
     }
     case 'H': {

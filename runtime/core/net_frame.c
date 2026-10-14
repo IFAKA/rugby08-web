@@ -54,8 +54,8 @@ static void read_local(uint32_t frame) {
                  N.local.ly);
         last = N.local;
     }
-    int d = net_tx_delay();
-    if (d > 0) N.delay = d > 60 ? 60 : d;
+    int d = net_tx_delay();   /* the page's estimate from its pings, less what the inputs show is spare */
+    if (d > 0) N.delay = d - N.cut < 2 ? 2 : d - N.cut > 60 ? 60 : d - N.cut;
 }
 
 /* One 'I' message: this player's pad for frame f, and (the host) its keyboard and mouse since the last. */
@@ -223,6 +223,19 @@ static void catch_up(uint32_t frame) {
     rt_ff = ff;
 }
 
+/* The input delay, as lockstep games tune it: the others' inputs arriving 3+ frames before they are needed
+   for a whole window (10 s) means a frame of delay to spare (the trips are alike both ways, and every game
+   tunes alike); any wait gives one back at once. From the page's estimate down to that. */
+static void tune_delay(uint32_t frame) {
+    int was = N.cut;
+    if (N.stalls && N.cut > 0) N.cut--;
+    else if (!N.stalls && N.slack_min != 1 << 30 && N.slack_min >= 3 && N.delay > 2) N.cut++;
+    if (N.cut != was)
+        rt_trace("netplay: input delay %s at frame %u (the others' inputs %d frames early at least, %u waits)",
+                 N.cut > was ? "down a frame" : "up a frame", frame, N.slack_min, N.stalls);
+    N.slack_min = 1 << 30;
+}
+
 /* det_frame hook: runs first at every Present. */
 void net_frame(uint32_t frame) {
     fault_inject(frame);
@@ -250,6 +263,7 @@ void net_frame(uint32_t frame) {
     if (frame % 600 == 0 && !rt_ff && !N.offline) {   /* (checks: tools/net/ls_lag_check.py) */
         rt_trace("netplay: pace at frame %u: delay %d inputs first by peer %u by relay %u stalls %u", frame, N.delay,
                  N.by_peer, N.by_relay, N.stalls);
+        tune_delay(frame);
         N.by_peer = N.by_relay = N.stalls = 0;
     }
 }

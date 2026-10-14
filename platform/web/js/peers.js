@@ -143,7 +143,7 @@ Module.peers = (function () {
     for (const s of P.members) {
       const c = P.conns[s];
       if (!c || !c.open || c.rtt === undefined) return null;
-      worst = Math.max(worst, c.rtt / 2 + 2 * c.jit);
+      worst = Math.max(worst, c.rtt / 2 + c.jit); // (the trip and one jitter: the pings already count each page's wait to be handled)
     }
     return P.members.length ? worst : null;
   };

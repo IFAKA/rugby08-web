@@ -44,6 +44,7 @@ typedef struct {
     uint32_t max_seen, frame;         /* highest input frame received; frame being resolved */
     int64_t front;                    /* the server's hint: the others' inputs reach this frame */
     uint32_t by_peer, by_relay, stalls; /* inputs that came first peer to peer / by the relay; frames waited */
+    int slack_min, cut;               /* the others' inputs: fewest frames early this window; frames off the delay */
     int64_t idle_lo, idle_hi;         /* catching up: idle inputs sent for these frames (beyond the ring) */
     rt_pad_t idle_pad;
     uint8_t want[RT_MAX_PADS];        /* join requests to grant (authority) */
