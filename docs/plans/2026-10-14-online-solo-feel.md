@@ -72,3 +72,7 @@ Local only; the user deploys the web app later.
   protected getter, from FUN_006E8500 / FUN_006E8180, watchpoint). Switched off (RT_OWN_END=1 in checks
   only) until ls.own_view passes. Next: RT_MS_CAMWRITES in a party with the cameras apart, and the WebGL
   errors.
+- DONE 2026-10-14: rule 1 (ls.own_view PASS) drawn only; the one-frame "HUD" picture difference was the
+  previous frame's "YOU: PLAYER N" overlay left in the back buffer where the game did not draw again
+  (RT_PIX_STRIP): overlay.cpp keeps the game's frame under the overlay and puts it back after the swap.
+  ls.match, ls.cursor PASS.

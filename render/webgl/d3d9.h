@@ -648,5 +648,6 @@ extern "C" void d3d9w_trace_draws(int on);
 extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t);
 // overlay.cpp: an RGBA image (w x h, the back buffer's size) over the finished frame; changed: re-upload
 extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int changed);
+extern "C" void d3d9w_overlay_undo(void);   // after the swap: the game's frame back under the overlay
 // overlay.cpp: the finished frame before the overlay, RGBA top row first (w x h); 1 if read
 extern "C" int d3d9w_frame_read(unsigned char *rgba, int w, int h);

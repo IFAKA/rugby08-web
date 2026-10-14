@@ -2,16 +2,22 @@
 // at Present (the in-game Online screens, runtime/core/ui_online.c). One texture, uploaded only when the
 // image changed, one quad over the whole back buffer, alpha-blended into the default framebuffer. Every
 // piece of GL state it touches is saved and restored, so the renderer's caches (internal.h) stay true.
+// The frame under the overlay is kept (one texture copy) and put back once the frame is shown
+// (d3d9w_overlay_undo): the back buffer holds the game's drawing only, so where the game does not draw
+// again next frame no overlay is left in it (the picture checks, RT_PIX, and the party view's picture
+// compare the game's drawing; measured: "YOU: PLAYER N" in one frame's picture).
 #include "internal.h"
 
-static GLuint g_ov_prog, g_ov_vao, g_ov_vbo, g_ov_tex;
-static GLint g_ov_u_tex = -1;
+static GLuint g_ov_prog, g_ov_vao, g_ov_vbo, g_ov_tex, g_under_tex;
+static GLint g_ov_u_tex = -1, g_ov_u_y = -1;
+static int g_under_w, g_under_h, g_under_kept;
 static int g_ov_w, g_ov_h;
 
 static const char *k_ov_vs = "#version 300 es\n"
                              "layout(location = 0) in vec2 a_p;\n"
                              "out vec2 v_uv;\n"
-                             "void main() { v_uv = vec2(a_p.x * 0.5 + 0.5, 0.5 - a_p.y * 0.5);"
+                             "uniform float u_y;\n"   // 1: an image, top row first; -1: a framebuffer copy
+                             "void main() { v_uv = vec2(a_p.x * 0.5 + 0.5, 0.5 - u_y * a_p.y * 0.5);"
                              " gl_Position = vec4(a_p, 0.0, 1.0); }\n";
 static const char *k_ov_fs = "#version 300 es\n"
                              "precision mediump float;\n"
@@ -31,6 +37,7 @@ static bool overlay_init() {
     glGetProgramiv(g_ov_prog, GL_LINK_STATUS, &ok);
     if (!ok) return false;
     g_ov_u_tex = glGetUniformLocation(g_ov_prog, "u_img");
+    g_ov_u_y = glGetUniformLocation(g_ov_prog, "u_y");
     static const float quad[8] = { -1, -1, 1, -1, -1, 1, 1, 1 };
     glGenVertexArrays(1, &g_ov_vao);
     glBindVertexArray(g_ov_vao);
@@ -40,6 +47,7 @@ static bool overlay_init() {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     glGenTextures(1, &g_ov_tex);
+    glGenTextures(1, &g_under_tex);
     return true;
 }
 
@@ -105,6 +113,12 @@ extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int 
     if (state > 0) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, g_logical_width ? g_logical_width : w, g_logical_height ? g_logical_height : h);
+        glBindTexture(GL_TEXTURE_2D, g_under_tex);   // the game's frame, put back after it is shown
+        glBindSampler(0, 0);
+        glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 0, 0, w, h, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        g_under_w = w, g_under_h = h, g_under_kept = 1;
         glBindTexture(GL_TEXTURE_2D, g_ov_tex);
         glBindSampler(0, 0);
         if (changed || w != g_ov_w || h != g_ov_h) {
@@ -119,6 +133,7 @@ extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int 
         }
         glUseProgram(g_ov_prog);
         glUniform1i(g_ov_u_tex, 0);
+        glUniform1f(g_ov_u_y, 1.0f);
         glBindVertexArray(g_ov_vao);
         glEnable(GL_BLEND);
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -130,6 +145,30 @@ extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int 
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     }
+    restore(s);
+}
+
+// After the frame is shown (the swap): the game's frame back where the overlay was drawn over it.
+extern "C" void d3d9w_overlay_undo(void) {
+    if (!g_under_kept) return;
+    g_under_kept = 0;
+    SavedGL s;
+    save(s);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, g_logical_width ? g_logical_width : g_under_w, g_logical_height ? g_logical_height : g_under_h);
+    glBindTexture(GL_TEXTURE_2D, g_under_tex);
+    glBindSampler(0, 0);
+    glUseProgram(g_ov_prog);
+    glUniform1i(g_ov_u_tex, 0);
+    glUniform1f(g_ov_u_y, -1.0f);
+    glBindVertexArray(g_ov_vao);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     restore(s);
 }
 
