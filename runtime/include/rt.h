@@ -94,6 +94,9 @@ typedef void (*det_frame_fn)(uint32_t frame);
 void det_init_main(void);
 void det_yield(void);
 void det_preempt(void);              /* a time slice of guest work ended */
+void det_local_begin(void);          /* det_local.c: this player's own guest work, invisible to scheduling */
+void det_local_end(void);
+extern RECOMP_TLS int t_det_local;   /* inside one (nesting depth) */
 int det_wait(det_ready_fn ready, void *arg, uint64_t deadline_ns);   /* 1 ready, 0 timeout */
 void det_sleep_ms(uint32_t ms);
 int det_thread_new(det_ready_fn ready, void *arg);

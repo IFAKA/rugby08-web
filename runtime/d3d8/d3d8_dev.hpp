@@ -33,6 +33,9 @@ struct DevState {
 
 bool d3d8_pov_pre(const uint32_t *a); // d3d8_pov.cpp: this player's camera around a draw
 void d3d8_pov_post(const uint32_t *a, bool set);
+bool d3d8_cursor_pre(
+    const uint32_t *a);   // d3d8_pov.cpp: a party's menus' cursor at this screen's pointer (DrawPrimitiveUP)
+void d3d8_cursor_post(const uint32_t *a, bool set);
 
 static inline DevState *S(const uint32_t *a) { return d3d8_obj(a[0])->dev; }
 static inline IDirect3DDevice9 *D(const uint32_t *a) { return dev9(d3d8_obj(a[0])); }

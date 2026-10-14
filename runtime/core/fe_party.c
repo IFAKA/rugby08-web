@@ -136,26 +136,25 @@ static uint32_t find(uint32_t head, int id) {
     return 0;
 }
 
-/* A line's text: the game's setter runs when SHARED (what every game shows there) changes and writes S,
-   this game's own wording of it (as long: the game's string heap takes the same room in every game). */
-static void set_shown(uint32_t screen, int id, const char *shared, const char *s) {
+/* A line's text, through the game's own setter when it changed. Every game of a party writes the same
+   text at the same frames: the game's memory (and the code drawing it) stays alike in all of them, so the
+   lockstep clock does too. What is this player's own ("YOU") is drawn over it (ui_badge.c). */
+static void set_text(uint32_t screen, int id, const char *s) {
     static uint32_t buf;
     static char last[FE_PARTY_LINES][64];
     static uint32_t last_screen;
     if (screen != last_screen) memset(last, 0, sizeof last), last_screen = screen;
-    if (id < 0 || id >= FE_PARTY_LINES || !strcmp(last[id], shared)) return;
+    if (id < 0 || id >= FE_PARTY_LINES || !strcmp(last[id], s)) return;
     if (id >= 2) rt_trace(id == 2 ? "ms: party status %s" : "ms: party row %s", s);
     uint32_t w = find(screen + 0x10, INFO_WINDOW), b = w ? find(w + 0xA0, id) : 0;
     if (!b || (!buf && !(buf = gcalloc(64)))) return;
-    snprintf(last[id], sizeof last[id], "%s", shared);
+    snprintf(last[id], sizeof last[id], "%s", s);
     snprintf(G2H(buf), 64, "%s", s[0] ? s : " ");
     uint32_t sv = g_ecx;
     g_ecx = b + BTN_TEXT;
     guest_call(SET_TEXT, 1, buf);
     g_ecx = sv;
 }
-
-static void set_text(uint32_t screen, int id, const char *s) { set_shown(screen, id, s, s); }
 
 /* JOIN PARTY accepted (lockstep): this game shows that party's screen until the page reloads into it
    (platform/web/join_view.c); SLOT, PLAYERS, CODE (16) as the server said, when not NULL. */
@@ -168,24 +167,21 @@ static int previewing(int *slot, uint32_t *players, char *code) {
 
 int fe_party_joining(int *slot) { return previewing(slot, NULL, NULL); }
 
-/* lockstep: the code and the roster, the same in every game but for "(YOU)" on this player's row (also
-   while it catches up, before the session it replays has it). Rows padded alike in every game. */
+/* lockstep: the code and the roster, the same text in every game (this player's "YOU": ui_badge.c). */
 static void ls_lines(uint32_t screen) {
-    char l[64], all[64], mine[64], pc[16];
+    char l[64], pc[16];
     uint32_t mask = ls_members(), was;
     int slot = rt_net_slot();
     if (previewing(&slot, &was, pc)) mask = was | 1u << slot;   /* (before the reload: no game state shared) */
     const char *code = previewing(NULL, NULL, NULL) ? pc : ls_code();
+    int host = previewing(NULL, NULL, NULL) ? 0 : rt_net_host();   /* (the roster: alike in every game) */
     set_text(screen, 0, " ");
     set_text(screen, 1, code[0] ? code : "......");
     set_text(screen, 2, code[0] ? "GIVE THIS CODE TO YOUR FRIENDS" : "PLAYING OFFLINE");
-    for (int k = 0; k < 4; k++) {   /* (the longest: "1  PLAYER 1 (HOST) (YOU)", 24) */
-        int in = mask >> k & 1, me = k == slot && (in || rt_ff);
-        snprintf(l, sizeof l, "PLAYER %d%s", k + 1, k == 0 ? " (HOST)" : "");
-        snprintf(all, sizeof all, "%d  %-21s", k + 1, in ? l : "WAITING...");
-        strcat(l, " (YOU)");
-        snprintf(mine, sizeof mine, "%d  %-21s", k + 1, l);
-        set_shown(screen, 3 + k, all, me ? mine : all);
+    for (int k = 0; k < 4; k++) {
+        if (mask >> k & 1) snprintf(l, sizeof l, "%d  PLAYER %d%s", k + 1, k + 1, k == host ? " (HOST)" : "");
+        else snprintf(l, sizeof l, "%d  WAITING...", k + 1);
+        set_text(screen, 3 + k, l);
     }
 }
 

@@ -114,12 +114,11 @@
         onExit(code) {
           if (code === 3 && room) {   // this copy fell out of step: rebuild it by joining again
             var tries = +(sessionStorage.getItem('rugbyRetry') || 0);
-            if (tries < 2) { sessionStorage.setItem('rugbyRetry', tries + 1); sessionStorage.setItem('rugbyJoin', room); location.reload(); return; }
+            if (tries < 2) { say('RESYNCING WITH THE PARTY'); sessionStorage.setItem('rugbyRetry', tries + 1); sessionStorage.setItem('rugbyJoin', room); location.reload(); return; }
             say('YOUR GAME COULD NOT STAY IN STEP WITH THE PARTY');
             reload('');
             return;
           }
-          if (code === 4) { say('YOU LEFT THE PARTY'); reload(''); return; }
           location.reload();   // the game closed: start it again
         },
         // the game's netplay status (runtime/core/netplay.c): 0 running, 1 waiting, 2 catching up %, 3 offline.
@@ -127,8 +126,8 @@
         rugbyNetStatus(kind, value) {
           if (kind === 2) send({ t: 'progress', pct: value });
           else if (kind === 0) { send({ t: 'progress', pct: 100 }); sessionStorage.removeItem('rugbyRetry'); sessionStorage.removeItem('rugbyBackdrop'); }
-          // offline: alone, play on; in a party, back to an own game (the party went on without this one)
-          else if (kind === 3 && partyEver) { say('YOU LOST THE CONNECTION TO THE PARTY'); reload(''); }
+          // offline: this game plays on alone (runtime/core/netplay.c), as online sports games do
+          else if (kind === 3 && partyEver) say('CONNECTION TO THE PARTY LOST: YOU PLAY ON YOUR OWN');
           else if (kind === 3) say('CONNECTION LOST: YOU PLAY ON YOUR OWN');
         },
         // my input delay in frames: the trip to the slowest friend peer to peer, its jitter included
@@ -140,7 +139,8 @@
           var ms = p2p != null ? p2p : (rtt || 80) / 2 + Math.max(...others) / 2;
           return Math.max(2, Math.min(20, Math.ceil(ms / 16.7) + 1));
         },
-        // the game's JOIN PARTY / LEAVE PARTY (runtime/core/ls_party.c): play in that room / a fresh own game
+        // the game's JOIN PARTY (runtime/core/ls_party.c): play in that room (LEAVE PARTY: the game plays on
+        // alone in a room of its own, runtime/core/net_leave.c, and the page hears "forked")
         rugbyJoin(code) {
           if (!code) return;
           if (code === room) { say("THAT IS YOUR OWN PARTY: GIVE THE CODE TO YOUR FRIENDS"); return; }
@@ -148,7 +148,6 @@
           if (!net || net.closed) { say('CANNOT REACH THE GAME SERVER'); return; }
           send({ t: 'peek', room: code, build: BUILD });   // the server answers whether it can be joined
         },
-        rugbyLeave() { reload(''); },
       };
       // Joining a party shows its party screen from the start (platform/web/join_view.c): JOIN PARTY accepted,
       // the game draws that party's screen, the page keeps a picture of it (or reloads anyway after 20 s), and
@@ -215,11 +214,16 @@
             logLine('page: in room ' + room + ' as player ' + (m.slot + 1) + (m.creator ? ' (created it)' : ' (joining)'));
             Module.rugbyRoom = room;   // the game's ONLINE screens show it (runtime/core/ls_party.c)
             Module.rugbyNet = net;
-            play(['--net-session', m.slot + ',' + (m.creator ? 1 : 0), '--own-camera']);
+            play(['--net-session', m.slot + ',' + (m.creator ? 1 : 0) + ',' + (m.since === undefined ? -1 : m.since), '--own-camera']);
             setInterval(() => send({ t: 'ping', ts: performance.now() }), 2000);
             send({ t: 'ping', ts: performance.now() });
           }
           if (m.t === 'members') { members = Module.rugbyMembers = m.players; partyEver = partyEver || members.length > 1; }
+          if (m.t === 'forked') {   // left the party: this game's own room now (the others' inputs stop)
+            room = Module.rugbyRoom = m.room; partyEver = false; Module.rugbyForked = 1;
+            if (Module.peers) Module.peers.inq.length = 0;
+            logLine('page: left the party, playing on in room ' + room);
+          }
           if (m.t === 'granted') Module.rugbyGrant = m.from;   // catching up: the server's hints (netplay.c)
           if (m.t === 'front') Module.rugbyFront = m.frame;
           if (m.t === 'pong') { var r = performance.now() - m.ts; rtt = rtt ? Math.round(rtt * 0.7 + r * 0.3) : Math.round(r); send({ t: 'rtt', rtt }); }

@@ -18,8 +18,10 @@ int rt_net_start(int argc, char **argv) {
     for (int i = 1; i < argc; i++)   /* --own-camera: each player's own camera (own_camera.c) */
         if (!strcmp(argv[i], "--own-camera")) rt_own_camera = 1;
     for (int i = 1; i + 1 < argc; i++) {
-        int s, c;   /* --net-session SLOT,CREATOR: the web page already joined the room */
-        if (!strcmp(argv[i], "--net-session") && sscanf(argv[i + 1], "%d,%d", &s, &c) == 2) return rt_net_begin(s, c);
+        int s, c;   /* --net-session SLOT,CREATOR[,SINCE]: the web page already joined the room */
+        long long since = -1;
+        if (!strcmp(argv[i], "--net-session") && sscanf(argv[i + 1], "%d,%d,%lld", &s, &c, &since) >= 2)
+            return rt_net_begin(s, c, since);
         if (!strcmp(argv[i], "--net")) url = argv[++i];
         else if (!strcmp(argv[i], "--net-room")) room = argv[++i];
         else if (!strcmp(argv[i], "--net-name")) name = argv[++i];
@@ -40,8 +42,11 @@ int rt_net_start(int argc, char **argv) {
         buf[n] = 0;
         const char *p;
         if (strstr(buf, "\"t\":\"error\"")) rt_fatal("netplay: %s", buf);
-        if (strstr(buf, "\"t\":\"joined\"") && (p = strstr(buf, "\"slot\":")))
-            return (ha ? rt_net_begin_ha : rt_net_begin)(atoi(p + 7), strstr(buf, "\"creator\":true") != NULL);
+        if (strstr(buf, "\"t\":\"joined\"") && (p = strstr(buf, "\"slot\":"))) {
+            int slot = atoi(p + 7), creator = strstr(buf, "\"creator\":true") != NULL;
+            const char *q = strstr(buf, "\"since\":");   /* (where the slot's previous player left) */
+            return ha ? rt_net_begin_ha(slot, creator) : rt_net_begin(slot, creator, q ? atoll(q + 8) : -1);
+        }
     }
     rt_fatal("netplay: lobby failed");
     return 0;

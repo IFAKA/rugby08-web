@@ -11,7 +11,8 @@
 //
 //	-> {"t":"host","name":N}                         create a room (you are player 1)
 //	-> {"t":"join","room":C,"name":N[,"auto":true]}  join (auto: create C if missing; tests)
-//	<- {"t":"joined","room":C,"slot":S,"creator":bool}  then the room's log, then live messages
+//	<- {"t":"joined","room":C,"slot":S,"creator":bool,"since":F}  then the room's log, then live messages
+//	   (since: where the slot's previous player left, -1 none: the log's 'A'/'D' for S before it are that player's)
 //	<- {"t":"members","room":C,"players":[{slot,name,rtt,joining,pct}]}
 //	-> {"t":"ping","ts":X}  <- {"t":"pong","ts":X}    -> {"t":"rtt","rtt":MS}
 //	-> {"t":"name","name":N}                          -> {"t":"progress","pct":P}  (catching up)
@@ -88,6 +89,9 @@ type room struct {
 	from    [maxPlayers]int64 // slot plays from this frame (-1: not granted)
 	last    [maxPlayers]int64 // last input frame received from the slot
 	pending [maxPlayers]bool  // waiting for a grant
+	freed   [maxPlayers]int64 // the slot's last player left at this frame: its 'A'/'D' before it are not a newcomer's (-1)
+	granted [maxPlayers]int64 // the slot's latest grant frame (-1)
+	forks   []forkReq         // players leaving into a room of their own, waiting for inputs (fork.go)
 	setup   []byte            // host mode: the latest 'S' message, for newcomers
 	key     []byte            // host mode: the latest key 'F' message, for newcomers
 	menu    []byte            // host mode: the latest 'M' (the host's front-end screen), for newcomers
@@ -397,6 +401,7 @@ type request struct {
 	RTT   int             `json:"rtt"`
 	Pct   int             `json:"pct"`
 	Slot  int             `json:"slot"`
+	Frame int64           `json:"frame"`
 	To    *int            `json:"to"`
 	Data  json.RawMessage `json:"data"`
 }
@@ -431,7 +436,7 @@ func (c *client) handle(req request) {
 			}
 			r = &room{code: code, build: req.Build}
 			for k := range r.from {
-				r.from[k], r.last[k] = -1, -1
+				r.from[k], r.last[k], r.freed[k], r.granted[k] = -1, -1, -1, -1
 			}
 			r.from[0] = 0 // the creator plays from the first frame
 			rooms[code] = r
@@ -459,7 +464,8 @@ func (c *client) handle(req request) {
 		}
 		c.room, c.slot, c.name, c.caughtUp = r, slot, cleanName(req.Name, slot), creator
 		r.slots[slot] = c
-		c.send(map[string]any{"t": "joined", "room": r.code, "slot": slot, "creator": creator, "stun": stunPort})
+		c.send(map[string]any{"t": "joined", "room": r.code, "slot": slot, "creator": creator, "stun": stunPort,
+			"since": r.freed[slot]})
 		if !creator {
 			r.dump(c)
 			r.dumpHA(c)
@@ -504,6 +510,11 @@ func (c *client) handle(req request) {
 			log.Printf("room %s: player %d stalled (reported by player %d): dropped", r.code, req.Slot+1, c.slot+1)
 			p.send(map[string]any{"t": "error", "msg": "Your connection was too slow: you left the game"})
 			p.conn.Close()
+		}
+	case "fork": // LEAVE PARTY in lockstep: this game plays on in a room of its own (fork.go)
+		if r := c.room; r != nil && req.Frame > 0 {
+			r.forks = append(r.forks, forkReq{c, req.Frame})
+			r.tryForks()
 		}
 	case "signal":
 		c.signal(req)
@@ -559,14 +570,21 @@ func (c *client) game(b []byte) {
 				r.last[k] = f
 			}
 			r.relay(m, c.slot)
+			if len(r.forks) > 0 { // (a leaver waiting for this input: fork.go)
+				r.tryForks()
+			}
 		case 'A': // a join grant from the authority: relayed as is (the authority applied it already)
 			if c.slot != r.auth {
 				continue
 			}
 			f := int64(binary.LittleEndian.Uint32(m[2:]))
 			r.relay(m, c.slot)
+			if f > r.granted[k] {
+				r.granted[k] = f
+			}
 			if r.slots[k] == nil { // the newcomer left before the grant: it leaves at once
 				r.relay(frameMsg('D', k, f), -1)
+				r.freed[k] = f + 1
 				continue
 			}
 			if r.pending[k] {
@@ -597,10 +615,13 @@ func (c *client) game(b []byte) {
 func (c *client) leave() {
 	roomsMu.Lock()
 	defer roomsMu.Unlock()
-	r := c.room
-	if r == nil || r.slots[c.slot] != c {
-		return
+	if r := c.room; r != nil && r.slots[c.slot] == c {
+		r.drop(c)
 	}
+}
+
+// drop: c leaves its room r (the others get its 'D'); the room closes when empty.
+func (r *room) drop(c *client) {
 	k := c.slot
 	r.slots[k] = nil
 	r.pending[k] = false
@@ -610,7 +631,7 @@ func (c *client) leave() {
 			l = r.from[k]
 		}
 		r.relay(frameMsg('D', k, l), -1)
-		r.from[k], r.last[k] = -1, -1
+		r.from[k], r.last[k], r.freed[k] = -1, -1, l
 	}
 	log.Printf("room %s: %s (player %d) left", r.code, c.name, k+1)
 	if k == 0 && (r.setup != nil || r.menu != nil) { // a party's host: the party is over
@@ -639,6 +660,7 @@ func (c *client) leave() {
 		r.auth = -1
 		r.setAuth()
 	}
+	r.tryForks()
 	r.members()
 }
 

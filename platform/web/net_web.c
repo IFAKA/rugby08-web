@@ -117,11 +117,11 @@ int net_tx_hints(int64_t *grant, int64_t *front) {
 }
 
 /* The lockstep session's room (the page's, platform/web/shell.html): its code, joining another room (the
-   page reloads into it and catches up), leaving for a fresh own game. */
+   page reloads into it and catches up), the room of its own the server gave it after a leave. */
 // clang-format off
 EM_JS(void, js_session_code, (char *out, int cap), { stringToUTF8(Module.rugbyRoom || '', out, cap); });
 EM_JS(void, js_session_join, (const char *code), { if (Module.rugbyJoin) Module.rugbyJoin(UTF8ToString(code)); });
-EM_JS(void, js_session_leave, (void), { if (Module.rugbyLeave) Module.rugbyLeave(); });
+EM_JS(int, js_forked, (void), { var f = Module.rugbyForked | 0; Module.rugbyForked = 0; return f; });
 EM_JS(int, js_page_message, (char *out, int cap), {   /* a message for the game to show, once */
     var m = Module.rugbyMessage || '';
     Module.rugbyMessage = '';
@@ -136,7 +136,7 @@ const char *plat_session_code(void) {
     return c;
 }
 void plat_session_join(const char *code) { js_session_join(code); }
-void plat_session_leave(void) { js_session_leave(); }
+int net_tx_forked(void) { return js_forked(); }
 const char *plat_page_message(void) {
     static char m[96];
     return js_page_message(m, sizeof m) ? m : NULL;

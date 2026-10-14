@@ -22,6 +22,9 @@ class D3D9 : public IDirect3D9 {
         // Canvas alpha must be disabled to match, otherwise DXT3 texture alpha
         // leaks into framebuffer and browser compositing darkens the output
         attrs.alpha = EM_FALSE;
+        // A frame can give the browser a turn before its Present (a party game waiting for the bytes another
+        // player's game read back, net_external.c): the browser must not clear what is drawn so far
+        attrs.preserveDrawingBuffer = EM_TRUE;
 
         g_webgl_context = emscripten_webgl_create_context(g_canvas_selector, &attrs);
         if (g_webgl_context <= 0) {

@@ -119,14 +119,15 @@ typedef struct {
     int nf, plugged, nu;
 } sorted_t;
 
-/* The keyboard is player 1's (lockstep: the room's creator, whose keyboard and mouse every game
-   applies). When that player leaves it goes off its side (the AI plays on) but stays plugged in: the
-   game pauses on the keyboard's Esc, which Start on any controller presses (pad_pause.c). */
-static int player1_gone(void) {
+/* The keyboard is the desk's player's (lockstep: whose keyboard and mouse every game applies, the host
+   in the menus: net_leave.c). When that player leaves it goes off its side (the AI plays on) but stays
+   plugged in: the game pauses on the keyboard's Esc, which Start on any controller presses
+   (pad_pause.c). In the menus the desk is the new host's, whose sides it then picks. */
+static int desk_gone(void) {
     static int had;
     if (!rt_net || rt_net_ha) return 0;
-    had |= rt_net_active(0);
-    return had && !rt_net_active(0);
+    had |= rt_net_active(rt_net_desk());
+    return had && !rt_net_active(rt_net_desk());
 }
 
 /* Plugged in or not, as its slot says; sorts the entries: mouse (and anything else), the keyboard,
@@ -139,7 +140,7 @@ static void plug(const uint32_t *c, int n, sorted_t *o) {
         else if (t != T_PAD) o->first[o->nf++] = c[e];   /* the mouse keeps its place */
         if (t != T_PAD && t != T_KEYBOARD) continue;
         int k = t == T_PAD ? rt_dinput_pad_slot(rd32(c[e] + C_DEVICE)) : -1;
-        if (t == T_KEYBOARD && player1_gone() && side_of(c[e])) {
+        if (t == T_KEYBOARD && desk_gone() && side_of(c[e])) {
             g_unplugged++;   /* (the teams are rebuilt: pads.c) */
             wr8(c[e] + C_SIDE, 0);
         }

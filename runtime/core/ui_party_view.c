@@ -61,7 +61,7 @@ static void rows(ui_image_t *im, int sc) {   /* the players, as the party screen
         fe_rect(im, (float)x - 8, (float)y - 2, 330, 20, r);
         ui_rect(im, r[0], r[1], r[2], r[3], 0xF0000000u);
         if (mask >> k & 1)
-            snprintf(l, sizeof l, "%d  PLAYER %d%s%s", k + 1, k + 1, k == 0 ? " (HOST)" : "",
+            snprintf(l, sizeof l, "%d  PLAYER %d%s%s", k + 1, k + 1, k == rt_net_host() ? " (HOST)" : "",
                      k == rt_net_slot() ? " (YOU)" : "");
         else snprintf(l, sizeof l, "%d  WAITING...", k + 1);
         ui_text(im, r[0] + 8, r[1] + r[3] / 2 - 7 * sc / 2, sc, l, mask >> k & 1 ? UI_WHITE : UI_GREY);

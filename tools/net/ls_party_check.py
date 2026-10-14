@@ -7,8 +7,10 @@ goes ONLINE > JOIN PARTY and types the code (keyboard, Enter): its page reloads 
 session, catches up (time measured) and from then on shows the host's game: the same screen, the
 roster on the PARTY screen and the badge count the players; all games print the same state hashes.
 The shared menus are the host's: a friend's screen says the host is choosing; the first friend leaves
-from its own prompt (Esc, then S): its page goes back to a fresh own game, the others see it leave and
-stay in sync. One line;
+from its own prompt (Esc, then S) as in online sports games: its game plays on (no restart), at its main
+menu, in a party of its own (a new code), "YOU LEFT THE PARTY"; the others see it leave and stay in sync.
+A newcomer joins the leaver's own party and is in sync with it (its log is the leaver's game); then the
+leaver joins the host's party again and plays along (not removed by its slot's earlier leave). One line;
 details in logs/ls_party/."""
 
 import os
@@ -93,6 +95,68 @@ def join(friend, code, on_join=False):
     return f"caught up in {time.time() - t0:.0f} s"
 
 
+def leave(host, friends, code, out):
+    """The first friend leaves: its game plays on (no new session) at its main menu, in its own room."""
+    f1 = friends[0]
+    if not f1.wait("THE HOST IS CHOOSING", 30):
+        return None, "the first friend was not told the host is choosing"
+    f1.key("Escape", 1500)  # a friend leaves from its own prompt (the shared menus are the host's)
+    if not f1.wait("LEAVE THE PARTY?", 10):
+        return None, "Esc did not ask the first friend whether to leave"
+    n = len(f1.lines)
+    f1.key("s", 3000)
+    if not f1.wait_for(lambda: any("left the party: playing on in room" in x for x in f1.lines[n:]), 60):
+        return None, "the first friend's LEAVE PARTY did not keep its game in a room of its own"
+    own = f1.page.evaluate("Module.rugbyRoom || ''")
+    if not wait_screen(f1, MAIN, 30) or not f1.wait("party toast YOU LEFT THE PARTY", 10):
+        return None, "the first friend is not at its main menu with YOU LEFT THE PARTY"
+    if any("session started" in x for x in f1.lines[n:]) or own in ("", code):
+        return None, f"the first friend's game restarted or kept the party's code ({own})"
+    out.append(f"friend1: left, plays on in room {own} at its main menu")
+    if not host.wait("party toast PLAYER 2 LEFT", 60):
+        return None, "the host was not told player 2 left"
+    host.page.wait_for_timeout(15000)
+    if not in_sync([host, friends[1]], out, "after the leave"):
+        return None, "the host and the second friend are not in sync after the leave"
+    return own, None
+
+
+def newcomer(f3, f1, own, out):
+    """A newcomer in the leaver's own room replays its log: the same game as the leaver's."""
+    err = to_menus(f3)
+    r = err or join(f3, own)
+    out.append(f"friend3 into {own}: {r}")
+    if not r.startswith("caught up"):
+        return f"friend3: {r}"
+    f3.page.wait_for_timeout(15000)
+    if not in_sync([f1, f3], out, "the leaver and a newcomer in its room"):
+        return "a newcomer in the leaver's room is not in sync with it"
+    n = len(f1.lines)
+    f3.page.close()  # (the leaver alone again: its ONLINE screen offers JOIN PARTY)
+    if not f1.wait_for(lambda: any("party toast PLAYER" in x and "LEFT" in x for x in f1.lines[n:]), 60):
+        return "the leaver was not told the newcomer left"
+    return None
+
+
+def rejoin(host, friends, code, out):
+    """The leaver joins the host's party again: it catches up and plays along (its slot's earlier
+    player, itself, left the log: not this player's own leave)."""
+    f1 = friends[0]
+    if not wait_screen(f1, MAIN, 30):
+        return "the leaver is not at its main menu"
+    r = join(f1, code)
+    out.append(f"friend1 back in {code}: {r}")
+    if not r.startswith("caught up"):
+        return f"friend1 back: {r}"
+    n = len(f1.lines)
+    host.page.wait_for_timeout(20000)
+    if any("removed from the session" in x or "connection lost" in x for x in f1.lines[n:]):
+        return "the friend who came back was removed from the party"
+    if not in_sync([host] + friends, out, "after coming back"):
+        return "the three games are not in sync after the friend came back"
+    return None
+
+
 def run(br, port, out):
     host = Player(br, "host", port)
     friends = [Player(br, f"friend{i}", port) for i in (1, 2)]
@@ -123,24 +187,15 @@ def run(br, port, out):
             return "the host was not told in the game that players 2 and 3 joined"
         if not in_sync(players, out, "three players"):
             return "the three games are not in sync"
-        f1 = friends[0]
-        if not f1.wait("ms: party role THE HOST IS CHOOSING", 30):
-            return "the first friend was not told the host is choosing"
-        f1.key("Escape", 1500)  # a friend leaves from its own prompt (the shared menus are the host's)
-        if not f1.wait("ms: party role LEAVE THE PARTY?", 10):
-            return "Esc did not ask the first friend whether to leave"
-        n = len(f1.lines)
-        f1.key("s", 3000)
-        if not f1.wait_for(lambda: any("created the room" in x for x in f1.lines[n:]), 120):
-            return "the first friend's LEAVE PARTY did not take it back to its own game"
-        if not host.wait("party toast PLAYER 2 LEFT", 60):
-            return "the host was not told player 2 left"
-        host.page.wait_for_timeout(15000)
-        if not in_sync([host, friends[1]], out, "after the leave"):
-            return "the host and the second friend are not in sync after the leave"
-        if not wait_screen(f1, MAIN, 120) and screen(f1.lines) < 0:
-            return "the first friend's own game did not start"
-        return None
+        own, err = leave(host, friends, code, out)
+        if err:
+            return err
+        f3 = Player(br, "friend3", port)
+        players.append(f3)
+        err = newcomer(f3, friends[0], own, out)
+        if err:
+            return err
+        return rejoin(host, friends, code, out)
     finally:
         for p in players:
             open(os.path.join(D, p.name + ".log"), "w").write("\n".join(p.lines))

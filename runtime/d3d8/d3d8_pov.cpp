@@ -6,6 +6,7 @@
 // (constant registers 96..99, appended to every translated shader by d3d8_vshader.cpp).
 // Limits: the game culls what its own camera cannot see, so presets stay close to the game's view.
 #include "d3d8_dev.hpp"
+#include "fe_party.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -191,4 +192,20 @@ bool d3d8_pov_pre(const uint32_t *a) {
 }
 void d3d8_pov_post(const uint32_t *a, bool set) {
     if (set) D(a)->SetTransform(D3DTS_VIEW, &S(a)->xf[D3DTS_VIEW]);
+}
+
+// A party: the menus' cursor (a quad the world transform places) drawn at this screen's own pointer,
+// on this GPU only (runtime/core/ls_cursor.c). Returns whether cursor_post must restore the world.
+bool d3d8_cursor_pre(const uint32_t *a) {   // DrawPrimitiveUP (this, type, primCount, data, stride)
+    DevState *s = S(a);
+    auto w = s->xf.find(D3DTS_WORLD);
+    float dx, dy;
+    if (w == s->xf.end() || !ls_cursor_shift(&w->second._41, a[2], a[4], G2H(a[3]), &dx, &dy)) return false;
+    D3DMATRIX m = w->second;
+    m._41 += dx, m._42 += dy;
+    D(a)->SetTransform(D3DTS_WORLD, &m);
+    return true;
+}
+void d3d8_cursor_post(const uint32_t *a, bool set) {
+    if (set) D(a)->SetTransform(D3DTS_WORLD, &S(a)->xf[D3DTS_WORLD]);
 }

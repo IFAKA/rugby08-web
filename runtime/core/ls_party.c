@@ -2,7 +2,7 @@
  * session with its room open (netplay.c), so a party is that session. Its ONLINE screens (fe_party.c)
  * show the room's code and the players from the roster, which every game applies at the same frame;
  * JOIN PARTY and LEAVE PARTY act only for the player whose controller pressed them (this game's page
- * reloads into the friend's room, or into a fresh own game). Nothing here writes game memory from local
+ * reloads into the friend's room; leaving, this game plays on alone: net_leave.c). Nothing here writes game memory from local
  * state: the screens' texts come from the code and the roster only, the same in every game. */
 #include "rt.h"
 #include "plat.h"
@@ -27,15 +27,15 @@ uint32_t ls_members(void) {
 
 const char *ls_code(void) { return plat_session_code(); }
 
-/* The room slot of the player whose controller the menus are handling: the keyboard and mouse are
-   controller 1's player (the room's slot 0), pad k is slot k's player (rt_pads, net_frame.c). */
+/* The room slot of the player whose controller the menus are handling: the keyboard and mouse are the
+   desk's player (net_leave.c), pad k is slot k's player (rt_pads, net_frame.c). */
 int ls_sender(void) {
     uint32_t g = rd32(GAME_PTR), m = g ? rd32(g + G_CTRLMGR) : 0, sv = g_ecx;
-    if (!m) return 0;
+    if (!m) return rt_net_desk();
     g_ecx = m;
     uint32_t c = guest_call(FN_SENDER, 1, 4u);
     g_ecx = sv;
-    if (!c || rd32(c + C_TYPE) != T_PAD) return 0;
+    if (!c || rd32(c + C_TYPE) != T_PAD) return rt_net_desk();
     int k = rt_dinput_pad_slot(rd32(c + C_DEVICE));
     return k > 0 ? k : 0;
 }
@@ -47,5 +47,5 @@ void ls_join(int sender, const char *code) {
 
 void ls_leave(int sender) {
     rt_trace("ms: party player %d leaves", sender + 1);
-    if (sender == rt_net_slot()) plat_session_leave();
+    if (sender == rt_net_slot()) rt_net_leave();
 }

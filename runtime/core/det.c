@@ -52,19 +52,21 @@ uint64_t det_now_ns(void) { return __atomic_load_n(&g_vt, __ATOMIC_RELAXED); }
  * advances DET_SPIN_NS. Reads scattered through real work (profiling stopwatches) never count, so
  * an ordinary frame's dt stays exactly 1/60 s. Counts are per thread and depend only on the guest's
  * own code path: deterministic. */
+static void time_step(const char *why);   /* (RT_DET_SCHED) */
 #define DET_SPIN     32
 #define DET_SPIN_GAP 64
 #define DET_SPIN_NS  500000ull
 static RECOMP_TLS uint32_t t_reads, t_last_entries;
 uint32_t rt_enter_mark(void);   /* log.c: guest function entries on this thread */
 uint64_t det_clock_read(void) {
-    if (t_id < 0) return det_now_ns();
+    if (t_id < 0 || t_det_local) return det_now_ns();   /* (one player's own work: never a poll) */
     uint32_t e = rt_enter_mark();
     if (e - t_last_entries >= DET_SPIN_GAP) t_reads = 0;
     t_last_entries = e;
     if (++t_reads >= DET_SPIN) {
         t_reads = 0;
         __atomic_add_fetch(&g_vt, DET_SPIN_NS, __ATOMIC_RELAXED);
+        time_step("clock poll");
         det_yield();
     }
     return det_now_ns();
@@ -97,6 +99,14 @@ static int runnable(dthr_t *t) {
 }
 
 static uint32_t g_scheds, g_handoffs; /* stats: scheduling points, and those that changed thread */
+/* RT_DET_SCHED=1 (diagnosis: two games that should be one): every Present's scheduling totals and every
+   time step taken by work or polling, with the thread, to find where two runs part */
+static int g_sched_trace = -1;
+static uint64_t g_all_scheds, g_all_handoffs;
+static void time_step(const char *why) {
+    if (g_sched_trace < 0) g_sched_trace = getenv("RT_DET_SCHED") != NULL;
+    if (g_sched_trace) rt_trace("det: step %s thread %d vt %llu", why, t_id, (unsigned long long)g_vt);
+}
 
 /* g_mu held. Pick the next thread after `me` (me itself last), advancing virtual time while
  * every thread waits; hand it the baton and wait until it comes back (unless me is dead). */
@@ -120,9 +130,9 @@ static void schedule(int me) {
         __atomic_store_n(&g_vt, m, __ATOMIC_RELAXED);
         g_slices = 0;
     }
-    g_scheds++;
+    g_scheds++, g_all_scheds++;
     if (next == me) return;
-    g_handoffs++;
+    g_handoffs++, g_all_handoffs++;
     static int chaos = -1; /* RT_DET_CHAOS=1: random host delays at every hand-over (synctest) */
     if (chaos < 0) {
         const char *e = getenv("RT_DET_CHAOS");
@@ -146,8 +156,8 @@ static void schedule(int me) {
 #define DET_STALL   256
 #define DET_WORK_NS 100000ull
 void det_preempt(void) {
-    if (t_id < 0) return;
-    if (++g_slices > DET_STALL) __atomic_add_fetch(&g_vt, DET_WORK_NS, __ATOMIC_RELAXED);
+    if (t_id < 0 || t_det_local) return;   /* (det_local.c) */
+    if (++g_slices > DET_STALL) __atomic_add_fetch(&g_vt, DET_WORK_NS, __ATOMIC_RELAXED), time_step("work");
     det_yield();
 }
 
@@ -163,6 +173,7 @@ void det_yield(void) {
  * acquires afterwards, still holding the baton, so nothing can intervene). */
 int det_wait(det_ready_fn ready, void *arg, uint64_t deadline) {
     if (t_id < 0) rt_fatal("det_wait from a host thread");
+    if (t_det_local) rt_trace("det: a wait inside one player's own work (det_local.c): scheduling may differ");
     pthread_mutex_lock(&g_mu);
     dthr_t *t = &g_t[t_id];
     if (!(ready && ready(arg)) && deadline > g_vt) {
@@ -194,7 +205,7 @@ void det_sleep_ms(uint32_t ms) {
             t_s0_frame = g_frame_no;
             t_s0_n = 0;
         }
-        if (++t_s0_n >= DET_SPIN) __atomic_add_fetch(&g_vt, DET_SPIN_NS, __ATOMIC_RELAXED);
+        if (++t_s0_n >= DET_SPIN) __atomic_add_fetch(&g_vt, DET_SPIN_NS, __ATOMIC_RELAXED), time_step("sleep 0");
         det_yield();
         return;
     }
@@ -248,6 +259,10 @@ void det_frame(uint32_t frame) {
     static unsigned over, n; /* frames whose work ran past their 1/60 s slot (dt > 1/60 there) */
     if (slot > g_vt) __atomic_store_n(&g_vt, slot, __ATOMIC_RELAXED);
     else over++;
+    if (g_sched_trace < 0) g_sched_trace = getenv("RT_DET_SCHED") != NULL;
+    if (g_sched_trace > 0)
+        rt_trace("det: frame %u sched %llu handoffs %llu slices %u vt %llu", frame, (unsigned long long)g_all_scheds,
+                 (unsigned long long)g_all_handoffs, g_slices, (unsigned long long)g_vt);
     g_slices = 0;
     g_frame_no = frame;
     if (++n == 600) {

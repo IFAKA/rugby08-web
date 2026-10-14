@@ -12,6 +12,7 @@
 
 static ui_image_t g_img;
 static void catchup_row(ui_image_t *im, int slot, int pct, const char *t);
+static void you_tag(ui_image_t *im, int slot);
 
 int ui_key(int sc, int down) { return fe_party_key(sc, down); }
 int ui_open(void) { return 0; }
@@ -30,12 +31,65 @@ static void ls_toasts(uint32_t frame) {
     uint32_t now = ls_members();
     char line[48];
     if (!was) was = now;   /* (whoever is there when this game starts: no news) */
-    for (int k = 0; k < 4; k++)
+    int left = rt_net_left();   /* this player left (the others are gone from its game), or lost the party */
+    if (left == 1) party_toast(frame, "YOU LEFT THE PARTY");
+    for (int k = 0; left == 0 && k < 4; k++)
         if (((now ^ was) >> k & 1) && k != rt_net_slot()) {
             snprintf(line, sizeof line, "PLAYER %d %s", k + 1, now >> k & 1 ? "JOINED" : "LEFT");
             party_toast(frame, line);
         }
     was = now;
+}
+
+/* Another player's turn: the screen dimmed (or covered) and whose turn it is (ROLE). */
+static void turn(ui_image_t *im, int rk, const char *role) {
+    int w = im->w, h = im->h;
+    ui_rect(im, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xE8000000u : 0x90000000u);
+    int sc = ui_text_width(role, 3) + 24 <= w - 16 ? 3 : 2;   /* (fits the screen) */
+    int tw = ui_text_width(role, sc) + 24;
+    ui_rect(im, (w - tw) / 2, h / 2 - 22, tw, 44, UI_PANEL);
+    ui_text(im, (w - tw) / 2 + 12, h / 2 - 4 * sc, sc, role, UI_GOLD);
+    rt_trace("ms: party role %s", role);
+}
+
+/* Which player this is (YOU, a corner), the party badge (B, the other corner; NULL none), a toast. */
+static void lines(ui_image_t *im, const char *you, const char *b, const char *toast) {
+    if (you[0]) {   /* (2: the player's controller colour) */
+        static const uint32_t col[4] = { 0xFF3040E0u, 0xFFE07030u, 0xFF40C040u, 0xFF30D0E0u };
+        int tw = ui_text_width(you, 2) + 16;
+        ui_rect(im, 8, 8, tw, 28, UI_PANEL);
+        ui_rect(im, 8, 8, 4, 28, col[rt_net_slot() & 3]);
+        ui_text(im, 18, 15, 2, you, UI_WHITE);
+    }
+    if (b) {
+        int bw = ui_text_width(b, 2) + 16;
+        ui_rect(im, im->w - bw - 8, 8, bw, 28, UI_PANEL);
+        ui_text(im, im->w - bw, 15, 2, b, UI_WHITE);
+        rt_trace("ms: party badge %s", b);
+    }
+    if (toast) {   /* who left, the party ended: top centre, a few seconds */
+        int tw = ui_text_width(toast, 3) + 24;
+        ui_rect(im, (im->w - tw) / 2, 44, tw, 36, UI_PANEL);
+        ui_text(im, (im->w - tw) / 2 + 12, 52, 3, toast, UI_GOLD);
+        rt_trace("ms: party toast %s", toast);
+    }
+}
+
+/* Friends joining (the server's word): how far each got (PCT, -1 none), the first one, how many. */
+static int joining(int pct[4], int *first) {
+    int n = 0;
+    *first = -1;
+    for (int k = 0; k < 4; k++) {
+        pct[k] = ls_on() && k != rt_net_slot() ? plat_join_progress(k) : -1;
+        if (pct[k] >= 0 && *first < 0) *first = k;
+        n += pct[k] >= 0;
+    }
+    return n;
+}
+
+/* This player's row is on the party screen (lockstep): its "YOU" tag. */
+static int own_row(void) {
+    return ls_on() && (ls_members() >> rt_net_slot() & 1) && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY;
 }
 
 int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) {
@@ -50,13 +104,9 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     int rk = ls ? ls_roles_banner(role, sizeof role) : 0;
     if (ls) snprintf(you, sizeof you, "YOU: PLAYER %d", rt_net_slot() + 1);
     int jslot, join = fe_party_joining(&jslot) && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY;
-    int pct[4], joiners = 0, first = -1;   /* friends joining (the server's word): how far they got */
-    for (int k = 0; k < 4; k++) {
-        pct[k] = ls_on() && k != rt_net_slot() ? plat_join_progress(k) : -1;
-        if (pct[k] >= 0 && first < 0) first = k;
-        joiners += pct[k] >= 0;
-    }
-    if (w <= 0 || h <= 0 || (!badge && !toast && !ls && !join && !joiners)) return 0;
+    int pct[4], first, joiners = joining(pct, &first);
+    int mine = !join && rk != LS_BANNER_LOBBY && own_row();
+    if (w <= 0 || h <= 0 || (!badge && !toast && !ls && !join && !joiners && !mine)) return 0;
     static char last[256];
     char b[64], all[256];
     if (ls) snprintf(b, sizeof b, "PARTY %s %d/4", ls_code(), count(ls_members()));
@@ -64,8 +114,8 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     if (first >= 0)   /* (anywhere in the menus: who is joining) */
         snprintf(b + strlen(b), sizeof b - strlen(b), " - PLAYER %d JOINING %d%%", first + 1, pct[first]);
     int rows = joiners && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY && rk != LS_BANNER_LOBBY;
-    snprintf(all, sizeof all, "%s|%s|%s|%d%s|%d|%u|%d%d%d%d%d", badge ? b : "", toast ? toast : "", you, rk, role, join,
-             rk == LS_BANNER_LOBBY ? ui_party_view_gen() : 0, rows, pct[0], pct[1], pct[2], pct[3]);
+    snprintf(all, sizeof all, "%s|%s|%s|%d%s|%d|%u|%d%d%d%d%d%d", badge ? b : "", toast ? toast : "", you, rk, role,
+             join, rk == LS_BANNER_LOBBY ? ui_party_view_gen() : 0, rows, pct[0], pct[1], pct[2], pct[3], mine);
     badge = badge || (joiners && in_menus());
     *changed = strcmp(all, last) != 0 || g_img.w != w || g_img.h != h;
     if (g_img.w != w || g_img.h != h) {
@@ -79,34 +129,10 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
         if (join) catchup_row(&g_img, jslot, 0, "JOINING THE PARTY...");   /* until the page reloads */
         for (int k = 0; rows && k < 4; k++)   /* the others' party screen: a joiner's row fills up there too */
             if (pct[k] >= 0) catchup_row(&g_img, k, pct[k], NULL);
+        if (mine) you_tag(&g_img, rt_net_slot());
         if (rk == LS_BANNER_LOBBY) ui_party_view(&g_img, role);   /* the host's menus: not this player's */
-        else if (rk) {   /* another player's turn: the screen dimmed (or covered) and whose turn it is */
-            ui_rect(&g_img, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xE8000000u : 0x90000000u);
-            int sc = ui_text_width(role, 3) + 24 <= w - 16 ? 3 : 2;   /* (fits the screen) */
-            int tw = ui_text_width(role, sc) + 24;
-            ui_rect(&g_img, (w - tw) / 2, h / 2 - 22, tw, 44, UI_PANEL);
-            ui_text(&g_img, (w - tw) / 2 + 12, h / 2 - 4 * sc, sc, role, UI_GOLD);
-            rt_trace("ms: party role %s", role);
-        }
-        if (you[0]) {   /* which player this is, in a corner (2: the player's controller colour) */
-            static const uint32_t col[4] = { 0xFF3040E0u, 0xFFE07030u, 0xFF40C040u, 0xFF30D0E0u };
-            int tw = ui_text_width(you, 2) + 16;
-            ui_rect(&g_img, 8, 8, tw, 28, UI_PANEL);
-            ui_rect(&g_img, 8, 8, 4, 28, col[rt_net_slot() & 3]);
-            ui_text(&g_img, 18, 15, 2, you, UI_WHITE);
-        }
-        if (badge) {
-            int bw = ui_text_width(b, 2) + 16;
-            ui_rect(&g_img, w - bw - 8, 8, bw, 28, UI_PANEL);
-            ui_text(&g_img, w - bw, 15, 2, b, UI_WHITE);
-            rt_trace("ms: party badge %s", b);
-        }
-        if (toast) {   /* who left, the party ended: top centre, a few seconds */
-            int tw = ui_text_width(toast, 3) + 24;
-            ui_rect(&g_img, (w - tw) / 2, 44, tw, 36, UI_PANEL);
-            ui_text(&g_img, (w - tw) / 2 + 12, 52, 3, toast, UI_GOLD);
-            rt_trace("ms: party toast %s", toast);
-        }
+        else if (rk) turn(&g_img, rk, role);
+        lines(&g_img, you, badge ? b : NULL, toast);
     }
     *img = (const uint8_t *)g_img.px;
     return 1;
@@ -132,6 +158,20 @@ static void catchup_row(ui_image_t *im, int slot, int pct, const char *t) {
     int pw = ui_text_width(t, sc) + 24, ph = (int)(48.f * k);
     ui_rect(im, px, py, pw, ph, 0xF4000000u);
     ui_text(im, px + 12, py + ph / 2 - 7 * sc / 2, sc, t, UI_GOLD);
+}
+
+/* "YOU" right of this player's row on the party screen: drawn here, never in the game (every game's rows
+   are the same text: lockstep, fe_party.c). */
+static void you_tag(ui_image_t *im, int slot) {
+    int x0, y, by, sc = im->w >= 960 ? 3 : 2;
+    float k = (float)im->w * 3 < (float)im->h * 4 ? (float)im->w / 640.f : (float)im->h / 480.f;
+    float ox = ((float)im->w - 640.f * k) / 2, oy = ((float)im->h - 480.f * k) / 2;
+    fe_party_layout(3 + slot, &x0, &y, &by);
+    int tx = (int)(ox + (float)(x0 + 205) * k), ty = (int)(oy + (float)(y + 9) * k) - 7 * sc / 2;
+    int tw = ui_text_width("YOU", sc) + 12;
+    ui_rect(im, tx - 6, ty - 4, tw, 7 * sc + 8, UI_PANEL);
+    ui_text(im, tx, ty, sc, "YOU", UI_GOLD);
+    rt_trace("ms: party row tag YOU on row %d", slot + 1);
 }
 
 /* The page's picture of the party's screen, taken before the reload (platform/web/join_view.c), W x H:

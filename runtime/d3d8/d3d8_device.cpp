@@ -135,7 +135,6 @@ HLE_D3D(IDirect3DDevice8, Reset) {
 }
 
 HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
-    ls_cursor_present();   // first: the menus' shared cursor back before anything reads it
     Obj *o = d3d8_obj(a[0]);
     DevState *s = o->dev;
     const uint8_t *img;
@@ -233,10 +232,7 @@ HLE_D3D(IDirect3DDevice8, GetDepthStencilSurface) {
 }
 
 // ---- scene ----------------------------------------------------------------------------------
-HLE_D3D(IDirect3DDevice8, BeginScene) {   // (a party: this screen's own pointer drawn, runtime/core/ls_cursor.c)
-    ls_cursor_scene();
-    return D(a)->BeginScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_;
-}
+HLE_D3D(IDirect3DDevice8, BeginScene) { return D(a)->BeginScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_; }
 HLE_D3D(IDirect3DDevice8, EndScene) { return D(a)->EndScene() == D3D_OK ? D3D_OK_ : D3DERR_INVALIDCALL_; }
 
 HLE_D3D(IDirect3DDevice8, Clear) { // (this, Count, D3DRECT*, Flags, Color, float Z, Stencil)
@@ -271,8 +267,9 @@ HLE_D3D(IDirect3DDevice8, DrawIndexedPrimitive) { // (this, type, minIndex, numV
 
 HLE_D3D(IDirect3DDevice8, DrawPrimitiveUP) { // (this, type, primCount, data, stride)
     DevState *s = S(a);
-    bool p = !hidden(a) && d3d8_pov_pre(a);
+    bool p = !hidden(a) && d3d8_pov_pre(a), c = !hidden(a) && d3d8_cursor_pre(a);
     if (!hidden(a)) D(a)->DrawPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], G2H(a[3]), a[4]);
+    d3d8_cursor_post(a, c);
     d3d8_pov_post(a, p);
     release(s->stream[0]);
     s->stream[0] = 0;

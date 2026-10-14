@@ -6,7 +6,7 @@
 #include "rt.h"
 #include <stdint.h>
 
-#define DESK_SLOT      0    /* the game's keyboard and mouse belong to controller 1's player */
+#define NET_DESK_MENU  0x41u /* a desk event: to the main menu (a leave: net_leave.c); 0x40 NET_DESK_LOOK */
 #define RING           1024
 #define AHEAD          600  /* read no message for a frame this far ahead (ring room) */
 #define NDESK          24   /* keyboard and mouse events per input message (more wait a frame) */
@@ -35,6 +35,10 @@ typedef struct {
     int nev[RT_MAX_PADS];
     uint8_t active[RT_MAX_PADS];      /* roster at the frame being resolved */
     int64_t my_from;                  /* my slot plays from this frame (-1: not granted yet) */
+    int64_t since;                    /* my slot's previous player left here: its 'A'/'D' are not mine (-1: none) */
+    uint32_t stint[RT_MAX_PADS];      /* the frame each playing slot came in (the host: the earliest) */
+    int desk;                         /* the slot whose keyboard and mouse are the game's (net_leave.c) */
+    int leaving, forked, go_menu;     /* LEAVE PARTY: asked, the server's answer, the menu event to send */
     int joined;                       /* caught up once (the room's creator: from the start): in step since */
     int64_t next_send;                /* first frame I have not sent an input for */
     uint32_t max_seen, frame;         /* highest input frame received; frame being resolved */
@@ -70,4 +74,10 @@ void net_external_rx(const uint8_t *m);
 /* net_frame.c */
 void net_frame(uint32_t frame);   /* det_frame hook: runs first at every Present */
 
+void net_go_offline(void);               /* alone from now on (netplay.c) */
+void net_left(int how);                  /* net_leave.c: rt_net_left's news (2: the connection lost) */
+void net_leave_step(uint32_t frame);     /* net_leave.c: a leave asked, before the frame's inputs */
+void net_desk_at(uint32_t frame);        /* ... who has the keyboard and mouse, at each applied frame */
+int net_leave_menu_event(plat_desk_ev_t *e);
+void net_leave_menu_apply(void);
 #endif

@@ -1,6 +1,6 @@
 /* ls_roles.c -- who drives what in a lockstep party, as online sports games do (the user, 2026-10-13):
- *   host     the shared menus are the host's: player 1, or the lowest player still in the room when
- *            player 1 has left. Other players' controllers do nothing there, except where every player
+ *   host     the shared menus are the host's: the player in the party the longest (player 1 first,
+ *            net_leave.c). Other players' controllers do nothing there, except where every player
  *            picks a side for their own controller (Team Select screens). Their screens say the host is
  *            choosing; their Esc asks whether to leave the party (this game only, local).
  *   pause    the player who paused drives the pause menu; the others' screens say who paused.
@@ -34,11 +34,7 @@ static int g_left[RT_MAX_PADS] = { PAUSES, PAUSES, PAUSES, PAUSES };
 static uint32_t g_pause_frames;
 static int g_leave_ask;       /* this player's "leave the party?" (local) */
 
-int ls_host(void) {
-    for (int k = 0; k < RT_MAX_PADS; k++)
-        if (rt_net_active(k)) return k;
-    return 0;
-}
+int ls_host(void) { return rt_net_host(); }
 
 static int in_match(void) {
     uint32_t g = rd32(GAME_PTR), st = g ? rd32(g + 0x90) : 0;
@@ -54,12 +50,12 @@ int ls_roles_may_pause(int slot) {   /* a player with pauses left (no limit outs
 void ls_roles_paused_by(int slot) {   /* pad_pause.c: Start, every game at the same frame */
     if (g_pauser < 0 && in_match()) g_pauser = slot, g_armed = 120;   /* (the menu opens ~32 frames later) */
 }
-/* Player 1's keyboard Esc pauses too: none once its pauses are used up. */
+/* The desk's keyboard Esc pauses too (its player's pause): none once its pauses are used up. */
 int ls_roles_desk_event(const plat_desk_ev_t *e) {
     if (!ls_on() || e->type != PLAT_DESK_KEY || e->x != SC_ESCAPE || !e->a || !in_match()) return 1;
     if (fe_screen_id() != SCR_HUD || g_pauser >= 0) return 1;
-    if (!ls_roles_may_pause(0)) return 0;
-    ls_roles_paused_by(0);
+    if (!ls_roles_may_pause(rt_net_desk())) return 0;
+    ls_roles_paused_by(rt_net_desk());
     return 1;
 }
 
@@ -106,7 +102,7 @@ int ls_roles_filter(const plat_desk_ev_t *d, int nd) {
             memset(&rt_pads[k], 0, sizeof rt_pads[k]);
             rt_pads[k].spare = plugged;
         }
-    return only == 0;
+    return only == rt_net_desk();
 }
 
 /* A set piece's options (penalty, quick options: screen 0x58) are for the team with the ball: 1 if that
@@ -115,7 +111,7 @@ static int others_choice(int id) {
     if (id != SCR_QUICK && id != SCR_PENALTY) return 0;
     ms_ball_t b;
     int me = rt_net_slot();
-    char side = me == 0 && rt_pads_side(-1) ? rt_pads_side(-1) : rt_pads_side(me);
+    char side = me == rt_net_desk() && rt_pads_side(-1) ? rt_pads_side(-1) : rt_pads_side(me);
     if (!ms_ball(&b) || b.holder_team < 0 || !side) return 0;
     static int said;
     if (!said++) rt_trace("ms: party options for team %d, this player's side %c", b.holder_team, side);
@@ -139,7 +135,7 @@ int ls_roles_banner(char *line, int cap) {
 }
 
 /* This player's own presses in the menus while another player is the host: Esc asks to leave, S says
-   yes (the page starts a fresh own game). The presses still go out: the host's game ignores them. */
+   yes (this game plays on alone: net_leave.c). The presses still go out: the host's game ignores them. */
 void ls_roles_local(const rt_pad_t *p) {
     static uint16_t was;
     uint16_t b = p->buttons, down = (uint16_t)(b & ~was);
@@ -149,5 +145,5 @@ void ls_roles_local(const rt_pad_t *p) {
         return;
     }
     if (down & RT_PAD_START) g_leave_ask = !g_leave_ask;
-    else if (g_leave_ask && (down & RT_PAD_CROSS)) plat_session_leave();
+    else if (g_leave_ask && (down & RT_PAD_CROSS)) g_leave_ask = 0, rt_net_leave();
 }

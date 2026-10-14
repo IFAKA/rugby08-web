@@ -82,10 +82,11 @@ int net_tx_hints(int64_t *grant, int64_t *front) {   /* natively they come as te
     *grant = *front = -1;
     return 0;
 }
-/* The lockstep session's room: natively the --net-room code; joining and leaving are the page's. */
+/* The lockstep session's room: natively the --net-room code (a leave's own room: netplay.c sets it);
+   joining another is the page's. */
 const char *plat_session_code(void) { return rt_net_room ? rt_net_room : ""; }
 void plat_session_join(const char *code) { (void)code; }
-void plat_session_leave(void) {}
+int net_tx_forked(void) { return 0; }   /* natively the answer comes in the stream (netplay.c) */
 int plat_join_preview(int *slot, uint32_t *players, char *code, int cap) {
     (void)slot, (void)players, (void)code, (void)cap;
     return 0;

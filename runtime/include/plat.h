@@ -109,18 +109,22 @@ void rt_pad_pause_frame(uint32_t frame); /* every Present, after it: Start pause
 extern int rt_net;
 extern int rt_ff; /* catching up (netplay): skip drawing and sound */
 int rt_net_start(int argc, char **argv); /* --net URL --net-room CODE ...: 1 if a session started */
-int rt_net_begin(int slot, int creator);
+int rt_net_begin(int slot, int creator, int64_t since);
 extern int rt_net_cfg_delay; /* --net-delay D (net_join.c; 0: default) */
 extern const char *rt_net_room; /* --net-room CODE (net_join.c) */
 rt_pad_t *rt_net_local_pad(void);
 int rt_net_active(int k);   /* lockstep: room slot k plays at the frame being resolved */
 int rt_net_slot(void);      /* lockstep: this player's room slot */
+int rt_net_host(void);      /* lockstep: the slot in the party the longest (it drives the menus: net_leave.c) */
+int rt_net_desk(void);      /* lockstep: the slot whose keyboard and mouse are the game's */
+void rt_net_leave(void);    /* lockstep: this player leaves the party and plays on alone */
+int rt_net_left(void);      /* lockstep, once: 1 this player left the party, 2 lost the connection, else 0 */
 int rt_net_external_source(void);                       /* net_external.c: this game reads its machine */
 void rt_net_external_put(const void *data, uint32_t len); /* ... and shares what it read */
 void rt_net_external_get(void *data, uint32_t len);     /* ... or gets the bytes another game read */
 const char *plat_session_code(void);      /* lockstep: this session's room code ("": none) */
 void plat_session_join(const char *code); /* lockstep: play in that room instead (the page reloads) */
-void plat_session_leave(void);           /* lockstep: leave for a fresh own game (the page reloads) */
+int net_tx_forked(void);                 /* lockstep: 1 once the server gave this game a room of its own */
 /* joining a party: its screen from the start (platform/web/join_view.c; native: none) */
 int plat_join_preview(int *slot, uint32_t *players, char *code, int cap); /* 1: joining that room as SLOT */
 void plat_join_snapshot(int menu_x); /* the frame just drawn is that party's screen: keep it (and the menu's x) */

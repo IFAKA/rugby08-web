@@ -34,8 +34,13 @@ uint64_t ls_simhash(void) {
             h = mix(h, &p.heading, sizeof p.heading);
             h = mix(h, &p.state_vt, sizeof p.state_vt);
         }
-    ms_ball_t b;
-    if (ms_ball(&b)) h = mix(h, &b, sizeof b);
+    ms_ball_t b;   /* (field by field: the struct's padding is whatever the stack held, per machine) */
+    if (ms_ball(&b)) {
+        h = mix(h, b.pos, sizeof b.pos);
+        h = mix(h, b.vel, sizeof b.vel);
+        h = mix(h, &b.holder_team, 1);
+        h = mix(h, &b.holder, 1);
+    }
     int s[2] = { ms_score(0), ms_score(1) };
     float c = ms_clock(), t = ms_time();
     h = mix(h, s, sizeof s);

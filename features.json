@@ -574,7 +574,8 @@
       ],
       "desc": "The ONLINE screens drive lockstep: CREATE PARTY shows this session's code and roster, JOIN PARTY reloads into the host's session with a catch-up screen, LEAVE PARTY back to an own game; 3 pages, identical frames and hashes.",
       "check": "/opt/homebrew/bin/python3 tools/net/ls_party_check.py",
-      "passes": true
+      "passes": false,
+      "notes": "2026-10-14 (the user: leaving must not restart the game, as in online sports games): LEAVE PARTY now keeps the leaver's game, at its main menu, in a room of its own (server/fork.go, runtime/core/net_leave.c); the check now requires that, a newcomer in sync in the leaver's room, and the leaver joining the party again. passes=false until it runs again."
     },
     {
       "id": "ls.controls",
@@ -723,6 +724,60 @@
       "check": "cd tools/net && /opt/homebrew/bin/python3 ls_cursor_check.py",
       "passes": false,
       "notes": "2026-10-14: built in d868fc8; the user's two-window test passed (cursors independent, party view, Team Select shared). The check never ran clean: its host page froze at boot after data/controltypes.csv both times while another session's 3-page check ran at once; rerun it alone."
+    },
+    {
+      "id": "aems.rebase",
+      "deps": [],
+      "desc": "Leaving a match never stops the sound: an EA sound bank the game loads again at another address after a match (the menus' fe_sfx.abk) is found there; no freeze after QUIT MATCH (the user's play test, 2026-10-14).",
+      "check": "tools/check/quit_sound_check.sh",
+      "passes": true,
+      "notes": "PASS 2026-10-14: fe_sfx.abk moved to 0x026B7F80 after QUIT, 6000 frames of menus, no errors; the same check on the old aems.c fails with the user's crash (ICALL: unresolved VA 0x026B81CF from 0x007D0470)."
+    },
+    {
+      "id": "ls.rules",
+      "deps": [
+        "ls.match"
+      ],
+      "desc": "The game's own couch rules measured with several humans: who controls which player on a team with 2+ humans (passes, rucks, tackles), and which controller a set piece's decision goes to (docs/plans/2026-10-14-online-solo-feel.md).",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_rules_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.own_view",
+      "deps": [
+        "ls.rules"
+      ],
+      "desc": "Every player plays as if alone: the camera from the player's own team's end with the player's own settings, never flipping with the ball, in any mix of up to 4 players; the copies stay identical (memory, clock, scheduling).",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_own_view_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.decisions",
+      "deps": [
+        "ls.rules"
+      ],
+      "desc": "Set-piece decisions: the controller the game gives it to sees the menu; every other screen shows the game carrying on as when the AI decides, with PLAYER N IS CHOOSING; any mix.",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_decisions_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.fastjoin",
+      "deps": [
+        "ls.party"
+      ],
+      "desc": "Joining is fast: catch-up speed measured and raised (indirect-call lookup, ...), then a save-state join if it proves reliable; join time per minute of session recorded.",
+      "check": "/opt/homebrew/bin/python3 tools/net/ls_join_time_check.py",
+      "passes": false
+    },
+    {
+      "id": "ls.mixes",
+      "deps": [
+        "ls.own_view",
+        "ls.decisions"
+      ],
+      "desc": "Every mix of up to 4 players (1v1, 2 vs AI, 2v1, 2v2, 3v1, 4 vs AI, one watching) stays in sync through a match, native copies.",
+      "check": "tools/net/ls_mixes_check.sh",
+      "passes": false
     }
   ]
 }

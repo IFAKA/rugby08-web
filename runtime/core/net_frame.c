@@ -13,7 +13,8 @@ static void check_hashes(uint32_t frame) {
     uint32_t k = (frame / NET_HASH_EVERY) % HRING;
     if (N.hash_frame[k][N.slot] != frame) return;
     for (int i = 0; i < RT_MAX_PADS; i++) {
-        if (i == N.slot || N.hash_frame[k][i] != frame || N.hash[k][i] == N.hash[k][N.slot]) continue;
+        if (i == N.slot || !N.active[i] || N.hash_frame[k][i] != frame || N.hash[k][i] == N.hash[k][N.slot])
+            continue;   /* (a slot gone: its hashes since are another game's, e.g. after this player left) */
         rt_trace("netplay: DESYNC at frame %u (player %d hash %016llX, mine %016llX)", frame, i + 1,
                  (unsigned long long)N.hash[k][i], (unsigned long long)N.hash[k][N.slot]);
         static int keep = -1;   /* RT_NET_KEEP_DESYNC (experiments): go on after a desync */
@@ -35,16 +36,17 @@ static void fault_inject(uint32_t frame) {
 /* This player's pad from its devices (no-op in replay runs: replay events already set N.local), and
  * its input delay as the page or the platform chose it. */
 static void read_local(uint32_t frame) {
-    static int had;   /* controller 1's player: its game controller (its keyboard is the game's keyboard) */
+    static int had;   /* the desk's player: its game controller (its keyboard is the game's keyboard) */
     rt_pad_t g;
-    if (N.slot != DESK_SLOT) {
+    plat_desk_capture(N.slot == N.desk);
+    if (N.slot != N.desk) {
         plat_local_pad(&N.local);   /* a friend: keyboard and game controller drive its pad */
         N.local.spare = 1;          /* (plugged in while it plays: rt_pad_attached) */
     } else if (plat_gamepad(&g)) {
         g.spare = 1;
         N.local = g;
     } else if (had) memset(&N.local, 0, sizeof N.local);
-    had = N.slot == DESK_SLOT && N.local.spare;
+    had = N.slot == N.desk && N.local.spare;
     ls_roles_local(&N.local);   /* this player's own presses where another player is the host */
     static rt_pad_t last;   /* trace input changes (checks: tools/net/net_live_input.py) */
     if (memcmp(&last, &N.local, sizeof last) != 0) {
@@ -59,14 +61,16 @@ static void read_local(uint32_t frame) {
 /* One 'I' message: this player's pad for frame f, and (the host) its keyboard and mouse since the last. */
 static void send_input(int64_t f, int idle) {
     plat_desk_ev_t d[NDESK];
-    int nd = N.slot == DESK_SLOT && !idle ? plat_desk_take(d, NDESK - 1) : 0;
-    static int16_t lx, lz;   /* player 1: its camera's look, when it changes (own_camera.c) */
+    int desk = N.slot == N.desk;
+    int nd = desk && !idle ? plat_desk_take(d, NDESK - 2) : 0;
+    static int16_t lx, lz;   /* the desk's player: its camera's look, when it changes (own_camera.c) */
     int16_t x, z;
-    if (N.slot == DESK_SLOT && !idle && own_camera_look(&x, &z) && (x != lx || z != lz))
+    if (desk && !idle && own_camera_look(&x, &z) && (x != lx || z != lz))
         d[nd++] = (plat_desk_ev_t){ NET_DESK_LOOK, 0, x, z }, lx = x, lz = z;
+    if (desk && !idle && net_leave_menu_event(&d[nd])) nd++;   /* (after a leave: to the main menu) */
     rt_pad_t pad = N.local;
-    if (idle) memset(&pad, 0, sizeof pad), pad.spare = N.slot != DESK_SLOT;   /* plugged in, nothing pressed */
-    else if (N.slot != DESK_SLOT) own_camera_turn_pad(&pad);   /* from its own camera's direction to player 1's */
+    if (idle) memset(&pad, 0, sizeof pad), pad.spare = !desk;   /* plugged in, nothing pressed */
+    else if (!desk) own_camera_turn_pad(&pad);   /* from its own camera's direction to the desk player's */
     uint8_t m[19 + 6 * NDESK] = { 'I', (uint8_t)N.slot };
     put32(m + 2, (uint32_t)f);
     memcpy(m + 6, &pad, sizeof pad);
@@ -169,18 +173,20 @@ static void apply_inputs(uint32_t frame) {
     for (int k = 0; k < RT_MAX_PADS; k++)
         rt_pads[k] = !N.offline && N.active[k] && net_have_input(k, frame) ? N.in[frame % RING][k].pad : zero;
     if (N.offline) rt_pads[N.slot] = N.local;
-    /* the host's keyboard and mouse, at the frame they were sent for (offline: as they come) */
-    if (!N.offline && N.active[DESK_SLOT] && net_have_input(DESK_SLOT, frame)) {
-        const slot_in_t *s = &N.in[frame % RING][DESK_SLOT];
+    net_desk_at(frame);
+    /* the desk's keyboard and mouse, at the frame they were sent for (offline: this player's, as they come) */
+    if (!N.offline && N.active[N.desk] && net_have_input(N.desk, frame)) {
+        const slot_in_t *s = &N.in[frame % RING][N.desk];
         int desk = ls_roles_filter(s->d, s->nd);   /* who may act now (the host's menus, the pauser's) */
         for (int i = 0; i < s->nd; i++)
             if (s->d[i].type == NET_DESK_LOOK) own_camera_set_ref(s->d[i].x, s->d[i].y);
+            else if (s->d[i].type == NET_DESK_MENU) net_leave_menu_apply();
             else if ((desk && ls_roles_desk_event(&s->d[i])) ||
                      ((s->d[i].type == PLAT_DESK_KEY || s->d[i].type == PLAT_DESK_BUTTON) && !s->d[i].a))
                 plat_desk_apply(&s->d[i]);   /* (releases always: nothing stays held) */
     } else if (!N.offline) {
         ls_roles_filter(NULL, 0);
-    } else if (N.offline && N.slot == DESK_SLOT) {
+    } else if (N.offline) {
         plat_desk_ev_t d[NDESK];
         for (int i = 0, n = plat_desk_take(d, NDESK); i < n; i++) plat_desk_apply(&d[i]);
     }
@@ -234,6 +240,7 @@ void net_frame(uint32_t frame) {
     }
     if (N.auth && !N.offline) admit(frame);
     exchange_hash(frame);
+    net_leave_step(frame);
     wait_inputs(frame);
     apply_inputs(frame);
     trace_applied(frame);

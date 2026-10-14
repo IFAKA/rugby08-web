@@ -12,11 +12,14 @@
  * change at the same frame. A join is granted by the roster authority (the creator; the server hands
  * the role on if it leaves) as "A slot J" with J beyond every input it has sent, so nobody can have
  * passed frame J without first seeing the grant. A leave is decided by the server as "D slot L", L
- * just past the leaver's last input, sent after all of them.
+ * just past the leaver's last input, sent after all of them. A slot is used again by a later player: the
+ * log a newcomer replays has the slot's earlier players' 'A' and 'D'; the server says where the last of
+ * them left ("since"), and only a grant from there on is this player's own.
  *
  * Desync check: every NET_HASH_EVERY frames the players exchange det_hash_step(). Whoever disagrees
  * with a lower slot is the one out of sync: it stops (exit 3) and the page rejoins, i.e. it rebuilds
- * its game from the log. Lost connection: the game carries on offline (it is a complete game).
+ * its game from the log. Lost connection: the game carries on offline, alone (it is a complete game).
+ * Leaving the party: the game plays on in a room of its own (net_leave.c, server/fork.go).
  *
  * Wire format (little-endian; the server relays and logs binary messages, possibly several per frame):
  *   'I' slot u32 frame rt_pad_t n ev[n]   19 + 6n  input  'H' slot u32 frame u64   14  state hash
@@ -34,7 +37,7 @@
 int rt_net;   /* a netplay session is running */
 int rt_ff;    /* fast-forward (catching up): no drawing, no sound */
 int rt_net_progress;   /* catching up: percent done (the game shows it: ui_badge.c) */
-net_state_t N = { .delay = 4, .my_from = -1 };
+net_state_t N = { .delay = 4, .my_from = -1, .since = -1 };
 
 rt_pad_t *rt_net_local_pad(void) { return &N.local; }
 int rt_net_slot(void) { return N.slot; }
@@ -65,6 +68,7 @@ static void add_event(int slot, uint32_t frame, int on) {
 void net_roster_at(uint32_t frame) {
     for (int k = 0; k < RT_MAX_PADS; k++)
         while (N.nev[k] && N.ev[k][0].frame <= frame) {
+            if (N.ev[k][0].on && !N.active[k]) N.stint[k] = N.ev[k][0].frame;
             N.active[k] = N.ev[k][0].on;
             memmove(&N.ev[k][0], &N.ev[k][1], (size_t)--N.nev[k] * sizeof(ev_t));
         }
@@ -103,16 +107,17 @@ void net_handle(const uint8_t *m) {
     }
     case 'A':
         add_event(k, f, 1);
-        if (k == N.slot) {   /* (the server may have told this game already: net_hint) */
+        if (k == N.slot && (int64_t)f >= N.since) {   /* (the server may have told this game already: net_hint) */
             N.my_from = f;
             if (N.next_send < (int64_t)f) N.next_send = f;
         }
         break;
     case 'D':
         add_event(k, f, 0);
-        if (k == N.slot && N.my_from >= 0 && (int64_t)f >= N.my_from) { /* (not a leave of the slot's last player) */
-            rt_trace("netplay: removed from the session");
-            exit(4);
+        if (k == N.slot && (int64_t)f > N.since && N.my_from >= 0 &&
+            (int64_t)f >= N.my_from) { /* (not an earlier player's) */
+            rt_trace("netplay: removed from the session");   /* (the server dropped it: too slow) */
+            net_go_offline();
         }
         break;
     case 'X': net_external_rx(m); break;
@@ -163,10 +168,14 @@ static int consume(void) {
     return ok;
 }
 
-static void go_offline(void) {
+/* Alone from now on: the others stop at once (their inputs are no longer waited for, applied or sent). */
+void net_go_offline(void) {
     if (N.offline) return;
     N.offline = 1;
     rt_ff = 0;
+    for (int k = 0; k < RT_MAX_PADS; k++) N.active[k] = 0, N.nev[k] = 0;
+    N.active[N.slot] = 1;   /* (also when the server dropped this player: its own 'D' is not for it) */
+    net_left(2);
     rt_trace("netplay: connection lost, playing on offline");
     net_tx_status(3, 0);
 }
@@ -189,6 +198,12 @@ static void hint_json(const char *s, int n) {
     const char *p;
     if (strstr(b, "\"granted\"") && (p = strstr(b, "\"from\":"))) hint(atoll(p + 7), -1);
     if (strstr(b, "\"front\"") && (p = strstr(b, "\"frame\":"))) hint(-1, atoll(p + 8));
+    if (strstr(b, "\"t\":\"forked\"") && (p = strstr(b, "\"room\":\""))) {   /* (web: net_tx_forked) */
+        static char room[16];
+        snprintf(room, sizeof room, "%.6s", p + 8);
+        rt_net_room = room;
+        N.forked = 1;
+    }
 }
 
 /* Peers' direct copies of inputs and hashes (web: js/peers.js), ahead of the relay's: taken only for a
@@ -214,7 +229,7 @@ void net_pump(int wait_ms) {
         if (N.rx_n >= (int)sizeof N.rx - (1 << 20) - 64) return; /* (room for an 'X') */
         int n = net_tx_recv(N.rx + N.rx_n, (int)sizeof N.rx - N.rx_n, wait_ms);
         if (n < 0) {
-            go_offline();
+            net_go_offline();
             return;
         }
         if (n == 0) return;
@@ -225,8 +240,9 @@ void net_pump(int wait_ms) {
 }
 
 /* Start the lockstep session (also called by the web page, platform/web). */
-int rt_net_begin(int slot, int creator) {
+int rt_net_begin(int slot, int creator, int64_t since) {
     N.slot = slot;
+    N.since = since;
     N.auth = creator;
     if (rt_net_cfg_delay > 0) N.delay = rt_net_cfg_delay;
     rt_npads = RT_MAX_PADS;
@@ -240,8 +256,10 @@ int rt_net_begin(int slot, int creator) {
         N.joined = 1;
     }
     rt_ff = !creator;
-    plat_desk_capture(slot == DESK_SLOT); /* the host plays with the game's own keyboard and mouse */
+    N.desk = 0;   /* the room's creator: its keyboard and mouse are the game's (net_leave.c) */
+    plat_desk_capture(slot == N.desk);
     det_on_frame(net_frame);
-    rt_trace("netplay: session started as player %d%s", slot + 1, creator ? " (created the room)" : ", catching up");
+    rt_trace("netplay: session started as player %d%s (slot free since %lld)", slot + 1,
+             creator ? " (created the room)" : ", catching up", (long long)since);
     return 1;
 }
