@@ -12,6 +12,7 @@
 #include "ls_roles.h"
 #include "match_state.h"
 #include "pad_attach.h"
+#include "own_hud.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -107,13 +108,20 @@ int ls_roles_filter(const plat_desk_ev_t *d, int nd) {
 
 /* The side of slot K's player: its keyboard's if it has the desk, else its pad's ('H', 'A', 0). */
 static char side_of(int k) { return k == rt_net_desk() && rt_pads_side(-1) ? rt_pads_side(-1) : rt_pads_side(k); }
+int ls_team_of(int slot) { return side_of(slot) == 'H' ? 0 : side_of(slot) == 'A' ? 1 : -1; }
+int ls_team_has_players(int team) {
+    for (int k = 0; k < RT_MAX_PADS; k++)
+        if (rt_net_active(k) && ls_team_of(k) == team) return 1;
+    return 0;
+}
 
 /* A set piece's options (penalty, quick options) are for one team (ms_setpiece_team: the game's own): if
    that is not this player's team, LINE says who of the players there is choosing; 0: it is this player's,
    or nobody's here (the AI's team, unknown). */
 static int others_choice(int id, char *line, int cap) {
     if (id != SCR_QUICK && id != SCR_PENALTY) return 0;
-    int t = ms_setpiece_team(), me = rt_net_slot(), n = 0, w = 0;
+    int t = ms_setpiece_team(), me = rt_net_slot(), n = 0, w = 0, from_acting = t < 0;
+    if (from_acting) t = own_hud_acting();   /* (penalty options: the team rule is measured on quick options only) */
     char want = t == 0 ? 'H' : 'A', who[24] = "";
     if (t < 0 || !side_of(me) || side_of(me) == want) return 0;
     for (int k = 0; k < RT_MAX_PADS; k++)
@@ -121,7 +129,10 @@ static int others_choice(int id, char *line, int cap) {
             w += snprintf(who + w, sizeof who - (size_t)w, "%s%d", n++ ? " AND " : "", k + 1);
     if (!n) return 0;
     static int said = -1;
-    if (said != t) rt_trace("ms: party options for team %d, this player's side %c", t, side_of(me)), said = t;
+    if (said != t)
+        rt_trace("ms: party options for team %d%s, this player's side %c", t, from_acting ? " (acting)" : "",
+                 side_of(me)),
+            said = t;
     snprintf(line, (size_t)cap, "PLAYER%s %s %s CHOOSING", n > 1 ? "S" : "", who, n > 1 ? "ARE" : "IS");
     return 1;
 }

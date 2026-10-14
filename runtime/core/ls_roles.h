@@ -18,4 +18,6 @@ int ls_roles_actor(void);                             /* the slot acting in the 
 int ls_roles_filter(const plat_desk_ev_t *d, int nd); /* every game: other slots' pads off; 1: desk may act */
 int ls_roles_banner(char *line, int cap);             /* this player's banner (LS_BANNER_*), 0: none */
 void ls_roles_local(const rt_pad_t *p);               /* this player's own presses (leave the party?) */
+int ls_team_of(int slot);                             /* that slot's team: 0 home, 1 away, -1 none (watching) */
+int ls_team_has_players(int team);                    /* a party player is on that team */
 #endif

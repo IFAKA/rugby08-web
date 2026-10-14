@@ -16,11 +16,16 @@ void ms_probe_frame(uint32_t frame);  /* match_probe.c: RT_MS_SCAN / RT_MS_DUMP 
 void ms_stream_check_frame(void);     /* match_stream_check.c: RT_MS_STREAM_CHECK */
 void ms_quit_frame(uint32_t frame);   /* match_quit.c: RT_MS_QUIT_AT, RT_MS_RELAUNCH */
 void net_ha_test_press(rt_pad_t *local, int host_phase, uint32_t frame);   /* net_ha_press.c */
+int dbg_draw_who(const uint32_t *a, int kind, uint32_t prims, uint32_t vb, uint32_t ib, uint32_t tex,
+                 uint32_t vs);   /* draw_who.c: RT_DRAW_WHO, RT_DRAW_HIDE_VB (1: leave the draw out) */
+void dbg_buffer_made(uint32_t buf, int vertex, uint32_t len, uint32_t usage, uint32_t fvf,
+                     uint32_t pool); /* draw_who.c */
 #ifdef __cplusplus
 }
 #endif
 
 void dbg_test_options_frame(uint32_t frame); /* test_options.c: RT_TEST_CAMERA */
+void dbg_ptr_find(uint32_t frame);           /* draw_who.c: RT_PTR_FIND */
 void dbg_setpiece_frame(uint32_t frame);     /* setpiece_probe.c: RT_MS_SETPIECE */
 void dbg_camside_frame(uint32_t frame);      /* camside_probe.c: RT_MS_CAMSIDE */
 void dbg_render_writes_begin(uint32_t frame); /* render_writes.c: RT_RENDER_WRITES (at the camera step) */

@@ -1,9 +1,9 @@
 /* own_camera.c -- each player's own camera in a lockstep party (the user, 2026-10-13: every player sees
  * the game as if playing alone). Every game runs the same match from everyone's inputs; the camera is the
  * one thing each game runs its own way:
- *   settings  the camera options (options 0xA33320 +0x230..+0x257: style, height, zoom, presets) are this
- *             player's: a change made on CHANGE CAMERA by the player who paused is kept in that player's
- *             game only (own_camera_options).
+ *   settings  the camera options (options 0xA33320 +0x230..+0x257: style, height, zoom, presets) are the
+ *             game's, the same in every game (own_camera_options; a pauser's CHANGE CAMERA too: one game's
+ *             own settings parted the games, the user's play test 2026-10-14).
  *   camera    the CameraManager runs on them in every game; what it keeps is left out of the state hash
  *             (det_hash_skip). Measured: the match never reads the camera, positions stay equal with
  *             different styles (2 min, 698 samples) -- except for one thing:
@@ -42,12 +42,9 @@ static int on(void) {
 }
 int own_camera_on(void) { return on(); }
 
-/* A screen where a player picks camera settings: in a match the pause menu's CHANGE CAMERA (0x2C). */
-static int camera_screen(int id) { return id == 0x2C; }
-
-/* Changes to the camera options since the last look. Made on a camera settings screen they are the acting
-   player's own choice (only the pauser acts there: ls_roles.c): kept in that player's game, undone in the
-   others. Any other change is the game's own (a profile loaded, a match set up): every game takes it. */
+/* Changes to the camera options since the last look: every game takes them, a pauser's CHANGE CAMERA too
+   (the game's camera is the same in every game: one game's own camera parted the games, the user's play
+   test 2026-10-14; each player's own view is drawn: own_end.c, ui_camera.c). */
 void own_camera_options(void) {
     if (!on()) return;
     uint8_t *o = (uint8_t *)G2H(OPTIONS + O_CAM_LO);
@@ -58,8 +55,8 @@ void own_camera_options(void) {
     if (!memcmp(o, g_seen, sizeof g_seen)) return;
     int id = fe_screen_id(), actor = ls_roles_actor();
     rt_trace("ms: own camera options changed on screen %04X by player %d", id & 0xFFFF, actor + 1);
-    if (!camera_screen(id) || actor < 0 || actor == rt_net_slot()) memcpy(g_mine, o, sizeof g_mine);
-    else memcpy(o, g_mine, sizeof g_mine);
+    memcpy(g_mine, o, sizeof g_mine);   /* (shared in a party: a game camera of each game's own parted the games,
+                                          2026-10-14; each player's own view is drawn only: own_end.c, ui_camera.c) */
     memcpy(g_seen, o, sizeof g_seen);
 }
 
@@ -104,7 +101,7 @@ void own_camera_after(uint32_t cam) {
     memcpy(eye, G2H(cam + 0x48), sizeof eye);
     memcpy(target, G2H(cam + 0x58), sizeof target);
     g_own[0] = target[0] - eye[0], g_own[1] = 0, g_own[2] = target[2] - eye[2];
-    if (rt_pov_yaw == 180) g_own[0] = -g_own[0], g_own[2] = -g_own[2];   /* drawn from the other end (own_end.c) */
+    if (rt_pov_way) g_own[0] = 0, g_own[2] = (float)rt_pov_way * 1000.0f;   /* drawn down the pitch (own_end.c) */
     g_own_set = 1;
     int ci = -1;   /* (checks: tools/net/ls_camera_check.py; the away side's first human's player) */
     if (rt_present_frame % 30 == 0 && ms_controlled(1, 0, &ci) | 1)

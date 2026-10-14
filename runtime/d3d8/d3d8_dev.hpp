@@ -29,6 +29,7 @@ struct DevState {
     uint32_t pshader = 0; // SetPixelShader handle
     uint32_t frame = 0;
     bool ff_drawn = false; // catching up (netplay): this frame is drawn all the same (ui_catchup shows it)
+    bool skip = false;     // this draw is left out of this player's picture (draw_who.c: RT_DRAW_HIDE_VB)
 };
 
 bool d3d8_pov_pre(const uint32_t *a); // d3d8_pov.cpp: this player's camera around a draw
@@ -36,10 +37,13 @@ void d3d8_pov_post(const uint32_t *a, bool set);
 bool d3d8_cursor_pre(
     const uint32_t *a);   // d3d8_pov.cpp: a party's menus' cursor at this screen's pointer (DrawPrimitiveUP)
 void d3d8_cursor_post(const uint32_t *a, bool set);
+bool d3d8_left_out(const uint32_t *a, int kind, uint32_t prims);   // d3d8_pov.cpp: not in this player's picture
 
 static inline DevState *S(const uint32_t *a) { return d3d8_obj(a[0])->dev; }
 static inline IDirect3DDevice9 *D(const uint32_t *a) { return dev9(d3d8_obj(a[0])); }
-static inline bool hidden(const uint32_t *a) { return rt_ff && !S(a)->ff_drawn; }   // catching up: not drawn
+static inline bool hidden(const uint32_t *a) {   // catching up, or left out of this player's picture: not drawn
+    return S(a)->skip || (rt_ff && !S(a)->ff_drawn);
+}
 static inline void addref(uint32_t g) {
     if (g) {
         Obj *o = d3d8_obj(g);

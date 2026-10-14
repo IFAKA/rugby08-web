@@ -6,7 +6,8 @@ code; the host takes PLAY NOW to Team Select, its keyboard goes home, the friend
 Both play (Cross now and then: each side answers its own set pieces). Measured:
   sync     the state hashes ("netplay: frame F hash H") are equal in both games;
   picture  the game's picture is the same at the same frame ("pix: frame F HASH", RT_PIX: the back
-           buffer before the local overlays): menus, intro cutscene, set-piece banners, referee;
+           buffer before the local overlays): menus, intro cutscene, set-piece banners, referee; except
+           while a game leaves the other team's prompt out ("ms: own hud part N left out", own_hud.c);
   pause    the friend's Esc pauses both games (screen 0x71), the host's screen says who paused (the menu is
            the friend's), its Cross on RESUME resumes both;
   presses  the friend's presses act in the match: its pause, and the away side's set pieces it answers.
@@ -34,9 +35,30 @@ def pixels(p):
     return {int(m.group(1)): m.group(2) for x in p.lines[start:] for m in [PIX.search(x)] if m}
 
 
+HUD = re.compile(r"ms: own hud part \d+ (left out|shown) .* at frame (\d+)")
+
+
+def own_hud(p):
+    """The frames this game left another team's prompt out of its picture (own_hud.c: the kick aim of the
+    other team's kicker), as (from, to) pairs: there the pictures differ by design."""
+    spans, start = [], None
+    for x in p.lines:
+        m = HUD.search(x)
+        if m and m.group(1) == "left out" and start is None:
+            start = int(m.group(2))
+        elif m and m.group(1) == "shown" and start is not None:
+            spans.append((start, int(m.group(2))))
+            start = None
+    return spans + ([(start, 1 << 30)] if start is not None else [])
+
+
 def same_picture(players, out, what, lo=0):
     ps = [pixels(p) for p in players]
-    common = sorted(f for f in set.intersection(*(set(x) for x in ps)) if f >= lo)
+    own = [s for p in players for s in own_hud(p)]
+    mine = sorted(f for f in set.intersection(*(set(x) for x in ps)) if f >= lo)
+    common = [f for f in mine if not any(a <= f <= b + 1 for a, b in own)]
+    if len(common) < len(mine):
+        out.append(f"{what}: {len(mine) - len(common)} pictures with one team's prompt left out of the other's")
     bad = [f for f in common if len({x[f] for x in ps}) > 1]
     out.append(f"{what}: {len(common)} pictures compared, {len(bad)} different" + (f" (first {bad[0]})" if bad else ""))
     for f in bad[:3]:  # where: the 16x12 blocks that differ (x,y), and whether the game's camera did

@@ -13,6 +13,7 @@
 #include "plat.h"
 #include "match_state.h"
 #include "own_camera.h"
+#include "own_hud.h"
 #include <string.h>
 
 #define C_STATE    0x54u        /* controller: the 16 floats applied last */
@@ -53,6 +54,7 @@ static int forwarded(uint32_t id) {
 
 void ms_camera_event(uint32_t listener, uint32_t event) {
     own_camera_options();   /* (this player's camera settings, before the camera hears of a change) */
+    own_hud_event(event);   /* (who acts: a party's prompts, own_hud.c) */
     g_listener = listener;
     uint32_t id = event ? rd32(event + 4) : 0xFFFFFFFFu;
     if (rt_net_ha == 1 && event && forwarded(id)) {
@@ -87,12 +89,16 @@ void ms_camera_remote(uint32_t id, uint32_t param) {   /* a friend: the host's e
 static uint32_t g_manager;
 
 /* The name of the camera this game shows ("Side", "Kickoff", "Zoom Broadcast" ...): CameraManager
-   thunk 0x453E90 (its controller +0x1E4, 0x40BBB0). */
+   thunk 0x453E90 (its controller +0x1E4, 0x40BBB0). A local section (det_local.c): one game alone asks
+   (own_end.c: a friend's view), and the asking must not move the lockstep's thread switches (the user's
+   play test 2026-10-14: the loader's switches parted at a scrum, DESYNC 8000 frames later). */
 const char *ms_camera_name(void) {
     if (!g_manager) return "";
     uint32_t sv = g_ecx;
     g_ecx = g_manager;
+    det_local_begin();
     uint32_t s = guest_call(0x00453E90u, 0);
+    det_local_end();
     g_ecx = sv;
     const char *n = s ? gstr(s) : NULL;
     return n ? n : "";

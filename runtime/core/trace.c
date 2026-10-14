@@ -29,7 +29,8 @@ int rt_enter_since(uint32_t mark, uint32_t *out, int max) {
 int rt_entry_hooks = -1;
 void rt_entry_hooks_arm(void) { rt_entry_hooks = 1; }
 static void entry_hooks_init(void) {
-    static const char *const v[] = { "RT_PROBE", "RT_PROBE_DUMP", "RT_SHADOW_ALL", "RT_SHADOW_FROM", "RT_COVERAGE" };
+    static const char *const v[] = { "RT_PROBE",       "RT_PROBE_DUMP", "RT_SHADOW_ALL",
+                                     "RT_SHADOW_FROM", "RT_COVERAGE",   "RT_DRAW_WHO" };
     rt_entry_hooks = 0;
     for (unsigned i = 0; i < sizeof v / sizeof *v; i++)
         if (getenv(v[i])) rt_entry_hooks = 1;

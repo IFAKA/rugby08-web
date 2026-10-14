@@ -12,6 +12,7 @@
 #include "fe_party.h"
 #include "own_camera.h"
 #include "match_state.h"
+#include "own_hud.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -214,6 +215,7 @@ void fe_party_present(uint32_t frame) {
     own_camera_options();   /* camera settings changed in the shared menus: this player's only (own_camera.c) */
     own_camera_present();   /* drawn: the match's camera, alike in every game, for the match's next step */
     own_end_present();      /* this player's end of the pitch, drawn only (own_end.c) */
+    own_hud_present();      /* another team's prompts left out of this picture (own_hud.c) */
     if (!ls_on()) {   /* host-authoritative party (lockstep: every game runs the same screens itself) */
         ui_lobby_poll();
         party_sides_present(frame);   /* (both also in a match: they check where the game is themselves) */

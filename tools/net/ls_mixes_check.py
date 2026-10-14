@@ -8,10 +8,11 @@ route puts home). A PLAY NOW match on the END ON camera (style 3), every player 
 for two minutes. Then:
   sync   the match's state hashes ("netplay: frame F hash") equal in every game, nobody removed;
   ends   (own_end.c) each player of a team saw the end camera along its team's way only (90 % of the
-         samples with the ball held), the two teams' ways opposite; a watcher's view never turned.
+         samples with the ball held), the two teams' ways opposite; a watcher's view never turned (own_end.c way 0).
 One line per mix; details in logs/ls_mixes/<mix>/."""
 
 import os
+import re
 import sys
 from collections import Counter
 
@@ -98,7 +99,7 @@ def run_mix(br, mix, out):
         if team["H"] and team["A"] and team["H"] == team["A"]:
             return f"the two teams saw the same end ({ways})"
         for p, x in zip(players, sides):
-            if x == "M" and any("turned 180" in y for y in session(p)):
+            if x == "M" and any(re.search(r"own end team -?\d+ way [+-]1", y) for y in session(p)):
                 return f"{p.name} watches, yet its view was turned"
         return None
     finally:

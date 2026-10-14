@@ -99,8 +99,7 @@ void ms_camera_host(const uint8_t *cam);                  /* a friend shows this
 void ms_camera_remote(uint32_t id, uint32_t param);       /* a friend: the host's camera event ('C') */
 int ms_camera_directed(void);                             /* the game shows a set piece's or event's camera */
 void ms_camera_manager(uint32_t manager);                 /* the CameraManager (its listener inside) */
-void own_end_heard(uint32_t event);   /* own_end.c: the camera heard a match event (every game) */
-void own_end_present(void);           /* ... every Present: this player's end, drawn only */
+void own_end_present(void);           /* own_end.c, every Present: this player's end, drawn only */
 const char *ms_camera_name(void);                         /* the camera this game shows ("Side", "Scrum" ...) */
 
 /* match_measure.c: RT_MS_POS lines for tools/net/match_compare.py */

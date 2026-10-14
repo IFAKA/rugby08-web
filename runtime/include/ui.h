@@ -35,7 +35,9 @@ int ui_open(void);                    /* (0: nothing of ours takes every key) */
 int ui_camera_key(int scancode, int down);
 void rt_pov_cycle(void);
 const char *rt_pov_name(void);
-extern float rt_pov_yaw; /* d3d8_pov.cpp: the view turned about the point it looks at (own_end.c: 180, the other end) */
+extern float rt_pov_yaw; /* d3d8_pov.cpp: the view turned about the point it looks at (degrees; checks: RT_POV_YAW) */
+extern int
+    rt_pov_way;   /* d3d8_pov.cpp: +1/-1 the view drawn looking that way along the pitch (own_end.c); 0 the game's */
 /* ui_party_view.c: a friend's screen stays on the party screen while the host chooses (drawing only) */
 void ui_party_view_capture(uint32_t frame, int w, int h); /* at Present, before the overlays */
 int ui_party_view_due(void); /* the next Present's frame is read back */

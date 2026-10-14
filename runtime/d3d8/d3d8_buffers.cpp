@@ -1,6 +1,8 @@
 // d3d8_buffers.cpp -- IDirect3DVertexBuffer8/IndexBuffer8: a guest shadow per buffer; Unlock uploads the
 // range written since the lock with the lock flags (renderer: render/webgl/buffers.cpp).
 #include "d3d8_int.hpp"
+#include "../debug/debug.h"
+#include "own_hud.h"
 #include <algorithm>
 #include <cstring>
 
@@ -34,6 +36,7 @@ static uint32_t new_buffer(Kind k, Obj *dev, uint32_t len, uint32_t usage, uint3
     o->pool = pool;
     o->shadow = gcalloc(len ? len : 1);
     *out = d3d8_new(o);
+    dbg_buffer_made(*out, k == K_VB, len, usage, fvf_or_fmt, pool);
     return D3D_OK_;
 }
 
@@ -85,6 +88,8 @@ static uint32_t buf_unlock(const uint32_t *a) {
                                  : ((IDirect3DIndexBuffer9 *)b->host)->Lock(b->lock_lo, n, &p, fl);
     if (hr != D3D_OK || !p) return D3DERR_INVALIDCALL_;
     memcpy(p, G2H(b->shadow + b->lock_lo), n);
+    if (b->kind == K_VB && !(b->usage & 0x200u))   // a static mesh: which HUD part, if any (D3DUSAGE_DYNAMIC: not)
+        b->part = own_hud_part((const uint8_t *)G2H(b->shadow), b->size, b->fvf);
     if (b->kind == K_VB) ((IDirect3DVertexBuffer9 *)b->host)->Unlock();
     else ((IDirect3DIndexBuffer9 *)b->host)->Unlock();
     return D3D_OK_;

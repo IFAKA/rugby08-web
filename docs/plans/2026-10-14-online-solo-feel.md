@@ -85,3 +85,22 @@ Local only; the user deploys the web app later.
   session: ~1/3 of its length in the browser (party made first: ~1.5 min). A save-state join is not
   reliable here: guest threads are native threads (their state on native stacks) and D3D/audio objects
   live outside guest memory.
+- The user's play test (2026-10-14 evening, room SYAXVW): (1) the friend dropped (DESYNC at frame 27719):
+  root cause own_end.c asking the game for its camera's name (a guest call) in the friend's game only;
+  the extra guest function entries moved the lockstep's thread switches (the loader's lines came out in
+  another order at a scrum, frame 19407; the heap's free count parted at frame 19620). Fixed:
+  ms_camera_name is a det_local section; ls.own_view: scheduling equal over 23642 frames. (2) Lag: the
+  sim took 18-20 ms a frame in each of the two pages on one Mac (47 fps, slow motion): a solo match 12-13
+  ms, solo in det mode 13-14 ms (headless, same machine); the party's share to be measured on two
+  machines. (3) The camera still turned with the ball: filtering 0xAD (and 0xAE, 0x1A) does not stop the
+  end camera following possession (measured, RT_MS_CAMEV). New rule 1: the game's camera stays a couch
+  camera; each game draws it straight down the pitch along its own team's way (d3d8_pov.cpp rt_pov_way:
+  same point, height and distance), each team's way read off the camera while that team (with party
+  players) holds the ball: ls.own_view PASS (host 256/260 one way, friend 260/260 the other). (4) The
+  other team's kick aim arrow: own_hud.c leaves it out (the arc and shadow meshes known by their vertex
+  data; the acting team: the ball's holder, else the last match event's player, as a kick-off's kicker
+  holds no ball): visual check, both screens. (5) Penalty options: ms_setpiece_team gave no team for 0x5F
+  (no cover on either screen): falls back to the acting team.
+- Open: the 2D prompts of another team's player (play calls LOOP/CLASSIC/MISS/POCKET, FEED, BIND, the
+  ruck wheel ST/KI/WI/TI) are drawn from the engine's render lists in the shared font and HUD textures,
+  so neither the code nor a buffer tells them apart yet; the set-piece menus are covered, not removed.

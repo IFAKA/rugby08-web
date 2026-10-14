@@ -12,5 +12,4 @@ GAME_OVERRIDE(sub_00407810) {
     ms_camera_event(g_ecx, ev);
     sub_00407810_lifted();   /* pops its argument */
     ms_camera_event_done(ev);
-    own_end_heard(ev);   /* (each player's end: runtime/core/own_end.c) */
 }

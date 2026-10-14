@@ -22,6 +22,12 @@ void dbg_setpiece_frame(uint32_t frame) {
     int ball = ms_ball(&b);
     rt_trace("setpiece: screen %02X at frame %u phase %s holder team %d", id, frame, ms_phase(),
              ball ? b.holder_team : -9);
+    for (int t = 0; t < 2; t++)   /* players in QuickOptionState@Player (vtable 0x8EDC78): the option's taker */
+        for (int i = 0; i < 15; i++) {
+            ms_player_t p;
+            if (ms_player(t, i, &p) && p.state_vt == 0x008EDC78u)
+                rt_trace("setpiece:  taker team %d player %d (number %d)", t, i, p.number);
+        }
     uint32_t ph = ms_phase_va();   /* the phase object: which word is the awarded team? */
     char pw[400];
     int pn = 0;

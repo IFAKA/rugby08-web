@@ -7,6 +7,8 @@
 // Limits: the game culls what its own camera cannot see, so presets stay close to the game's view.
 #include "d3d8_dev.hpp"
 #include "fe_party.h"
+#include "own_hud.h"
+#include "../debug/debug.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -21,7 +23,9 @@ static const struct {
 };
 static const int k_npresets = (int)(sizeof k_presets / sizeof k_presets[0]);
 extern "C" int rt_pov = 0;
-extern "C" float rt_pov_yaw = 0;   // degrees about the vertical through the pivot: 180 = the other end
+extern "C" float rt_pov_yaw = 0;   // degrees about the vertical through the pivot (checks: RT_POV_YAW)
+extern "C" int rt_pov_way = 0;     // +1/-1: drawn looking that way along the pitch (z) at the same point (own_end.c)
+static bool pov_on() { return rt_pov || rt_pov_yaw != 0 || rt_pov_way != 0; }
 
 extern "C" const char *rt_pov_name(void) { return k_presets[rt_pov].name; }
 extern "C" void rt_pov_set(int i) {
@@ -85,7 +89,7 @@ static void norm3(float *v) {
 // The local view for game view V and projection P (D3D row-vector convention: view = world * V).
 // P's _34 is the handedness: +1 left-handed (camera looks along +z), -1 right-handed (-z, this game).
 static bool local_view(const M4 V, const M4 P, M4 out) {
-    if (!rt_pov && rt_pov_yaw == 0) return false;
+    if (!pov_on()) return false;
     M4 C;
     if (!inv(V, C)) return false;   // camera to world: rows right, up, z, position
     const float *u = C[1], *pos = C[3];
@@ -126,6 +130,10 @@ static bool local_view(const M4 V, const M4 P, M4 out) {
         for (int i = 0; i < 3; i++) q[i] = rot[i] * c + ux[i] * sn + up[i] * ud * (1 - c);
         memcpy(rot, q, sizeof q);   // (left and right turn with the view: no fix below)
     }
+    if (rt_pov_way && ax == 1) {   // straight down the pitch, rot's height and distance kept: a turning
+        float l = sqrtf(rot[0] * rot[0] + rot[2] * rot[2]);   // game camera is held still (own_end.c)
+        rot[0] = 0, rot[2] = -(float)rt_pov_way * l;
+    }
     float sc = k_presets[rt_pov].scale, eye[3];
     for (int i = 0; i < 3; i++) eye[i] = piv[i] + sc * rot[i];
     float z[3] = { piv[0] - eye[0], piv[1] - eye[1], piv[2] - eye[2] }, x[3], y[3];
@@ -134,7 +142,7 @@ static bool local_view(const M4 V, const M4 P, M4 out) {
     cross3(up, z, x);
     norm3(x);
     cross3(z, x, y);
-    if (rt_pov_yaw == 0 && dot3(x, r) < 0)
+    if (rt_pov_yaw == 0 && !rt_pov_way && dot3(x, r) < 0)
         for (int i = 0; i < 3; i++) { x[i] = -x[i]; }   // keep the game's left/right
     float m[4][4] = { { x[0], y[0], z[0], 0 },
                       { x[1], y[1], z[1], 0 },
@@ -148,7 +156,7 @@ static bool perspective(const M4 P) { return fabsf(P[2][3]) > 1e-6f && fabsf(P[3
 
 // Fixed function: the view to use for this draw (false: the game's).
 extern "C" bool pov_ff_view(const D3DMATRIX &V, const D3DMATRIX &P, D3DMATRIX *out) {
-    if ((!rt_pov && rt_pov_yaw == 0) || !perspective(P.m)) return false;
+    if (!pov_on() || !perspective(P.m)) return false;
     return local_view(V.m, P.m, out->m);
 }
 
@@ -156,7 +164,7 @@ extern "C" bool pov_ff_view(const D3DMATRIX &V, const D3DMATRIX &P, D3DMATRIX *o
 extern "C" void pov_clip_columns(float cols[4][4]) {
     static const float id[4][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
     memcpy(cols, id, sizeof id);
-    if (!rt_pov && rt_pov_yaw == 0) return;
+    if (!pov_on()) return;
     M4 V, P, Vl, Vi, Pi, M;
     for (int i = 0; i < 16; i++) {
         uint32_t w = rd32(0xA60B68 + 4u * i), q = rd32(0xA60C28 + 4u * i);   // the game's camera
@@ -192,15 +200,16 @@ bool d3d8_pov_pre(const uint32_t *a) {
         }
         return false;
     }
-    if ((!rt_pov && rt_pov_yaw == 0) || !to_screen) return false;
+    if (!pov_on() || !to_screen) return false;
     auto v = s->xf.find(D3DTS_VIEW), p = s->xf.find(D3DTS_PROJECTION);
     D3DMATRIX lv;
     if (v == s->xf.end() || p == s->xf.end() || !pov_ff_view(v->second, p->second, &lv)) return false;
     D(a)->SetTransform(D3DTS_VIEW, &lv);
     return true;
 }
-void d3d8_pov_post(const uint32_t *a, bool set) {
+void d3d8_pov_post(const uint32_t *a, bool set) {   // (after every draw: also ends d3d8_left_out's verdict)
     if (set) D(a)->SetTransform(D3DTS_VIEW, &S(a)->xf[D3DTS_VIEW]);
+    S(a)->skip = false;
 }
 
 // A party: the menus' cursor (a quad the world transform places) drawn at this screen's own pointer,
@@ -217,4 +226,13 @@ bool d3d8_cursor_pre(const uint32_t *a) {   // DrawPrimitiveUP (this, type, prim
 }
 void d3d8_cursor_post(const uint32_t *a, bool set) {
     if (set) D(a)->SetTransform(D3DTS_WORLD, &S(a)->xf[D3DTS_WORLD]);
+}
+
+// A party leaves another team's prompts out of this player's picture (own_hud.c, by the vertex buffer
+// drawn from); RT_DRAW_WHO / RT_DRAW_HIDE_VB (runtime/debug/draw_who.c) tell which draw is which.
+bool d3d8_left_out(const uint32_t *a, int kind, uint32_t prims) {
+    DevState *s = S(a);
+    bool dbg = dbg_draw_who(a, kind, prims, s->stream[0], s->ib, s->tex[0], s->vshader);
+    Obj *vb = kind == 0 || kind == 1 ? d3d8_obj(s->stream[0]) : nullptr;
+    return dbg || (vb && own_hud_hidden(vb->part));
 }

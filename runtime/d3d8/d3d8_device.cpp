@@ -250,8 +250,9 @@ HLE_D3D(IDirect3DDevice8, Clear) { // (this, Count, D3DRECT*, Flags, Color, floa
 }
 
 // ---- draws -----------------------------------------------------------------------------------
-// This player's camera: d3d8_pov.cpp (d3d8_pov_pre / d3d8_pov_post around each draw).
+// This player's picture: d3d8_pov.cpp (its camera around each draw; d3d8_left_out: another team's prompts).
 HLE_D3D(IDirect3DDevice8, DrawPrimitive) {
+    S(a)->skip = d3d8_left_out(a, 0, a[3]);
     bool p = !hidden(a) && d3d8_pov_pre(a);
     if (!hidden(a)) D(a)->DrawPrimitive((D3DPRIMITIVETYPE)a[1], a[2], a[3]);
     d3d8_pov_post(a, p);
@@ -259,6 +260,7 @@ HLE_D3D(IDirect3DDevice8, DrawPrimitive) {
 }
 
 HLE_D3D(IDirect3DDevice8, DrawIndexedPrimitive) { // (this, type, minIndex, numVertices, startIndex, primCount)
+    S(a)->skip = d3d8_left_out(a, 1, a[5]);
     bool p = !hidden(a) && d3d8_pov_pre(a);
     if (!hidden(a)) D(a)->DrawIndexedPrimitive((D3DPRIMITIVETYPE)a[1], (INT)S(a)->base_vertex, a[2], a[3], a[4], a[5]);
     d3d8_pov_post(a, p);
@@ -266,6 +268,7 @@ HLE_D3D(IDirect3DDevice8, DrawIndexedPrimitive) { // (this, type, minIndex, numV
 }
 
 HLE_D3D(IDirect3DDevice8, DrawPrimitiveUP) { // (this, type, primCount, data, stride)
+    S(a)->skip = d3d8_left_out(a, 2, a[2]);
     DevState *s = S(a);
     bool p = !hidden(a) && d3d8_pov_pre(a), c = !hidden(a) && d3d8_cursor_pre(a);
     if (!hidden(a)) D(a)->DrawPrimitiveUP((D3DPRIMITIVETYPE)a[1], a[2], G2H(a[3]), a[4]);
@@ -279,6 +282,7 @@ HLE_D3D(IDirect3DDevice8, DrawPrimitiveUP) { // (this, type, primCount, data, st
 
 HLE_D3D(IDirect3DDevice8,
         DrawIndexedPrimitiveUP) { // (this, type, minIndex, numVerts, primCount, idx, idxFmt, verts, stride)
+    S(a)->skip = d3d8_left_out(a, 3, a[4]);
     DevState *s = S(a);
     bool p = !hidden(a) && d3d8_pov_pre(a);
     if (!hidden(a))
