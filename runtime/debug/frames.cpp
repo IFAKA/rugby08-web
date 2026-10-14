@@ -91,6 +91,21 @@ void d3d8_debug_pixels(uint32_t frame, int w, int h) {
             snprintf(blocks + (by * 16 + bx) * 4, 5, "%04X", (bh ^ bh >> 16) & 0xFFFF);
         }
     rt_trace("pix: frame %u %016llX cam %08X blocks %s", frame, (unsigned long long)hash, cam, blocks);
+    // RT_PIX_STRIP=1: with every picture, its top-left strip (blocks 0..5 of the top row: the HUD's score
+    // and clock, where two games' pictures have parted for one frame) at half size, "pix: strip F W H HEX"
+    static int strip = -1;
+    if (strip < 0) strip = getenv("RT_PIX_STRIP") != NULL;
+    if (strip) {
+        static const char *hd = "0123456789ABCDEF";
+        int x1 = w * 6 / 16, y0 = h * 11 / 12, sw = x1 / 2, sh = (h - y0) / 2;
+        std::string hex = "";
+        for (int y = 0; y < sh; y++)
+            for (int x = 0; x < sw; x++) {
+                const uint8_t *p = &px[((size_t)(y0 + 2 * y) * w + (size_t)(2 * x)) * 4];
+                for (int c = 0; c < 3; c++) hex += hd[p[c] >> 4], hex += hd[p[c] & 15];
+            }
+        rt_trace("pix: strip %u %d %d %s", frame, sw, sh, hex.c_str());
+    }
     // RT_PIX_DUMP=A-B[/S]: those frames also as "pix: dump F W H HEX" (RGB, bottom row first; 1/S of the
     // size, S 4 by default), to see a difference (tools/net/pix_dump.py turns them into PNGs)
     static long a = -2, b = -1, sc = 4;

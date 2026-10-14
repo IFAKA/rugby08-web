@@ -23,8 +23,6 @@ void net_ha_test_press(rt_pad_t *local, int host_phase, uint32_t frame);   /* ne
 void dbg_test_options_frame(uint32_t frame); /* test_options.c: RT_TEST_CAMERA */
 void dbg_setpiece_frame(uint32_t frame);     /* setpiece_probe.c: RT_MS_SETPIECE */
 void dbg_camside_frame(uint32_t frame);      /* camside_probe.c: RT_MS_CAMSIDE */
-void dbg_camwrites_begin(uint32_t kind);     /* camwrites_probe.c: RT_MS_CAMWRITES (kind: 0 step, else event) */
-void dbg_camwrites_end(uint32_t kind);
 void dbg_render_writes_begin(uint32_t frame); /* render_writes.c: RT_RENDER_WRITES (at the camera step) */
 void dbg_render_writes_end(uint32_t frame);   /* (at the Present) */
 #endif

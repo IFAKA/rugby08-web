@@ -17,6 +17,7 @@
 #include "fe_party.h"
 #include "own_camera.h"
 #include "match_state.h"
+#include "ui.h"
 #include "ls_roles.h"
 #include <math.h>
 #include <stdlib.h>
@@ -103,6 +104,7 @@ void own_camera_after(uint32_t cam) {
     memcpy(eye, G2H(cam + 0x48), sizeof eye);
     memcpy(target, G2H(cam + 0x58), sizeof target);
     g_own[0] = target[0] - eye[0], g_own[1] = 0, g_own[2] = target[2] - eye[2];
+    if (rt_pov_yaw == 180) g_own[0] = -g_own[0], g_own[2] = -g_own[2];   /* drawn from the other end (own_end.c) */
     g_own_set = 1;
     int ci = -1;   /* (checks: tools/net/ls_camera_check.py; the away side's first human's player) */
     if (rt_present_frame % 30 == 0 && ms_controlled(1, 0, &ci) | 1)

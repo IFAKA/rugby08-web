@@ -16,7 +16,7 @@ void dbg_camside_frame(uint32_t frame) {
     uint8_t c[MS_CAMERA_BYTES];
     ms_ball_t b;
     if (!ms_ball(&b)) return;
-    ms_camera_last(c);
+    ms_camera_game(c);   /* (the game camera's own view, before a party's shared look) */
     float e[3], t[3];
     memcpy(e, c, sizeof e);
     memcpy(t, c + 0x10, sizeof t);

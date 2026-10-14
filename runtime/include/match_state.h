@@ -89,15 +89,15 @@ uint32_t ms_ball_va(void); /* BallManager* or 0 */
 #define MS_HEAD_DIRECTED (32 + MS_CAMERA_BYTES + MS_CONTROLS_BYTES)
 void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj);   /* game/overrides/match/camera_update.c */
 void ms_camera_last(uint8_t *out);        /* this game's view at the last Present */
+void ms_camera_game(uint8_t *out);        /* the game camera's own computed view (its controller's 16 floats) */
 void ms_camera_event(uint32_t listener, uint32_t event);  /* the CameraManager hears a match event */
 void ms_camera_event_done(uint32_t event);                 /* ... and has picked its camera (RT_MS_CAMEV) */
 void ms_camera_host(const uint8_t *cam);                  /* a friend shows this view (NULL: its own) */
 void ms_camera_remote(uint32_t id, uint32_t param);       /* a friend: the host's camera event ('C') */
 int ms_camera_directed(void);                             /* the game shows a set piece's or event's camera */
 void ms_camera_manager(uint32_t manager);                 /* the CameraManager (its listener inside) */
-void own_end_begin(uint32_t kind);   /* own_end.c: this player's camera (kind: 0 the step, else the event id) */
-void own_end_end(uint32_t kind);
-int own_end_skip(uint32_t event);   /* own_end.c: 1 if this copy's camera must not hear EVENT */
+void own_end_heard(uint32_t event);   /* own_end.c: the camera heard a match event (every game) */
+void own_end_present(void);           /* ... every Present: this player's end, drawn only */
 const char *ms_camera_name(void);                         /* the camera this game shows ("Side", "Scrum" ...) */
 
 /* match_measure.c: RT_MS_POS lines for tools/net/match_compare.py */

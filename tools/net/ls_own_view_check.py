@@ -2,13 +2,14 @@
 """ls.own_view: every player of a party sees the match as if playing alone (runtime/core/own_end.c).
 
 Two pages (headless Chrome, muted, relay on a free port), the host's keyboard home, the friend's pad away,
-both on the END ON camera (style 3, RT_TEST_CAMERA): a couch match would turn the one camera to whichever
-team has the ball (measured). Two minutes of play, then:
-  ends       both teams had the ball, and each game's end camera always looked along its own team's way
-             (the host one way, the friend the other), never turning with possession;
-  same match the match's state hashes ("netplay: frame F hash") equal in both games;
-  scheduling every frame's thread switches equal (RT_DET_SCHED): each game's own camera ran in det_local
-             sections, which never waited nor allocated ("det: a wait", "det: heap" traces: none).
+both on the END ON camera (style 3, RT_TEST_CAMERA): the game's one camera turns to whichever team has the
+ball (a couch match, measured); each game draws it turned to its own player's end (rt_pov_yaw 180). Two
+minutes of play, then:
+  ends       both teams had the ball, and the end view each game drew (the camera's way along the pitch,
+             reversed while "ms: own end ... turned 180") always looked along its own team's way: the host
+             one way, the friend the other, never turning with possession;
+  same match the match's state hashes ("netplay: frame F hash") equal in both games (drawing only);
+  scheduling every frame's thread switches equal (RT_DET_SCHED).
 One line; details in logs/ls_own_view/."""
 
 import os
@@ -25,8 +26,9 @@ from ls_match_check import into_match, play  # noqa: E402
 from ls_party_check import in_sync  # noqa: E402
 
 D = os.path.join(ROOT, "logs", "ls_own_view")
-ENV = "RT_OWN_END=1,RT_TEST_CAMERA=3,RT_MS_CAMSIDE=30,RT_DET_SCHED=1,RT_MS_POS=10"
-CAM = re.compile(r"camside f \d+ cam (.+?) eye (\S+) (\S+) target (\S+) (\S+) ball team (-?\d+)")
+ENV = "RT_TEST_CAMERA=3,RT_MS_CAMSIDE=30,RT_DET_SCHED=1,RT_MS_POS=10"
+CAM = re.compile(r"camside f (\d+) cam (.+?) eye (\S+) (\S+) target (\S+) (\S+) ball team (-?\d+)")
+TURN = re.compile(r"ms: own end team -?\d+ turned (\d+) at frame (\d+)")
 SCHED = re.compile(r"det: frame (\d+) sched (\d+) handoffs \d+ slices (\d+)")
 
 
@@ -37,15 +39,19 @@ def session(p):
 
 
 def ends(lines):
-    """The end camera's way along the pitch (sign of the look's larger axis) per ball team."""
+    """The end view drawn (the camera's way along the pitch, reversed while turned) per ball team."""
+    turns = sorted((int(m.group(2)), int(m.group(1))) for x in lines for m in [TURN.search(x)] if m)
     seen = Counter()
     for x in lines:
         m = CAM.search(x)
-        if not m or not ("Classic" in m.group(1) or "End to End" in m.group(1)):
+        if not m or not ("Classic" in m.group(2) or "End to End" in m.group(2)):
             continue
-        dx, dz = float(m.group(4)) - float(m.group(2)), float(m.group(5)) - float(m.group(3))
-        way = ("+z" if dz > 0 else "-z") if abs(dz) >= abs(dx) else ("+x" if dx > 0 else "-x")
-        seen[(way, int(m.group(6)))] += 1
+        f = int(m.group(1))
+        dx, dz = float(m.group(5)) - float(m.group(3)), float(m.group(6)) - float(m.group(4))
+        if abs(dz) < abs(dx):
+            continue
+        turned = next((t for at, t in reversed(turns) if at <= f), 0) == 180
+        seen[(("+z" if dz > 0 else "-z") if not turned else ("-z" if dz > 0 else "+z"), int(m.group(7)))] += 1
     return seen
 
 
@@ -89,9 +95,6 @@ def run(br, port, out):
             return "the two games are not in sync"
         if not same_sched(players, out):
             return "the two games' thread switches differ"
-        bad = [x for p in players for x in session(p) if "det: a wait inside" in x or "det: heap" in x]
-        if bad:
-            return f"one player's own work waited or allocated: {bad[0][:120]}"
         return None
     finally:
         for p in players:

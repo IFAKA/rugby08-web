@@ -134,6 +134,10 @@ void ms_camera_last(uint8_t *out) {
     memcpy(out + 0x34, G2H(g_proj + 0x110), 12);
 }
 
+/* The view the game's camera computed at its last step (the controller's 16 floats: eye xyz 1, target
+   xyz 1, ...), before anything of a party's own view (own_camera.c moves the camera object after it). */
+void ms_camera_game(uint8_t *out) { memcpy(out, g_last, MS_CAMERA_BYTES); }
+
 /* After the controller's own step (it has applied this game's view): on a friend the host's view
    instead, as FUN_006E8260's tail applies a view (0x006E8436..0x006E848D). */
 void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj) {

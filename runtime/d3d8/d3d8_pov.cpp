@@ -21,6 +21,7 @@ static const struct {
 };
 static const int k_npresets = (int)(sizeof k_presets / sizeof k_presets[0]);
 extern "C" int rt_pov = 0;
+extern "C" float rt_pov_yaw = 0;   // degrees about the vertical through the pivot: 180 = the other end
 
 extern "C" const char *rt_pov_name(void) { return k_presets[rt_pov].name; }
 extern "C" void rt_pov_set(int i) {
@@ -84,7 +85,7 @@ static void norm3(float *v) {
 // The local view for game view V and projection P (D3D row-vector convention: view = world * V).
 // P's _34 is the handedness: +1 left-handed (camera looks along +z), -1 right-handed (-z, this game).
 static bool local_view(const M4 V, const M4 P, M4 out) {
-    if (!rt_pov) return false;
+    if (!rt_pov && rt_pov_yaw == 0) return false;
     M4 C;
     if (!inv(V, C)) return false;   // camera to world: rows right, up, z, position
     const float *u = C[1], *pos = C[3];
@@ -118,6 +119,13 @@ static bool local_view(const M4 V, const M4 P, M4 out) {
         if ((th > 0) == (dot3(rot, up) > dot3(off, up)) || th == 0) break;
         th = -th;                   // wrong way round: the other direction raises the camera
     }
+    if (rt_pov_yaw != 0) {   // the same point from another side: about the world's up (Rodrigues)
+        float c = cosf(rt_pov_yaw * 3.14159265f / 180.0f), sn = sinf(rt_pov_yaw * 3.14159265f / 180.0f), ux[3];
+        float ud = dot3(up, rot), q[3];
+        cross3(up, rot, ux);
+        for (int i = 0; i < 3; i++) q[i] = rot[i] * c + ux[i] * sn + up[i] * ud * (1 - c);
+        memcpy(rot, q, sizeof q);   // (left and right turn with the view: no fix below)
+    }
     float sc = k_presets[rt_pov].scale, eye[3];
     for (int i = 0; i < 3; i++) eye[i] = piv[i] + sc * rot[i];
     float z[3] = { piv[0] - eye[0], piv[1] - eye[1], piv[2] - eye[2] }, x[3], y[3];
@@ -126,7 +134,7 @@ static bool local_view(const M4 V, const M4 P, M4 out) {
     cross3(up, z, x);
     norm3(x);
     cross3(z, x, y);
-    if (dot3(x, r) < 0)
+    if (rt_pov_yaw == 0 && dot3(x, r) < 0)
         for (int i = 0; i < 3; i++) { x[i] = -x[i]; }   // keep the game's left/right
     float m[4][4] = { { x[0], y[0], z[0], 0 },
                       { x[1], y[1], z[1], 0 },
@@ -140,7 +148,7 @@ static bool perspective(const M4 P) { return fabsf(P[2][3]) > 1e-6f && fabsf(P[3
 
 // Fixed function: the view to use for this draw (false: the game's).
 extern "C" bool pov_ff_view(const D3DMATRIX &V, const D3DMATRIX &P, D3DMATRIX *out) {
-    if (!rt_pov || !perspective(P.m)) return false;
+    if ((!rt_pov && rt_pov_yaw == 0) || !perspective(P.m)) return false;
     return local_view(V.m, P.m, out->m);
 }
 
@@ -148,7 +156,7 @@ extern "C" bool pov_ff_view(const D3DMATRIX &V, const D3DMATRIX &P, D3DMATRIX *o
 extern "C" void pov_clip_columns(float cols[4][4]) {
     static const float id[4][4] = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
     memcpy(cols, id, sizeof id);
-    if (!rt_pov) return;
+    if (!rt_pov && rt_pov_yaw == 0) return;
     M4 V, P, Vl, Vi, Pi, M;
     for (int i = 0; i < 16; i++) {
         uint32_t w = rd32(0xA60B68 + 4u * i), q = rd32(0xA60C28 + 4u * i);   // the game's camera
@@ -171,6 +179,7 @@ bool d3d8_pov_pre(const uint32_t *a) {
     if (!env) {
         env = 1;
         if (const char *e = getenv("RT_POV")) { rt_pov_set(atoi(e)); }
+        if (const char *e = getenv("RT_POV_YAW")) rt_pov_yaw = (float)atof(e);   // (checks: the other end)
     }
     DevState *s = S(a);
     Obj *rt = d3d8_obj(s->rt), *bb = d3d8_obj(s->backbuffer);   // the scene, on screen or in a screen-sized target
@@ -183,7 +192,7 @@ bool d3d8_pov_pre(const uint32_t *a) {
         }
         return false;
     }
-    if (!rt_pov || !to_screen) return false;
+    if ((!rt_pov && rt_pov_yaw == 0) || !to_screen) return false;
     auto v = s->xf.find(D3DTS_VIEW), p = s->xf.find(D3DTS_PROJECTION);
     D3DMATRIX lv;
     if (v == s->xf.end() || p == s->xf.end() || !pov_ff_view(v->second, p->second, &lv)) return false;

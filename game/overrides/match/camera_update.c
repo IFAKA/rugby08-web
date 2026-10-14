@@ -7,9 +7,7 @@
 
 GAME_OVERRIDE(sub_006E8260) {
     uint32_t self = g_ecx, cam = GAME_ARG(2), proj = GAME_ARG(3);
-    own_end_begin(0);   /* (a party: this player's team's camera, runtime/core/own_end.c) */
     ms_camera_manager(GAME_ARG(0));
     sub_006E8260_lifted();   /* pops its 0x10 bytes of arguments */
     ms_camera_after(self, cam, proj);
-    own_end_end(0);
 }

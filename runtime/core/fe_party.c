@@ -213,6 +213,7 @@ void fe_party_present(uint32_t frame) {
     dbg_render_writes_end(frame);   /* (RT_RENDER_WRITES: what the drawing wrote) */
     own_camera_options();   /* camera settings changed in the shared menus: this player's only (own_camera.c) */
     own_camera_present();   /* drawn: the match's camera, alike in every game, for the match's next step */
+    own_end_present();      /* this player's end of the pitch, drawn only (own_end.c) */
     if (!ls_on()) {   /* host-authoritative party (lockstep: every game runs the same screens itself) */
         ui_lobby_poll();
         party_sides_present(frame);   /* (both also in a match: they check where the game is themselves) */
