@@ -76,3 +76,6 @@ Local only; the user deploys the web app later.
   previous frame's "YOU: PLAYER N" overlay left in the back buffer where the game did not draw again
   (RT_PIX_STRIP): overlay.cpp keeps the game's frame under the overlay and puts it back after the swap.
   ls.match, ls.cursor PASS.
+- ls.lag (2026-10-14): delay 9 -> 6 frames (adaptive), 0 stalls; peer share 86-89 % (wants 90 %): in the
+  check both pages and the relay run on one machine (relay hop ~0 ms, 52-54 fps); to confirm on two
+  machines (the user's test), not by easing the check.
