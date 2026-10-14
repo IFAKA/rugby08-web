@@ -65,9 +65,10 @@ void ms_camera_event(uint32_t listener, uint32_t event) {
 void ms_camera_event_done(uint32_t event) {
     static int on = -1;
     if (on < 0) on = getenv("RT_MS_CAMEV") != NULL;
+    int what, t = event ? ms_team_of(rd32(event + 8), &what) : -1;
     if (on && event)
-        rt_trace("ms: cam event %X data %08X param %d at frame %u -> %s", rd32(event + 4), rd32(event + 8),
-                 (int)rd32(event + 0xC), rt_present_frame, ms_camera_name());
+        rt_trace("ms: cam event %X data %08X (team %d as %d) param %d at frame %u -> %s", rd32(event + 4),
+                 rd32(event + 8), t, what, (int)rd32(event + 0xC), rt_present_frame, ms_camera_name());
 }
 
 void ms_camera_remote(uint32_t id, uint32_t param) {   /* a friend: the host's event, to its own cameras */

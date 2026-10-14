@@ -80,6 +80,7 @@ void ms_puppet_controls(void);                 /* friend: its controls and their
 /* players and ball, after the friend's presentation */ /* game/overrides/match/replay_playing.c */
 uint32_t ms_player_va(int team, int i); /* CRugbyPlayer* or 0 */
 uint32_t ms_team_va(int team); /* CRugbyTeam* or 0 */
+int ms_team_of(uint32_t va, int *what); /* the team of a CRugbyTeam (what 0), a human control (1), a player (2); -1 */
 uint32_t ms_ball_va(void); /* BallManager* or 0 */
 
 /* match_camera.c: the match view (16 floats: eye, target, up, fov, aspect, near, far) */
@@ -94,8 +95,9 @@ void ms_camera_host(const uint8_t *cam);                  /* a friend shows this
 void ms_camera_remote(uint32_t id, uint32_t param);       /* a friend: the host's camera event ('C') */
 int ms_camera_directed(void);                             /* the game shows a set piece's or event's camera */
 void ms_camera_manager(uint32_t manager);                 /* the CameraManager (its listener inside) */
-void own_end_begin(void);   /* own_end.c: this player's camera, its team's humans only (party) */
-void own_end_end(void);
+void own_end_begin(uint32_t kind);   /* own_end.c: this player's camera (kind: 0 the step, else the event id) */
+void own_end_end(uint32_t kind);
+int own_end_skip(uint32_t event);   /* own_end.c: 1 if this copy's camera must not hear EVENT */
 const char *ms_camera_name(void);                         /* the camera this game shows ("Side", "Scrum" ...) */
 
 /* match_measure.c: RT_MS_POS lines for tools/net/match_compare.py */

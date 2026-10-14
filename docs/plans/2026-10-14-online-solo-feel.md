@@ -54,3 +54,21 @@ D. Joining during a match: "THE PARTY IS IN A MATCH: YOU JOIN AFTER IT".
 6. ls.fastjoin: faster catch-up (indirect-call lookup, TLS, ...), then a save-state join if reliable.
 7. ls.mixes: every mix of up to 4 players stays in sync (native copies).
 Local only; the user deploys the web app later.
+
+## Open (2026-10-14, measured)
+- End camera flip: every flip follows camera event 0xAD (possession changed), its data the side that
+  gained the ball; hiding the other team's controls (+0xC0) in the camera's event/step changed nothing
+  (own_end.c v1). Next: in each copy the camera does not hear an 0xAD for the other team (as solo).
+- Pause did not open (friend's Start at frame 20729, Esc pressed in both games) in the run with own_end v1
+  and the END ON camera, 96 frames after a flip; worked in every run without them. Must be cleared by the
+  next full ls_match run (pause step) or isolated per camera.
+- 2 of 194 pictures differed (bottom-left HUD blocks, one frame each) while the match was equal.
+- own_end v2 (each copy's camera skips 0xAD for another team's player; camera listener and step in
+  det_local sections; the C library's rand seed and the copy protection's countdowns, [0x01409500,
+  0x0140AA80), put back after the camera): scheduling equal (21172 frames), but the copies still part
+  (ls_match_check: 2 of 133 hashes; ls_own_view: friend DESYNC at frame 17279, after "WebGL: too many
+  errors"). Measured on the way: the camera never moves rand's seed (solo, whole match); its writes are
+  its own objects, the stack and three countdowns (0x01409630/0x01409720/0x01409724: FUN_0042A360, a
+  protected getter, from FUN_006E8500 / FUN_006E8180, watchpoint). Switched off (RT_OWN_END=1 in checks
+  only) until ls.own_view passes. Next: RT_MS_CAMWRITES in a party with the cameras apart, and the WebGL
+  errors.

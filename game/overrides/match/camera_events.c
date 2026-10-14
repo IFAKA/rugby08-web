@@ -8,10 +8,15 @@
 #include "match_state.h"
 
 GAME_OVERRIDE(sub_00407810) {
-    own_end_begin();   /* (a party: this player's team's view, runtime/core/own_end.c) */
-    ms_camera_event(g_ecx, GAME_ARG(0));
     uint32_t ev = GAME_ARG(0);
+    uint32_t id = ev ? rd32(ev + 4) : 0xFFFFFFFFu;
+    own_end_begin(id);   /* (a party: this player's team's camera, runtime/core/own_end.c) */
+    ms_camera_event(g_ecx, ev);
+    if (own_end_skip(ev)) {   /* another team's possession: this copy's camera stays at its team's end */
+        own_end_end(id);
+        GAME_RETURN(0, 4);
+    }
     sub_00407810_lifted();   /* pops its argument */
     ms_camera_event_done(ev);
-    own_end_end();
+    own_end_end(id);
 }

@@ -223,6 +223,19 @@ void ms_frame(uint32_t frame) {
 
 uint32_t ms_player_va(int t, int i) { return player(t, i); }
 uint32_t ms_team_va(int t) { return team(t); }
+
+/* The team a match object belongs to: a CRugbyTeam (WHAT 0), one of its human controls (+0xC0..+0xCC,
+   1) or one of its players (2); -1 none of them. */
+int ms_team_of(uint32_t va, int *what) {
+    int t, i;
+    for (int k = 0; k < MS_TEAMS && va; k++) {
+        if (team(k) == va) return *what = 0, k;
+        for (uint32_t c = 0; team(k) && c < 4; c++)
+            if (rd32(team(k) + 0xC0 + 4 * c) == va) return *what = 1, k;
+    }
+    if (find_player(va, &t, &i)) return *what = 2, t;
+    return *what = -1, -1;
+}
 uint32_t ms_ball_va(void) {
     uint32_t r = rugby(), b = r ? rd32(r + R_BALL) : 0;
     return heap_obj(b, 0x1DC) ? b : 0;
