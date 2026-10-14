@@ -759,7 +759,8 @@
       ],
       "desc": "Set-piece decisions: the controller the game gives it to sees the menu; every other screen shows the game carrying on as when the AI decides, with PLAYER N IS CHOOSING; any mix.",
       "check": "/opt/homebrew/bin/python3 tools/net/ls_decisions_check.py",
-      "passes": false
+      "passes": true,
+      "notes": "PASS 2026-10-14 (./init.sh check ls.decisions): 6/6 quick-options menus; the deciding team is the game's (CRugbyTeam +0x10 clear). No penalty options came up in the check's matches: same field, to confirm when one does."
     },
     {
       "id": "ls.fastjoin",
