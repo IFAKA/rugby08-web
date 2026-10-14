@@ -14,7 +14,7 @@ export default [
         ...globals.browser,
         ...globals.worker,
         Module: 'writable', FS: 'readonly', HEAPU8: 'readonly',
-        addRunDependency: 'readonly', removeRunDependency: 'readonly',
+        addRunDependency: 'readonly', removeRunDependency: 'readonly', ENV: 'readonly',
         AudioWorkletProcessor: 'readonly', registerProcessor: 'readonly',
       },
     },

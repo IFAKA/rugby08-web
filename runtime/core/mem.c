@@ -14,6 +14,14 @@ void rt_mem_init(void) {
     rt_heap_init(rt_guest_size - 0x01000000u);   /* top 16 MiB kept free (thread TIBs etc.) */
 }
 
+/* Diagnosis: lifted code compiled with ADDR() redefined to this (a file of build/web-gen patched by
+ * hand) logs the first guest VA outside the backed arena, with the function, before using it. */
+uintptr_t rt_addr_check(uint32_t va, const char *fn) {
+    static int seen;
+    if (va >= rt_guest_size && va < RT_BRIDGE_HOST && seen++ < 8) rt_log("ADDR: wild guest VA %08X in %s", va, fn);
+    return (uintptr_t)va + (uintptr_t)g_mem_base;
+}
+
 /* Minimal PE32 loader: headers + every section's raw data at ImageBase + VirtualAddress. */
 uint32_t rt_load_image(const char *path, uint32_t *entry_out) {
     FILE *f = fopen(path, "rb");

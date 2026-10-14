@@ -41,7 +41,8 @@ option(RUGBY_TRACE "lifted bodies record entry in a per-thread ring (dumped on f
 if(RUGBY_TRACE)
   target_compile_definitions(recomp_gen PRIVATE RECOMP_TRACE)
 endif()
-target_compile_options(recomp_gen PRIVATE -w -fwrapv -fno-strict-aliasing -O1 -g0)
+set(RECOMP_GEN_OPT "-O1" CACHE STRING "optimisation of the lifted code (gen/recomp, game/overrides)")
+target_compile_options(recomp_gen PRIVATE -w -fwrapv -fno-strict-aliasing ${RECOMP_GEN_OPT} -g0)
 
 # ---- MojoShader: D3D8/9 shader bytecode -> GLSL (ES) for the D3D8 bridge (docs/PRIOR_ART.md) ----
 # Only the parser and the GLSL profiles; its GL glue (mojoshader_opengl.c) is not used.

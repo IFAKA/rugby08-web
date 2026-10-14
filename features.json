@@ -318,6 +318,32 @@
       "desc": "Formatters and linters clean: clang-format + clang-tidy (C/C++), ruff (Python), shfmt + shellcheck (sh), Prettier + ESLint (web JS)",
       "check": "tools/check/lint.sh",
       "passes": true
+    },
+    {
+      "id": "web.split_check",
+      "deps": [
+        "web.smoke"
+      ],
+      "desc": "The web build's split giant functions behave like the originals: a native build with build/web-gen opens MY RUGBY and Squad Management without a fault (the split jump tables sent computed jumps to the wrong exit; MY RUGBY crashed in the browser).",
+      "check": "tools/check/split_check.sh",
+      "passes": true
+    },
+    {
+      "id": "web.crt_math",
+      "deps": [
+        "web.smoke",
+        "lift.crt_math"
+      ],
+      "desc": "The CRT math self-test passes in the browser build too, where no interpreter stands behind the lift: every arm of the CRT's x87 dispatcher that the grid reaches (zero, negative, overflow, underflow, infinities, NaN, denormal) is lifted and keeps the calling convention (an unlifted exp arm unbalanced the stack and crashed the game at the first scrum).",
+      "check": "timeout 600 /opt/homebrew/bin/python3 tools/web/web_selftest.py   # system Python: Playwright",
+      "passes": true
+    },
+    {
+      "id": "aems.rebase",
+      "deps": [],
+      "desc": "Leaving a match never stops the sound: an EA sound bank the game loads again at another address after a match (the menus' fe_sfx.abk) is found there; no freeze after QUIT MATCH (the user's play test, 2026-10-14).",
+      "check": "tools/check/quit_sound_check.sh",
+      "passes": true
     }
   ]
 }

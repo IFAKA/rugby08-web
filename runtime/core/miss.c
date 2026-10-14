@@ -33,7 +33,11 @@ static void dyncode_capture(uint32_t va) {
     fclose(f);
 }
 
+static uint32_t g_miss_calls;   /* every miss, repeats included (selftests) */
+uint32_t recomp_miss_calls(void) { return __atomic_load_n(&g_miss_calls, __ATOMIC_RELAXED); }
+
 void recomp_miss(int tail, uint32_t va, uint32_t from) {
+    __atomic_add_fetch(&g_miss_calls, 1, __ATOMIC_RELAXED);
     pthread_mutex_lock(&g_miss_mu);
     if (va == 0) {
         if (g_miss_zero) {
