@@ -58,10 +58,23 @@ uint32_t rt_heap_top(void) { return (H2G(((mstate)g_ms)->top) + 7u) & ~7u; }
 
 static uint32_t h2g_or0(void *p) { return p ? H2G(p) : 0; }
 
-uint32_t gmalloc(uint32_t size) { return h2g_or0(mspace_malloc(g_ms, size ? size : 1)); }
-uint32_t gcalloc(uint32_t size) { return h2g_or0(mspace_calloc(g_ms, 1, size ? size : 1)); }
-uint32_t gmemalign(uint32_t al, uint32_t size) { return h2g_or0(mspace_memalign(g_ms, al, size ? size : 1)); }
+/* One player's own guest work (det_local.c) must leave the shared heap alone: every copy's heap is the
+   same only if every copy allocates the same. Told, not stopped (the check is the copies' hashes). */
+static void local_note(const char *what) {
+    static uint32_t said;
+    if (t_det_local && said != rt_present_frame) {
+        said = rt_present_frame;
+        rt_trace("det: heap %s inside one player's own work at frame %u", what, rt_present_frame);
+    }
+}
+
+uint32_t gmalloc(uint32_t size) { return local_note("alloc"), h2g_or0(mspace_malloc(g_ms, size ? size : 1)); }
+uint32_t gcalloc(uint32_t size) { return local_note("alloc"), h2g_or0(mspace_calloc(g_ms, 1, size ? size : 1)); }
+uint32_t gmemalign(uint32_t al, uint32_t size) {
+    return local_note("alloc"), h2g_or0(mspace_memalign(g_ms, al, size ? size : 1));
+}
 void gfree(uint32_t va) {
+    local_note("free");
     if (va) mspace_free(g_ms, G2H(va));
 }
 uint32_t gmsize(uint32_t va) { return va ? (uint32_t)mspace_usable_size(G2H(va)) : 0; }

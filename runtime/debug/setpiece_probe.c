@@ -14,6 +14,12 @@ void dbg_setpiece_frame(uint32_t frame) {
     static int on = -1, last;
     if (on < 0) on = getenv("RT_MS_SETPIECE") != NULL;
     int id = fe_screen_id();
+    static int last_sender = -9;   /* while a set piece's menu is up: whose controller it listens to */
+    if (on && (id == 0x58 || id == 0x5F)) {
+        int k = ls_sender();
+        if (k != last_sender) rt_trace("setpiece: screen %02X frame %u the menu listens to slot %d", id, frame, k);
+        last_sender = k;
+    } else last_sender = -9;
     if (!on || id == last) return;
     last = id;
     if (id != 0x58 && id != 0x5F) return;

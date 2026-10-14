@@ -8,6 +8,10 @@
 #include "match_state.h"
 
 GAME_OVERRIDE(sub_00407810) {
+    own_end_begin();   /* (a party: this player's team's view, runtime/core/own_end.c) */
     ms_camera_event(g_ecx, GAME_ARG(0));
+    uint32_t ev = GAME_ARG(0);
     sub_00407810_lifted();   /* pops its argument */
+    ms_camera_event_done(ev);
+    own_end_end();
 }

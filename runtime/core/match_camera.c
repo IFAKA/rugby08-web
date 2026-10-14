@@ -61,6 +61,15 @@ void ms_camera_event(uint32_t listener, uint32_t event) {
     }
 }
 
+/* RT_MS_CAMEV=1: every match event the cameras hear, and the camera after it (what flips an end camera). */
+void ms_camera_event_done(uint32_t event) {
+    static int on = -1;
+    if (on < 0) on = getenv("RT_MS_CAMEV") != NULL;
+    if (on && event)
+        rt_trace("ms: cam event %X data %08X param %d at frame %u -> %s", rd32(event + 4), rd32(event + 8),
+                 (int)rd32(event + 0xC), rt_present_frame, ms_camera_name());
+}
+
 void ms_camera_remote(uint32_t id, uint32_t param) {   /* a friend: the host's event, to its own cameras */
     static uint32_t ev, zero;
     if (!g_listener || !forwarded(id) || (!ev && !(ev = gcalloc(16))) || (!zero && !(zero = gcalloc(16)))) return;

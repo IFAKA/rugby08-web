@@ -574,8 +574,8 @@
       ],
       "desc": "The ONLINE screens drive lockstep: CREATE PARTY shows this session's code and roster, JOIN PARTY reloads into the host's session with a catch-up screen, LEAVE PARTY back to an own game; 3 pages, identical frames and hashes.",
       "check": "/opt/homebrew/bin/python3 tools/net/ls_party_check.py",
-      "passes": false,
-      "notes": "2026-10-14 (the user: leaving must not restart the game, as in online sports games): LEAVE PARTY now keeps the leaver's game, at its main menu, in a room of its own (server/fork.go, runtime/core/net_leave.c); the check now requires that, a newcomer in sync in the leaver's room, and the leaver joining the party again. passes=false until it runs again."
+      "passes": true,
+      "notes": "2026-10-14 (the user: leaving must not restart the game, as in online sports games): LEAVE PARTY now keeps the leaver's game, at its main menu, in a room of its own (server/fork.go, runtime/core/net_leave.c); the check now requires that, a newcomer in sync in the leaver's room, and the leaver joining the party again. passes=false until it runs again. PASS 2026-10-14 (./init.sh check ls.party): leave in place (own room, main menu), a newcomer in sync in the leaver's room (428 hashes), the leaver back in the party (714 hashes, 0 different). Joins slow down as the session grows (94 s, 328 s, 540 s): ls.fastjoin."
     },
     {
       "id": "ls.controls",

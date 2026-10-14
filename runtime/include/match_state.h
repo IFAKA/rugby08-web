@@ -89,10 +89,13 @@ uint32_t ms_ball_va(void); /* BallManager* or 0 */
 void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj);   /* game/overrides/match/camera_update.c */
 void ms_camera_last(uint8_t *out);        /* this game's view at the last Present */
 void ms_camera_event(uint32_t listener, uint32_t event);  /* the CameraManager hears a match event */
+void ms_camera_event_done(uint32_t event);                 /* ... and has picked its camera (RT_MS_CAMEV) */
 void ms_camera_host(const uint8_t *cam);                  /* a friend shows this view (NULL: its own) */
 void ms_camera_remote(uint32_t id, uint32_t param);       /* a friend: the host's camera event ('C') */
 int ms_camera_directed(void);                             /* the game shows a set piece's or event's camera */
 void ms_camera_manager(uint32_t manager);                 /* the CameraManager (its listener inside) */
+void own_end_begin(void);   /* own_end.c: this player's camera, its team's humans only (party) */
+void own_end_end(void);
 const char *ms_camera_name(void);                         /* the camera this game shows ("Side", "Scrum" ...) */
 
 /* match_measure.c: RT_MS_POS lines for tools/net/match_compare.py */
