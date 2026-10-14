@@ -35,6 +35,9 @@ typedef struct {
 int ms_active(void);                      /* a match object exists (CRugby) */
 uint32_t ms_phase_vt(void);               /* the match state machine's current state (class vtable) */
 int ms_phase_id(void);                    /* its id (Free 7, Kickoff 8, ...): FUN_0062DA80 changes to it */
+uint32_t ms_phase_va(void);               /* the phase state object (0 none) */
+uint32_t ms_rugby_va(void);               /* CRugby (0 none) */
+int ms_setpiece_team(void);               /* the team a set piece's options are for, -1 unknown */
 const char *ms_phase(void);               /* its name: Kickoff, Formation, Run, Free, LineOut, ... or "?" */
 float ms_clock(void);                     /* match clock, game seconds */
 uint32_t ms_team_id(int team);            /* 0 home, 1 away */

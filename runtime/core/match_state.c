@@ -90,6 +90,19 @@ uint32_t ms_phase_vt(void) {
     return heap_obj(st, 4) ? rd32(st) : 0;
 }
 /* The state's id (state+8, FUN_0068C2C0): what CRugby's change-phase FUN_0062DA80 takes. -1: none. */
+uint32_t ms_rugby_va(void) { return rugby(); }   /* CRugby, 0 none */
+
+/* The team a set piece's options are for (quick options, penalty options), -1 unknown. Measured
+   (tools/net decider runs, 10 menus): only one team's controllers act there, and that team's CRugbyTeam
+   +0x10 is 0 while the other's points at an object; the ball's holder was another team in 3 of 8. */
+int ms_setpiece_team(void) {
+    uint32_t a = team(0) ? rd32(team(0) + 0x10) : 1, b = team(1) ? rd32(team(1) + 0x10) : 1;
+    return !a && b ? 0 : a && !b ? 1 : -1;
+}
+uint32_t ms_phase_va(void) {   /* the current phase state object, 0 none */
+    uint32_t r = rugby(), st = r ? current_state(rd32(r + R_STATES)) : 0;
+    return heap_obj(st, 12) ? st : 0;
+}
 int ms_phase_id(void) {
     uint32_t r = rugby(), st = r ? current_state(rd32(r + R_STATES)) : 0;
     return heap_obj(st, 12) ? (int)rd32(st + 8) : -1;

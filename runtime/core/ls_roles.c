@@ -105,25 +105,32 @@ int ls_roles_filter(const plat_desk_ev_t *d, int nd) {
     return only == rt_net_desk();
 }
 
-/* A set piece's options (penalty, quick options: screen 0x58) are for the team with the ball: 1 if that
-   is not this player's team (its screen shows the other team choosing, not their menu). */
-static int others_choice(int id) {
+/* The side of slot K's player: its keyboard's if it has the desk, else its pad's ('H', 'A', 0). */
+static char side_of(int k) { return k == rt_net_desk() && rt_pads_side(-1) ? rt_pads_side(-1) : rt_pads_side(k); }
+
+/* A set piece's options (penalty, quick options) are for one team (ms_setpiece_team: the game's own): if
+   that is not this player's team, LINE says who of the players there is choosing; 0: it is this player's,
+   or nobody's here (the AI's team, unknown). */
+static int others_choice(int id, char *line, int cap) {
     if (id != SCR_QUICK && id != SCR_PENALTY) return 0;
-    ms_ball_t b;
-    int me = rt_net_slot();
-    char side = me == rt_net_desk() && rt_pads_side(-1) ? rt_pads_side(-1) : rt_pads_side(me);
-    if (!ms_ball(&b) || b.holder_team < 0 || !side) return 0;
-    static int said;
-    if (!said++) rt_trace("ms: party options for team %d, this player's side %c", b.holder_team, side);
-    return (side == 'H') != (b.holder_team == 0);
+    int t = ms_setpiece_team(), me = rt_net_slot(), n = 0, w = 0;
+    char want = t == 0 ? 'H' : 'A', who[24] = "";
+    if (t < 0 || !side_of(me) || side_of(me) == want) return 0;
+    for (int k = 0; k < RT_MAX_PADS; k++)
+        if (rt_net_active(k) && side_of(k) == want && w < (int)sizeof who - 8)
+            w += snprintf(who + w, sizeof who - (size_t)w, "%s%d", n++ ? " AND " : "", k + 1);
+    if (!n) return 0;
+    static int said = -1;
+    if (said != t) rt_trace("ms: party options for team %d, this player's side %c", t, side_of(me)), said = t;
+    snprintf(line, (size_t)cap, "PLAYER%s %s %s CHOOSING", n > 1 ? "S" : "", who, n > 1 ? "ARE" : "IS");
+    return 1;
 }
 
 /* This player's own view of the roles (local, drawn by ui_badge.c). */
 int ls_roles_banner(char *line, int cap) {
     if (!ls_on() || __builtin_popcount(ls_members()) < 2) return 0;
     int me = rt_net_slot(), id = fe_screen_id();
-    if (in_match() && others_choice(id))
-        return snprintf(line, (size_t)cap, "THE OTHER TEAM IS CHOOSING"), LS_BANNER_COVER;
+    if (in_match() && others_choice(id, line, cap)) return LS_BANNER_COVER;
     if (in_match() && g_paused && g_pauser != me)
         return snprintf(line, (size_t)cap, "PAUSED BY PLAYER %d  %d S", g_pauser + 1, ls_roles_pause_left()),
                LS_BANNER_COVER;
