@@ -147,6 +147,7 @@ void ms_probe_frame(uint32_t frame) {
     dbg_test_options_frame(frame);
     dbg_setpiece_frame(frame);
     dbg_ptr_find(frame);
+    dbg_obj_scan(frame);
     dbg_camside_frame(frame);
     static const char *snap_at = (const char *)-1;
     if (snap_at == (const char *)-1) snap_at = getenv("RT_MS_SNAP");

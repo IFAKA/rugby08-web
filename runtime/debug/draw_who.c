@@ -87,3 +87,33 @@ void dbg_ptr_find(uint32_t frame) {
     ptr_find(from, to, 3, path, 0);
     rt_trace("ptr: search from %X for %X done", from, to);
 }
+
+/* RT_OBJ_SCAN=VT,VT..@F (diagnosis): at frame F, every heap object whose first word is one of those
+   vtables, with its first 0x60 bytes ("obj: VT at A: words"). To find the game's HUD items and what
+   they belong to. */
+void dbg_obj_scan(uint32_t frame) {
+    static uint32_t vt[12], at = ~0u;
+    static int n = -1;
+    if (n < 0) {
+        n = 0;
+        const char *e = getenv("RT_OBJ_SCAN");
+        while (e && *e && n < 12) {
+            char *end;
+            vt[n++] = (uint32_t)strtoul(e, &end, 16);
+            if (*end == '@') at = (uint32_t)strtoul(end + 1, NULL, 10), e = "";
+            else e = *end == ',' ? end + 1 : "";
+        }
+    }
+    if (frame != at) return;
+    for (uint32_t a = 0x01465000u; a + 0x60 < rt_heap_top(); a += 4) {
+        uint32_t w = rd32(a);
+        for (int i = 0; i < n; i++)
+            if (w == vt[i]) {
+                char line[700];
+                int o = snprintf(line, sizeof line, "obj: %08X at %08X:", w, a);
+                for (uint32_t k = 4; k < 0x60 && o < (int)sizeof line - 10; k += 4)
+                    o += snprintf(line + o, sizeof line - (size_t)o, " %08X", rd32(a + k));
+                rt_trace("%s", line);
+            }
+    }
+}

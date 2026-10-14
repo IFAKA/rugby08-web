@@ -26,6 +26,7 @@ void dbg_buffer_made(uint32_t buf, int vertex, uint32_t len, uint32_t usage, uin
 
 void dbg_test_options_frame(uint32_t frame); /* test_options.c: RT_TEST_CAMERA */
 void dbg_ptr_find(uint32_t frame);           /* draw_who.c: RT_PTR_FIND */
+void dbg_obj_scan(uint32_t frame);           /* draw_who.c: RT_OBJ_SCAN */
 void dbg_setpiece_frame(uint32_t frame);     /* setpiece_probe.c: RT_MS_SETPIECE */
 void dbg_camside_frame(uint32_t frame);      /* camside_probe.c: RT_MS_CAMSIDE */
 void dbg_render_writes_begin(uint32_t frame); /* render_writes.c: RT_RENDER_WRITES (at the camera step) */
