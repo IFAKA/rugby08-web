@@ -3,8 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Rugby 08</title>
-    <!-- platform/web/shell.html: the page around the game canvas (emcc --shell-file). Local only. -->
+    <title>Rugby 08 in the browser: a static recompilation to WebAssembly</title>
+    <!-- platform/web/shell.html: the page around the game canvas (emcc --shell-file); an installable app
+         (platform/web/pwa/). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="EA Sports Rugby 08 (PC, 2007) running in a web browser: the game's own code statically recompiled to WebAssembly, Direct3D 8 drawn with WebGL 2. Bring your own copy of the game.">
+    <meta name="theme-color" content="#125c30">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="pwa/icon-192.png">
+    <link rel="apple-touch-icon" href="pwa/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <style>
       body { margin: 0; padding: 8px; background: #111; color: #ccc; font: 13px system-ui, sans-serif; }
       .emscripten { display: block; margin: 0 auto; text-align: center; }
@@ -128,6 +136,15 @@
       };
     </script>
     {{{ SCRIPT }}}
+    <script>
+      // The installable app (platform/web/pwa/sw.js): localhost or HTTPS only. A new deploy is a new worker
+      // (checked at every start, never from the HTTP cache); the page itself always comes fresh when online.
+      if ('serviceWorker' in navigator)
+        navigator.serviceWorker
+          .register('sw.js', { updateViaCache: 'none' })
+          .then((r) => r.update())
+          .catch(() => {});
+    </script>
 #if MODULARIZE && !EXPORT_ES6
     <script type='text/javascript'>
       {{{ EXPORT_NAME }}}(moduleArgs);

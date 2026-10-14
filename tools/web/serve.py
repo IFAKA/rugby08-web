@@ -14,6 +14,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         ".wasm": "application/wasm",
         ".js": "text/javascript",
         ".mjs": "text/javascript",
+        ".webmanifest": "application/manifest+json",
     }
 
     def end_headers(self):

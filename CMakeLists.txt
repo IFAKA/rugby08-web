@@ -151,5 +151,10 @@ if(EMSCRIPTEN)
     --preload-file=${ROOT}/Rugby08_unpacked.exe@/Rugby08_unpacked.exe)
   set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/js/gamefs.js ${ROOT}/platform/web/js/audio.js
     ${ROOT}/platform/web/js/errors.js ${ROOT}/platform/web/shell.html)
-  add_custom_command(TARGET rugby08 POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:rugby08>/rugby08.html $<TARGET_FILE_DIR:rugby08>/index.html)
+  add_custom_command(TARGET rugby08 POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:rugby08>/rugby08.html $<TARGET_FILE_DIR:rugby08>/index.html
+    # the installable app (platform/web/pwa/README.md): icons in pwa/, the worker and manifest beside the page
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${ROOT}/platform/web/pwa $<TARGET_FILE_DIR:rugby08>/pwa
+    COMMAND ${CMAKE_COMMAND} -E copy ${ROOT}/platform/web/pwa/manifest.webmanifest $<TARGET_FILE_DIR:rugby08>
+    COMMAND ${CMAKE_COMMAND} -DIN=${ROOT}/platform/web/pwa/sw.js -DOUT=$<TARGET_FILE_DIR:rugby08>/sw.js
+      -P ${ROOT}/tools/web/stamp_sw.cmake)
 endif()
