@@ -79,3 +79,9 @@ Local only; the user deploys the web app later.
 - ls.lag (2026-10-14): delay 9 -> 6 frames (adaptive), 0 stalls; peer share 86-89 % (wants 90 %): in the
   check both pages and the relay run on one machine (relay hop ~0 ms, 52-54 fps); to confirm on two
   machines (the user's test), not by easing the check.
+- ls.fastjoin (2026-10-14, measured): catch-up is the game's own code (native profile: lookup 4.5 %, TLS
+  16 % native only, scheduler 4 %); -O2 for the lifted code: 60 -> 56 s for 16000 frames, state identical
+  (53 hashes): not worth a web build's time (RECOMP_GEN_OPT kept, default -O1). Joining replays the room's
+  session: ~1/3 of its length in the browser (party made first: ~1.5 min). A save-state join is not
+  reliable here: guest threads are native threads (their state on native stacks) and D3D/audio objects
+  live outside guest memory.
