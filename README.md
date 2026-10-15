@@ -41,22 +41,23 @@ platform/  SDL2 (window, input, audio) + native (macOS) | web (Emscripten, JSPI,
 - More: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [runtime/DESIGN.md](runtime/DESIGN.md),
   [REVERSE.md](REVERSE.md) (facts about the executable), [docs/PRIOR_ART.md](docs/PRIOR_ART.md).
 
-## Build it yourself
-Requirements: macOS (Apple Silicon or Intel), CMake, clang, SDL2, Python 3, Emscripten (web), Ghidra and
-OpenJDK 21 (the analysis step), and **your own Rugby 08 PC installation**: put its game files in
-`Game Files/` and its executable, without the disc's copy protection, as `Rugby08_unpacked.exe` (neither
-is provided here).
-
+## Quick start (your own copy of the game)
 ```sh
 git clone https://github.com/IFAKA/rugby08-web.git && cd rugby08-web
-tools/setup_submodules.sh        # upstream submodules + our patch series (third_party/patches)
-./init.sh status                 # what passes, what is next (features.json)
-tools/lift/lift_fixpoint.sh      # analyse and recompile the executable into gen/ (slow, once)
-./init.sh build-native && scripts/play.sh    # play natively (macOS)
-./init.sh build-web && ./init.sh serve 8080  # then open http://localhost:8080 (install it as an app)
+# copy in your game: the installed game's folder as "Game Files/", its executable (without the disc's
+# copy protection) as Rugby08_unpacked.exe -- neither is provided here
+npm install
+npm run dev        # builds once (~5-10 min), then opens the game at http://localhost:8080
 ```
-`./init.sh` is the single entry point (`check <id>`, `check-all`, `lint`, `structure`); every check is
-listed in [features.json](features.json).
+Needs Python 3, CMake and Emscripten (macOS: `brew install python cmake emscripten`). `npm run dev` checks
+your copy against the version this repo was made for, recompiles the executable (seconds: the function
+list is in `analysis/`), packages your game files for the browser and serves it; later runs start in
+seconds. In Chrome or Edge, "Install app" puts it on your desktop. `npm run play` builds and plays the native
+macOS version instead (also needs `brew install sdl2`).
+
+For development: `./init.sh` is the single entry point (`status`, `check <id>`, `check-all`, `build-web`,
+`build-native`, `lint`, `structure`); every check is listed in [features.json](features.json). Re-deriving
+the function list from scratch needs Ghidra and OpenJDK 21 (`tools/analysis/`, `tools/lift/lift_fixpoint.sh`).
 
 ## Status
 35 of 37 tracked items pass: the game boots, plays complete matches with sound and video, natively and in

@@ -41,7 +41,7 @@ Objective: run the full Rugby 08 (PE32 x86, MSVC 7.1, D3D8/DInput/DSound) in a b
 - Use `krn state` only for irreducible facts: objective, constraints, proven facts, dead ends.
 
 ## Hard constraints
-- Never commit EA content or derived binaries: `Game Files/`, `*.exe`, `gen/`, `build/`, `analysis/`, `ghidra/` are gitignored. Keep it that way.
+- Never commit EA content or derived binaries: `Game Files/`, `*.exe`, `gen/`, `build/`, `analysis/`, `ghidra/` are gitignored. Keep it that way. Exception (the user, 2026-10-15: `npm run dev` from a clone): the build's address lists in `analysis/` (lift_catalog.json, ghidra_funcs.csv, imports_sig.json, pe_analysis.json, exe.sha256: addresses and signatures, no code) are tracked.
 - Push the source to GitHub (`origin`, branch `main`) only when the user asks. Never publish EA content or anything built from it (Game Files, the exe, `gen/`, `build/`: no deploys of the playable game), and nothing else (no pastebins).
 - Reuse before writing: pcrecomp (lifter/runtime), xboxrecomp and burnout3 (ICALL dispatch, D3D8 semantics), d3d8to9, MojoShader, SDL2 and ffmpeg (VP6). All are in `third_party/` (the renderer, grown from d3d9-webgl, is ours: `render/webgl/`). Read their docs before reimplementing anything.
 - Verification referee: behavior checks (trace logs, frame hashes, screenshots), never "it looks right".

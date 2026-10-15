@@ -1,0 +1,2794 @@
+[
+ {
+  "dll": "ADVAPI32.DLL",
+  "name": "RegQueryValueExA",
+  "iat_va": 9224192,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "str",
+   "ptr",
+   "ptr",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "ADVAPI32.DLL",
+  "name": "RegOpenKeyExA",
+  "iat_va": 9224196,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "long",
+   "str",
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "ADVAPI32.DLL",
+  "name": "RegEnumValueA",
+  "iat_va": 9224200,
+  "conv": "stdcall",
+  "slots": 8,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "ptr",
+   "ptr",
+   "ptr",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 32
+ },
+ {
+  "dll": "ADVAPI32.DLL",
+  "name": "RegOpenKeyA",
+  "iat_va": 9224204,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "str",
+   "ptr"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "ADVAPI32.DLL",
+  "name": "RegCloseKey",
+  "iat_va": 9224208,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "DDRAW.DLL",
+  "name": "DirectDrawCreate",
+  "iat_va": 9224216,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "ptr",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "DINPUT.DLL",
+  "name": "DirectInputCreateA",
+  "iat_va": 9224224,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "DSOUND.DLL",
+  "name": "DirectSoundCaptureCreate",
+  "iat_va": 9224232,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "ptr",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "DSOUND.DLL",
+  "name": "DirectSoundCreate",
+  "iat_va": 9224236,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "ptr",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "CreateFontA",
+  "iat_va": 9224244,
+  "conv": "stdcall",
+  "slots": 14,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "str"
+  ],
+  "pop": 56
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "SetTextColor",
+  "iat_va": 9224248,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "SetBkColor",
+  "iat_va": 9224252,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "SetBkMode",
+  "iat_va": 9224256,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "ExtTextOutA",
+  "iat_va": 9224260,
+  "conv": "stdcall",
+  "slots": 8,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long",
+   "ptr",
+   "str",
+   "long",
+   "ptr"
+  ],
+  "pop": 32
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "GetPixel",
+  "iat_va": 9224264,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "GetStockObject",
+  "iat_va": 9224268,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "CreateDCA",
+  "iat_va": 9224272,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "str",
+   "str",
+   "str",
+   "ptr"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "CreateCompatibleDC",
+  "iat_va": 9224276,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "CreateCompatibleBitmap",
+  "iat_va": 9224280,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "SelectObject",
+  "iat_va": 9224284,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "BitBlt",
+  "iat_va": 9224288,
+  "conv": "stdcall",
+  "slots": 9,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 36
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "GetObjectA",
+  "iat_va": 9224292,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "GetDIBits",
+  "iat_va": 9224296,
+  "conv": "stdcall",
+  "slots": 7,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long",
+   "ptr",
+   "ptr",
+   "long"
+  ],
+  "pop": 28
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "DeleteObject",
+  "iat_va": 9224300,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "DeleteDC",
+  "iat_va": 9224304,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "GDI32.DLL",
+  "name": "CreateBitmap",
+  "iat_va": 9224308,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetFileSize",
+  "iat_va": 9224316,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "DeleteFileA",
+  "iat_va": 9224320,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "str"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "MoveFileA",
+  "iat_va": 9224324,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "str",
+   "str"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "ReadFile",
+  "iat_va": 9224328,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "long",
+   "ptr",
+   "long",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FindClose",
+  "iat_va": 9224332,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FindFirstFileA",
+  "iat_va": 9224336,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "str",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetVolumeInformationA",
+  "iat_va": 9224340,
+  "conv": "stdcall",
+  "slots": 8,
+  "args": [
+   "str",
+   "ptr",
+   "long",
+   "ptr",
+   "ptr",
+   "ptr",
+   "ptr",
+   "long"
+  ],
+  "pop": 32
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetFullPathNameA",
+  "iat_va": 9224344,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "str",
+   "long",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "MapViewOfFile",
+  "iat_va": 9224348,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CreateFileMappingA",
+  "iat_va": 9224352,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "ptr",
+   "long",
+   "long",
+   "long",
+   "str"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "UnmapViewOfFile",
+  "iat_va": 9224356,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetEndOfFile",
+  "iat_va": 9224360,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetLogicalDrives",
+  "iat_va": 9224364,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetLogicalDriveStringsA",
+  "iat_va": 9224368,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetDiskFreeSpaceA",
+  "iat_va": 9224372,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "str",
+   "ptr",
+   "ptr",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetProcAddress",
+  "iat_va": 9224376,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "str"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "TerminateThread",
+  "iat_va": 9224380,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetCurrentThread",
+  "iat_va": 9224384,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SleepEx",
+  "iat_va": 9224388,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetCurrentThreadId",
+  "iat_va": 9224392,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetThreadPriority",
+  "iat_va": 9224396,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetThreadPriority",
+  "iat_va": 9224400,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetExitCodeThread",
+  "iat_va": 9224404,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "DuplicateHandle",
+  "iat_va": 9224408,
+  "conv": "stdcall",
+  "slots": 7,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "ptr",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 28
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetCurrentProcess",
+  "iat_va": 9224412,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "ResumeThread",
+  "iat_va": 9224416,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetModuleFileNameA",
+  "iat_va": 9224420,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "QueryPerformanceCounter",
+  "iat_va": 9224424,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "QueryPerformanceFrequency",
+  "iat_va": 9224428,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetVersionExA",
+  "iat_va": 9224432,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetSystemInfo",
+  "iat_va": 9224436,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "IsBadWritePtr",
+  "iat_va": 9224440,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "ptr",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "IsBadReadPtr",
+  "iat_va": 9224444,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "ptr",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "IsProcessorFeaturePresent",
+  "iat_va": 9224448,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "LoadLibraryA",
+  "iat_va": 9224452,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "str"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "WideCharToMultiByte",
+  "iat_va": 9224456,
+  "conv": "stdcall",
+  "slots": 8,
+  "args": [
+   "long",
+   "long",
+   "wstr",
+   "long",
+   "ptr",
+   "long",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 32
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "VirtualProtect",
+  "iat_va": 9224460,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "ptr",
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CreateThread",
+  "iat_va": 9224464,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "ptr",
+   "long",
+   "ptr",
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CreateMutexA",
+  "iat_va": 9224468,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "ptr",
+   "long",
+   "str"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "ReleaseMutex",
+  "iat_va": 9224472,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GlobalAlloc",
+  "iat_va": 9224476,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GlobalFree",
+  "iat_va": 9224480,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CreateSemaphoreA",
+  "iat_va": 9224484,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "ptr",
+   "long",
+   "long",
+   "str"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "ReleaseSemaphore",
+  "iat_va": 9224488,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "ReadConsoleInputA",
+  "iat_va": 9224492,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "ptr",
+   "long",
+   "ptr"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "EnterCriticalSection",
+  "iat_va": 9224496,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetFilePointer",
+  "iat_va": 9224500,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetEnvironmentVariableA",
+  "iat_va": 9224504,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "str",
+   "str"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CompareStringW",
+  "iat_va": 9224508,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "long",
+   "wstr",
+   "long",
+   "wstr",
+   "long"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CompareStringA",
+  "iat_va": 9224512,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "long",
+   "str",
+   "long",
+   "str",
+   "long"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FlushFileBuffers",
+  "iat_va": 9224516,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetOEMCP",
+  "iat_va": 9224520,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetACP",
+  "iat_va": 9224524,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "IsBadCodePtr",
+  "iat_va": 9224528,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetStringTypeW",
+  "iat_va": 9224532,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "wstr",
+   "long",
+   "ptr"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetStringTypeA",
+  "iat_va": 9224536,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "long",
+   "long",
+   "str",
+   "long",
+   "ptr"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "IsValidCodePage",
+  "iat_va": 9224540,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "IsValidLocale",
+  "iat_va": 9224544,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "EnumSystemLocalesA",
+  "iat_va": 9224548,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "ptr",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetLocaleInfoA",
+  "iat_va": 9224552,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetUserDefaultLCID",
+  "iat_va": 9224556,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetCurrentProcessId",
+  "iat_va": 9224560,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetTickCount",
+  "iat_va": 9224564,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FreeLibrary",
+  "iat_va": 9224568,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetProcessHeap",
+  "iat_va": 9224572,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetStdHandle",
+  "iat_va": 9224576,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetDriveTypeA",
+  "iat_va": 9224580,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "str"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetHandleCount",
+  "iat_va": 9224584,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetEnvironmentStringsW",
+  "iat_va": 9224588,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FreeEnvironmentStringsW",
+  "iat_va": 9224592,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetEnvironmentStrings",
+  "iat_va": 9224596,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FreeEnvironmentStringsA",
+  "iat_va": 9224600,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "UnhandledExceptionFilter",
+  "iat_va": 9224604,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetStdHandle",
+  "iat_va": 9224608,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "VirtualQuery",
+  "iat_va": 9224612,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "ptr",
+   "ptr",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "VirtualAlloc",
+  "iat_va": 9224616,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "ptr",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "VirtualFree",
+  "iat_va": 9224620,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "ptr",
+   "long",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "HeapCreate",
+  "iat_va": 9224624,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "HeapDestroy",
+  "iat_va": 9224628,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "HeapSize",
+  "iat_va": 9224632,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "HeapReAlloc",
+  "iat_va": 9224636,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetUnhandledExceptionFilter",
+  "iat_va": 9224640,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "TlsGetValue",
+  "iat_va": 9224644,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "TlsSetValue",
+  "iat_va": 9224648,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "TlsFree",
+  "iat_va": 9224652,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "TlsAlloc",
+  "iat_va": 9224656,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetCPInfo",
+  "iat_va": 9224660,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "LCMapStringW",
+  "iat_va": 9224664,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "long",
+   "wstr",
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "MultiByteToWideChar",
+  "iat_va": 9224668,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "long",
+   "str",
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "LCMapStringA",
+  "iat_va": 9224672,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "long",
+   "str",
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "DebugBreak",
+  "iat_va": 9224676,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "RemoveDirectoryA",
+  "iat_va": 9224680,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "str"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetFileType",
+  "iat_va": 9224684,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FindNextFileA",
+  "iat_va": 9224688,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FileTimeToLocalFileTime",
+  "iat_va": 9224692,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "ptr",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FileTimeToSystemTime",
+  "iat_va": 9224696,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "ptr",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CreateDirectoryA",
+  "iat_va": 9224700,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "str",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "FormatMessageA",
+  "iat_va": 9224704,
+  "conv": "stdcall",
+  "slots": 7,
+  "args": [
+   "long",
+   "ptr",
+   "long",
+   "long",
+   "ptr",
+   "long",
+   "ptr"
+  ],
+  "pop": 28
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "OutputDebugStringA",
+  "iat_va": 9224708,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "str"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "LocalFree",
+  "iat_va": 9224712,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CreateEventA",
+  "iat_va": 9224716,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "ptr",
+   "long",
+   "long",
+   "str"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetCurrentDirectoryA",
+  "iat_va": 9224720,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetLastError",
+  "iat_va": 9224724,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetCurrentDirectoryA",
+  "iat_va": 9224728,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "str"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "WaitForSingleObject",
+  "iat_va": 9224732,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "ResetEvent",
+  "iat_va": 9224736,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetEvent",
+  "iat_va": 9224740,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetLastError",
+  "iat_va": 9224744,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "ExitProcess",
+  "iat_va": 9224748,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetModuleHandleA",
+  "iat_va": 9224752,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "str"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "Sleep",
+  "iat_va": 9224756,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "DeleteCriticalSection",
+  "iat_va": 9224760,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetLocaleInfoW",
+  "iat_va": 9224764,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "LeaveCriticalSection",
+  "iat_va": 9224768,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "InitializeCriticalSection",
+  "iat_va": 9224772,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CreateFileA",
+  "iat_va": 9224776,
+  "conv": "stdcall",
+  "slots": 7,
+  "args": [
+   "str",
+   "long",
+   "long",
+   "ptr",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 28
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "WriteFile",
+  "iat_va": 9224780,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "long",
+   "ptr",
+   "long",
+   "ptr",
+   "ptr"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "CloseHandle",
+  "iat_va": 9224784,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "SetConsoleMode",
+  "iat_va": 9224788,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetConsoleMode",
+  "iat_va": 9224792,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "PeekConsoleInputA",
+  "iat_va": 9224796,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "ptr",
+   "ptr",
+   "long",
+   "ptr"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetNumberOfConsoleInputEvents",
+  "iat_va": 9224800,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "IsDebuggerPresent",
+  "iat_va": 9224804,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "ExitThread",
+  "iat_va": 9224808,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "TerminateProcess",
+  "iat_va": 9224812,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetCommandLineA",
+  "iat_va": 9224816,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetStartupInfoA",
+  "iat_va": 9224820,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "HeapAlloc",
+  "iat_va": 9224824,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "HeapFree",
+  "iat_va": 9224828,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "InterlockedIncrement",
+  "iat_va": 9224832,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "InterlockedDecrement",
+  "iat_va": 9224836,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "InterlockedExchange",
+  "iat_va": 9224840,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "ptr",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "RtlUnwind",
+  "iat_va": 9224844,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "ptr",
+   "ptr",
+   "ptr",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "RaiseException",
+  "iat_va": 9224848,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetTimeZoneInformation",
+  "iat_va": 9224852,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "KERNEL32.DLL",
+  "name": "GetSystemTimeAsFileTime",
+  "iat_va": 9224856,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "AdjustWindowRect",
+  "iat_va": 9224864,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "ptr",
+   "long",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SendMessageA",
+  "iat_va": 9224868,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "LoadImageA",
+  "iat_va": 9224872,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "str",
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetWindowTextA",
+  "iat_va": 9224876,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "str"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "DestroyIcon",
+  "iat_va": 9224880,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "ToAsciiEx",
+  "iat_va": 9224884,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "ptr",
+   "long",
+   "long"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetForegroundWindow",
+  "iat_va": 9224888,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "keybd_event",
+  "iat_va": 9224892,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "RegisterClassA",
+  "iat_va": 9224896,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetMessageA",
+  "iat_va": 9224900,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "ptr",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "IsIconic",
+  "iat_va": 9224904,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetWindowLongA",
+  "iat_va": 9224908,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetCursorPos",
+  "iat_va": 9224912,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "AdjustWindowRectEx",
+  "iat_va": 9224916,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "ptr",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetForegroundWindow",
+  "iat_va": 9224920,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "BeginPaint",
+  "iat_va": 9224924,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "EndPaint",
+  "iat_va": 9224928,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetClientRect",
+  "iat_va": 9224932,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "ClientToScreen",
+  "iat_va": 9224936,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "PostQuitMessage",
+  "iat_va": 9224940,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetWindowsHookExA",
+  "iat_va": 9224944,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetAsyncKeyState",
+  "iat_va": 9224948,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "CallNextHookEx",
+  "iat_va": 9224952,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SendNotifyMessageA",
+  "iat_va": 9224956,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SystemParametersInfoA",
+  "iat_va": 9224960,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetCursorPos",
+  "iat_va": 9224964,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "ScreenToClient",
+  "iat_va": 9224968,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "ptr"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "CharUpperA",
+  "iat_va": 9224972,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "str"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "ShowCursor",
+  "iat_va": 9224976,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "MessageBoxA",
+  "iat_va": 9224980,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "str",
+   "str",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "LoadIconA",
+  "iat_va": 9224984,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "str"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "LoadCursorA",
+  "iat_va": 9224988,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "str"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "UnhookWindowsHookEx",
+  "iat_va": 9224992,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetWindowPos",
+  "iat_va": 9224996,
+  "conv": "stdcall",
+  "slots": 7,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 28
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "RegisterClassExA",
+  "iat_va": 9225000,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetSystemMetrics",
+  "iat_va": 9225004,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "MoveWindow",
+  "iat_va": 9225008,
+  "conv": "stdcall",
+  "slots": 6,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 24
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "ShowWindow",
+  "iat_va": 9225012,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "long",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetActiveWindow",
+  "iat_va": 9225016,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetFocus",
+  "iat_va": 9225020,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetCursor",
+  "iat_va": 9225024,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "DestroyWindow",
+  "iat_va": 9225028,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "UnregisterClassA",
+  "iat_va": 9225032,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "str",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "SetRect",
+  "iat_va": 9225036,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "ptr",
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetDesktopWindow",
+  "iat_va": 9225040,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "CreateWindowExA",
+  "iat_va": 9225044,
+  "conv": "stdcall",
+  "slots": 12,
+  "args": [
+   "long",
+   "str",
+   "str",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "long",
+   "ptr"
+  ],
+  "pop": 48
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "UpdateWindow",
+  "iat_va": 9225048,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "DefWindowProcA",
+  "iat_va": 9225052,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "PeekMessageA",
+  "iat_va": 9225056,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "ptr",
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "DispatchMessageA",
+  "iat_va": 9225060,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "TranslateMessage",
+  "iat_va": 9225064,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "PostMessageA",
+  "iat_va": 9225068,
+  "conv": "stdcall",
+  "slots": 4,
+  "args": [
+   "long",
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 16
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetKeyState",
+  "iat_va": 9225072,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetKeyboardLayout",
+  "iat_va": 9225076,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "GetKeyboardState",
+  "iat_va": 9225080,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "ptr"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "USER32.DLL",
+  "name": "MapVirtualKeyExA",
+  "iat_va": 9225084,
+  "conv": "stdcall",
+  "slots": 3,
+  "args": [
+   "long",
+   "long",
+   "long"
+  ],
+  "pop": 12
+ },
+ {
+  "dll": "WINMM.DLL",
+  "name": "timeGetTime",
+  "iat_va": 9225092,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "WINMM.DLL",
+  "name": "timeBeginPeriod",
+  "iat_va": 9225096,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "WINMM.DLL",
+  "name": "timeEndPeriod",
+  "iat_va": 9225100,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "WINMM.DLL",
+  "name": "timeSetEvent",
+  "iat_va": 9225104,
+  "conv": "stdcall",
+  "slots": 5,
+  "args": [
+   "long",
+   "long",
+   "ptr",
+   "long",
+   "long"
+  ],
+  "pop": 20
+ },
+ {
+  "dll": "WINMM.DLL",
+  "name": "timeKillEvent",
+  "iat_va": 9225108,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ },
+ {
+  "dll": "WINMM.DLL",
+  "name": "waveOutGetNumDevs",
+  "iat_va": 9225112,
+  "conv": "stdcall",
+  "slots": 0,
+  "args": [],
+  "pop": 0
+ },
+ {
+  "dll": "WINMM.DLL",
+  "name": "timeGetDevCaps",
+  "iat_va": 9225116,
+  "conv": "stdcall",
+  "slots": 2,
+  "args": [
+   "ptr",
+   "long"
+  ],
+  "pop": 8
+ },
+ {
+  "dll": "D3D8.DLL",
+  "name": "Direct3DCreate8",
+  "iat_va": 9225124,
+  "conv": "stdcall",
+  "slots": 1,
+  "args": [
+   "long"
+  ],
+  "pop": 4
+ }
+]

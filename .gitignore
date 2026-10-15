@@ -11,11 +11,19 @@
 /build
 /ghidra
 /logs
-/analysis
+/analysis/*
+# ...except what the build reads (function addresses, import signatures: no game code), so a clone needs
+# only your own game to build (npm run dev)
+!/analysis/lift_catalog.json
+!/analysis/ghidra_funcs.csv
+!/analysis/imports_sig.json
+!/analysis/pe_analysis.json
+!/analysis/exe.sha256
 *.log
 .DS_Store
 __pycache__/
 /.venv
+/.emsdk
 /third_party/wine-specs
 /userdata
 node_modules/
