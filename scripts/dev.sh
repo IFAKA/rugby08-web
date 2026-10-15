@@ -4,13 +4,13 @@
 #   1 your game: "Game Files/" (the installed game's folder) and Rugby08_unpacked.exe (checked against
 #     analysis/exe.sha256: the function list in analysis/ is for that exe)
 #   2 tools: python3, cmake, emcc (macOS: brew install python cmake emscripten), a .venv for the lifter
-#   3 third_party/ (tools/setup_submodules.sh)
+#   3 third_party/ (tools/setup_submodules.sh; Wine's Win32 signatures: tools/analysis/fetch_wine_specs.sh)
 #   4 gen/: the exe recompiled to C (tools/lift/lift.py, seconds) and its sound-bank code (aems_lift.py)
 #   5 build/web/data/: the game files in 8 MiB chunks (tools/web/package_assets.py)
 #   6 build/web/: the browser build (./init.sh build-web; the first one takes ~5 minutes)
 #   7 http://localhost:8080 (opened for you; installable as an app)
-# PORT=N picks another port. One line per step; details in logs/.
-cd "$(dirname "$0")/.." || exit 1
+# PORT=N picks another port; NO_OPEN=1 does not open a browser (checks). One line per step; details in logs/.
+cd "$(cd "$(dirname "$0")/.." && pwd -P)" || exit 1 # (the real path: Emscripten builds its libraries by relative paths)
 mkdir -p logs
 PORT=${PORT:-8080}
 say() { printf '\033[1m%s\033[0m %s\n' "dev:" "$*"; }
@@ -30,15 +30,18 @@ say "your game: ok"
 for t in python3 cmake emcc; do
   command -v "$t" >/dev/null || die "missing '$t' (macOS: brew install python cmake emscripten)"
 done
-if [ ! -x .venv/bin/python ]; then
-  python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt >logs/dev_venv.log 2>&1 ||
-    die "python packages failed (logs/dev_venv.log)"
+if [ ! -f .venv/requirements.txt ] || ! cmp -s requirements.txt .venv/requirements.txt; then
+  { [ -x .venv/bin/python ] || python3 -m venv .venv; } && .venv/bin/pip install -q -r requirements.txt >logs/dev_venv.log 2>&1 &&
+    cp requirements.txt .venv/requirements.txt || die "python packages failed (logs/dev_venv.log)"
 fi
 say "tools: ok"
 
 # 3 third_party
 if [ ! -f third_party/pcrecomp/tools/lift/lift32.py ] || [ ! -f third_party/mojoshader/mojoshader.c ]; then
   tools/setup_submodules.sh || exit 1
+fi
+if [ ! -s third_party/wine-specs/kernel32.spec ]; then # (Win32 import signatures, for the import bridges)
+  tools/analysis/fetch_wine_specs.sh || exit 1
 fi
 
 # 4 gen/
@@ -65,5 +68,5 @@ say "building for the browser (the first build takes a few minutes)..."
 # 7 play
 URL="http://localhost:$PORT/"
 say "playing at $URL (Ctrl+C to stop)"
-(sleep 1 && { command -v open >/dev/null && open "$URL" || xdg-open "$URL"; } >/dev/null 2>&1) &
+[ -n "$NO_OPEN" ] || (sleep 1 && { command -v open >/dev/null && open "$URL" || xdg-open "$URL"; } >/dev/null 2>&1) &
 exec python3 tools/web/serve.py build/web "$PORT"
