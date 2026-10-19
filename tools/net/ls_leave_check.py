@@ -119,12 +119,16 @@ def run(br, port, out):
         newcomer.key("Enter", 1000)
         # The friend plays on (its set pieces wait for it) while the newcomer joins. Joining replays the
         # whole session (ls.fastjoin is about its speed), so wait while the newcomer gains on the friend:
-        # its frame gap must shrink every minute, for 45 minutes at most.
+        # once its replay runs, its frame gap must shrink every 2 minutes, for 45 minutes at most.
         gap, since, end = None, time.time(), time.time() + 45 * 60
         while time.time() < end:
             if any("caught up at frame" in x for x in newcomer.lines[n:]):
                 break
-            if time.time() - since > 60:
+            status = [x for x in newcomer.lines[n:] if "ms: joining" in x][-1:]
+            started = any("catching up (slot free" in x for x in newcomer.lines[n:])
+            if not started or (status and MATCH_MSG in status[0].lower()):
+                gap, since = None, time.time()  # still loading the party, or waiting for the match's end
+            elif time.time() - since > 120:
                 g = f2.last(r"^frame (\d+)") - newcomer.last(r"^frame (\d+)")
                 if gap is not None and g >= gap:
                     out.append(f"newcomer: catch-up stopped gaining (frame gap {gap:.0f} -> {g:.0f})")

@@ -623,7 +623,7 @@
       ],
       "desc": "Leaving (page closed or LEAVE PARTY): the AI takes the player without a reassign screen; the host leaving hands the room on and the others play on.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/ls_leave_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ls.lag",
