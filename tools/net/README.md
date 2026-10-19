@@ -10,7 +10,7 @@ first differ, including what a friend's own recorder wrote against the host fram
 runs a host and a friend in host-authoritative mode over a local relay (`--net-mode ha`); `match_flow_check.sh`
 a party through two matches (join from the menus, pause from the friend, the ends).
 
-Browser party checks (headless Chrome with the real GPU, muted; system Python /opt/homebrew/bin/python3):
+Browser party checks (headless Chrome with the real GPU, muted; system Python /opt/homebrew/bin/python3.14):
 `web_route.py` drives the menus by the traced front-end screen id, `web_party.py` the players (a page each, the
 relay on a free port, the Online screens). `web_soak.py` (pt.freeze: two pages in a party match for 10 minutes,
 the host's tab hidden), `party_controllers_check.py` (pt.controllers: solo = the real devices, friends add and

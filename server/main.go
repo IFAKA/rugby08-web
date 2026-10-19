@@ -40,7 +40,6 @@ import (
 	"bufio"
 	"crypto/rand"
 	"crypto/sha1"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -700,7 +699,7 @@ func serveWS(w http.ResponseWriter, r *http.Request) {
 func main() {
 	addr := flag.String("addr", ":8090", "listen address")
 	dir := flag.String("dir", "build/web", "web build to serve")
-	password := flag.String("password", "", "require this password (HTTP basic auth, any user name)")
+	password := flag.String("password", "", "private site: only the party link https://host/k/PASSWORD lets in (gate.go); empty: public")
 	cert := flag.String("cert", "", "TLS certificate file (HTTPS; browsers allow the game's threads only on HTTPS or localhost)")
 	key := flag.String("key", "", "TLS private key file")
 	stun := flag.Int("stun", 0, "answer STUN on this UDP port (WebRTC peers behind NAT find their public address)")
@@ -720,14 +719,10 @@ func main() {
 		go serveSTUN(net.JoinHostPort("", strconv.Itoa(*stun)))
 	}
 	files := http.FileServer(http.Dir(*dir))
+	g := gate{password: *password}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if *password != "" {
-			_, p, ok := r.BasicAuth()
-			if !ok || subtle.ConstantTimeCompare([]byte(p), []byte(*password)) != 1 {
-				w.Header().Set("WWW-Authenticate", `Basic realm="Rugby 08"`)
-				http.Error(w, "password required", http.StatusUnauthorized)
-				return
-			}
+		if !g.allow(w, r) { // the private party site (gate.go)
+			return
 		}
 		if r.URL.Path == "/log" { // the players' game logs (playlog.go)
 			servePlayLog(w, r)

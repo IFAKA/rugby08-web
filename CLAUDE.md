@@ -20,6 +20,7 @@ Objective: run the full Rugby 08 (PE32 x86, MSVC 7.1, D3D8/DInput/DSound) in a b
 ## Hard constraints
 - Never commit EA content or derived binaries: `Game Files/`, `*.exe`, `gen/`, `build/`, `analysis/`, `ghidra/` are gitignored. Keep it that way.
 - Never publish or upload anything (no deploys, no pushes to remotes, no pastebins). Local only.
+- Exception (the user, 2026-10-19): the private party site (docs/ONLINE.md) may serve the program (build/site: no Game Files chunk) behind the party link's password; each player brings their own Rugby 08. Going live still needs the user's go; public only after a clean-room replacement of the EA parts.
 - Reuse before writing: pcrecomp (lifter/runtime), xboxrecomp and burnout3 (ICALL dispatch, D3D8 semantics), d3d8to9, MojoShader, SDL2 and ffmpeg (VP6). All are in `third_party/` (the renderer, grown from d3d9-webgl, is ours: `render/webgl/`). Read their docs before reimplementing anything.
 - Verification referee: behavior checks (trace logs, frame hashes, screenshots), never "it looks right".
 

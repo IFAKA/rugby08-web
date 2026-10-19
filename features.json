@@ -390,7 +390,7 @@
         "net.web_lockstep"
       ],
       "desc": "Live input in real browser pages: the host's (controller 1's) real mouse clicks and keys are the game's own keyboard and mouse and reach the game on both pages at the same frame (original controls, Esc pause); a friend's keyboard is its controller; state hashes stay equal.",
-      "check": "timeout 600 /opt/homebrew/bin/python3 tools/net/net_live_input.py   # system Python: Playwright is not in .venv",
+      "check": "timeout 600 /opt/homebrew/bin/python3.14 tools/net/net_live_input.py   # system Python: Playwright is not in .venv",
       "passes": true
     },
     {
@@ -419,7 +419,7 @@
         "pt.freeze"
       ],
       "desc": "Drop-in in real browser pages, as players use it: the game boots straight in, the host's code comes from its Online panel, a friend opens their own game and types the code into the Join box 20 s later, catches up, gets the \"You're in\" toast, its keys reach its controller, hashes stay equal, and the host plays on after the friend leaves.",
-      "check": "timeout 1200 /opt/homebrew/bin/python3 tools/net/net_dropin.py   # system Python: Playwright",
+      "check": "timeout 1200 /opt/homebrew/bin/python3.14 tools/net/net_dropin.py   # system Python: Playwright",
       "passes": false
     },
     {
@@ -438,7 +438,7 @@
         "lift.crt_math"
       ],
       "desc": "The CRT math self-test passes in the browser build too, where no interpreter stands behind the lift: every arm of the CRT's x87 dispatcher that the grid reaches (zero, negative, overflow, underflow, infinities, NaN, denormal) is lifted and keeps the calling convention (an unlifted exp arm unbalanced the stack and crashed the game at the first scrum).",
-      "check": "timeout 600 /opt/homebrew/bin/python3 tools/web/web_selftest.py   # system Python: Playwright",
+      "check": "timeout 600 /opt/homebrew/bin/python3.14 tools/web/web_selftest.py   # system Python: Playwright",
       "passes": true
     },
     {
@@ -492,7 +492,7 @@
         "on.match_flow"
       ],
       "desc": "The game keeps running when its tab is not visible (it stops today: requestAnimationFrame pacing, user-observed), so the host switching tabs never stops a party's match; the automated browser tests (background pages) become reliable. Pass: a background tab keeps running; two pages, menus into a match, 10 minutes, no freeze.",
-      "check": "/opt/homebrew/bin/python3 tools/net/web_soak.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/web_soak.py",
       "passes": true
     },
     {
@@ -510,7 +510,7 @@
         "pt.research"
       ],
       "desc": "Controllers follow the party: solo is the original (no virtual pads); a friend joining adds a controller Team Select shows, leaving removes it; all 4 players can take a side.",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_controllers_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_controllers_check.py",
       "passes": true
     },
     {
@@ -519,7 +519,7 @@
         "pt.controllers"
       ],
       "desc": "Party traffic over WebRTC data channels between browsers (frames unordered/unreliable, setup and flow reliable); the server only signals and relays as fallback; latency measured.",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_webrtc_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_webrtc_check.py",
       "passes": true
     },
     {
@@ -528,7 +528,7 @@
         "pt.webrtc"
       ],
       "desc": "ONLINE in the game's main menu: CREATE PARTY (code, slots, CONTINUE, badge, LEAVE), JOIN PARTY (letter grid), friends' lobby; pad, mouse, keyboard and touch; the F2 overlay is gone.",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_menu_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_menu_check.py",
       "passes": true
     },
     {
@@ -537,7 +537,7 @@
         "pt.menu"
       ],
       "desc": "Team Select on every party member's own screen, synced: only party controllers, each moves its own icon, each side's captain picks its team and kit, the host picks the AI side's and presses CONTINUE.",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_sides_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_sides_check.py",
       "passes": true
     },
     {
@@ -546,7 +546,7 @@
         "pt.sides"
       ],
       "desc": "Each player's own camera and personal settings in the match (no copy of the host's camera); the personal settings audited and listed.",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_camera_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_camera_check.py",
       "passes": true
     },
     {
@@ -555,7 +555,7 @@
         "pt.camera"
       ],
       "desc": "Start/Esc/touch pauses the match for everyone, the pauser drives the menu, personal settings there; closing the page leaves (AI takes the player), the host leaving ends the party, a mid-match joiner watches until the next Team Select.",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_pause_leave_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_pause_leave_check.py",
       "passes": true
     },
     {
@@ -564,7 +564,7 @@
         "pt.pause_leave"
       ],
       "desc": "Every web game boots in lockstep with its room open (server log from frame 0; offline = solo as before): menus and a match at >= 55 fps in the test browser, a hidden page keeps pace, equal hashes with a joiner (docs/plans/2026-10-13-lockstep-party.md).",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_boot_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_boot_check.py",
       "passes": true
     },
     {
@@ -573,7 +573,7 @@
         "ls.boot"
       ],
       "desc": "The ONLINE screens drive lockstep: CREATE PARTY shows this session's code and roster, JOIN PARTY reloads into the host's session with a catch-up screen, LEAVE PARTY back to an own game; 3 pages, identical frames and hashes.",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_party_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_party_check.py",
       "passes": true,
       "notes": "2026-10-14 (the user: leaving must not restart the game, as in online sports games): LEAVE PARTY now keeps the leaver's game, at its main menu, in a room of its own (server/fork.go, runtime/core/net_leave.c); the check now requires that, a newcomer in sync in the leaver's room, and the leaver joining the party again. passes=false until it runs again. PASS 2026-10-14 (./init.sh check ls.party): leave in place (own room, main menu), a newcomer in sync in the leaver's room (428 hashes), the leaver back in the party (714 hashes, 0 different). Joins slow down as the session grows (94 s, 328 s, 540 s): ls.fastjoin."
     },
@@ -583,7 +583,7 @@
         "ls.party"
       ],
       "desc": "Each player drives their own controller; solo shows only its own; joiners plugged / leavers unplugged at the same frame everywhere; Team Select is the game's own, 4 players take sides.",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_controls_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_controls_check.py",
       "passes": true
     },
     {
@@ -592,7 +592,7 @@
         "ls.controls"
       ],
       "desc": "A full PLAY NOW match in a party: every screen shows the same match (identical frames: overlays, cutscenes, referee), own view per player (POV), pause from anyone, a friend's presses act.",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_match_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_match_check.py",
       "passes": true,
       "notes": "2026-10-13: ok (2 pages: 390 hashes, 481 pictures equal; friend pauses/resumes both; own view only on its screen). Earlier runs saw 1-4 of ~240 pictures differ in cutscenes (game camera equal): not reproduced in this run, still watched."
     },
@@ -602,7 +602,7 @@
       "deps": [
         "ls.match"
       ],
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_camera_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_camera_check.py",
       "description": "Each player's own camera in a party (their own settings, their own view; the match reads one shared camera; friends' sticks turned into it): same match (hashes), own pictures, own controls.",
       "notes": "2026-10-13: ok (Side vs Truck: 162 hashes equal, 97/100 pictures differ, the friend's Up runs within 35 degrees of its own look)."
     },
@@ -612,7 +612,7 @@
         "ls.party"
       ],
       "desc": "Joining shows the party screen, not a black one: while catching up the joiner's game draws the party screen now and then with its own row filling up (buttons covered: catching up); every game writes (YOU) on its own row (rows as long in every game, so the game's string heap stays alike); hashes equal.",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_joinview_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_joinview_check.py",
       "passes": true,
       "notes": "2026-10-14: ok (0% party view before the reload, picture then live frames while catching up, never black; 130 hashes equal)."
     },
@@ -622,7 +622,7 @@
         "ls.match"
       ],
       "desc": "Leaving (page closed or LEAVE PARTY): the AI takes the player without a reassign screen; the host leaving hands the room on and the others play on.",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_leave_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_leave_check.py",
       "passes": false
     },
     {
@@ -631,7 +631,7 @@
         "ls.leave"
       ],
       "desc": "Inputs over WebRTC with relay fallback, input delay from measured round trips, no stalls on jitter; measured.",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_lag_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_lag_check.py",
       "passes": false
     },
     {
@@ -640,7 +640,7 @@
         "ls.lag"
       ],
       "desc": "Tournaments and the other multi-player modes in a party (shared menus).",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_modes_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_modes_check.py",
       "passes": false
     },
     {
@@ -658,7 +658,7 @@
         "ls.ha_out"
       ],
       "desc": "Every game mode that allows several players works in a party, including between-match screens (one check per mode). Superseded by ls.modes (lockstep, 2026-10-13).",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_modes_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_modes_check.py",
       "passes": false
     },
     {
@@ -667,7 +667,7 @@
         "ls.ha_out"
       ],
       "desc": "The page only runs the game: it fills the window and resizes with it; the fps counter stays; nothing else on the page.",
-      "check": "/opt/homebrew/bin/python3 tools/net/page_layout_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/page_layout_check.py",
       "passes": false
     },
     {
@@ -676,7 +676,7 @@
         "pt.page"
       ],
       "desc": "Phones: menus by tap, on-screen stick and buttons in matches (Playwright touch emulation).",
-      "check": "/opt/homebrew/bin/python3 tools/net/touch_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/touch_check.py",
       "passes": false
     },
     {
@@ -685,7 +685,7 @@
         "pt.touch"
       ],
       "desc": "Host input delay matching the friends' measured delay (a host option, on by default): host and friends feel the same response.",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_fairness_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_fairness_check.py",
       "passes": false
     },
     {
@@ -694,7 +694,7 @@
         "pt.fairness"
       ],
       "desc": "A friend's own player moves at once and is corrected smoothly from the host's frames; measured against the host's path (corrections counted and sized).",
-      "check": "/opt/homebrew/bin/python3 tools/net/party_predict_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/party_predict_check.py",
       "passes": false
     },
     {
@@ -709,9 +709,11 @@
     {
       "id": "pt.deploy",
       "deps": [
-        "pt.lockstep_out"
+        "ls.lag",
+        "pt.own_files",
+        "pt.private_link"
       ],
-      "desc": "Deploy-ready on the user's own server (HTTPS: domain + certificate or an HTTPS tunnel, decided with the user); docs/ONLINE.md is the players' guide. Deploying itself needs the user's go.",
+      "desc": "Deploy-ready private party site (the user, 2026-10-19): one package (program from build/site, the Go lobby/relay server with STUN, HTTPS) that friends reach by a private link; each player brings their own Rugby 08 (pt.own_files); public with one setting (only after a clean-room replacement of the EA parts). docs/ONLINE.md is the players' guide in plain words. Going live (host, account, domain) needs the user's go.",
       "check": "tools/net/deploy_check.sh",
       "passes": false
     },
@@ -721,7 +723,7 @@
         "ls.party"
       ],
       "desc": "Share only what online sports games share: each screen draws the menus' cursor at its own player's pointer (runtime/core/ls_cursor.c); the host's mouse alone drives the shared menus; while the host is in its own menus a friend's screen stays on the party screen with the message (runtime/core/ui_party_view.c). With both pointers in one place the two games' pictures are equal (the friend's pointer changes nothing in the game).",
-      "check": "cd tools/net && /opt/homebrew/bin/python3 ls_cursor_check.py",
+      "check": "cd tools/net && /opt/homebrew/bin/python3.14 ls_cursor_check.py",
       "passes": true,
       "notes": "2026-10-14: built in d868fc8; the user's two-window test passed (cursors independent, party view, Team Select shared). The check never ran clean: its host page froze at boot after data/controltypes.csv both times while another session's 3-page check ran at once; rerun it alone. PASS 2026-10-14 (./init.sh check ls.cursor) after the friend's pointer became GPU-only (d3d8_pov.cpp cursor quad)."
     },
@@ -739,7 +741,7 @@
         "ls.match"
       ],
       "desc": "The game's own couch rules measured with several humans: who controls which player on a team with 2+ humans (passes, rucks, tackles), and which controller a set piece's decision goes to (docs/plans/2026-10-14-online-solo-feel.md).",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_rules_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_rules_check.py",
       "passes": false
     },
     {
@@ -748,7 +750,7 @@
         "ls.rules"
       ],
       "desc": "Every player plays as if alone: the camera from the player's own team's end with the player's own settings, never flipping with the ball, in any mix of up to 4 players; the copies stay identical (memory, clock, scheduling).",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_own_view_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_own_view_check.py",
       "passes": true,
       "notes": "PASS 2026-10-14 (./init.sh check ls.own_view): host 282/282 samples from its own end, friend 282/282 from the other, both teams with the ball; match and scheduling equal. Drawn only (own_end.c, d3d8_pov.cpp rt_pov_yaw); the game's camera stays shared."
     },
@@ -758,7 +760,7 @@
         "ls.rules"
       ],
       "desc": "Set-piece decisions: the controller the game gives it to sees the menu; every other screen shows the game carrying on as when the AI decides, with PLAYER N IS CHOOSING; any mix.",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_decisions_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_decisions_check.py",
       "passes": true,
       "notes": "PASS 2026-10-14 (./init.sh check ls.decisions): 6/6 quick-options menus; the deciding team is the game's (CRugbyTeam +0x10 clear). No penalty options came up in the check's matches: same field, to confirm when one does."
     },
@@ -768,7 +770,7 @@
         "ls.party"
       ],
       "desc": "Joining is fast: catch-up speed measured and raised (indirect-call lookup, ...), then a save-state join if it proves reliable; join time per minute of session recorded.",
-      "check": "/opt/homebrew/bin/python3 tools/net/ls_join_time_check.py",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/ls_join_time_check.py",
       "passes": false
     },
     {
@@ -780,6 +782,24 @@
       "desc": "Every mix of up to 4 players (1v1, 2 vs AI, 2v1, 2v2, 3v1, 4 vs AI, one watching) stays in sync through a match, native copies.",
       "check": "tools/net/ls_mixes_check.sh",
       "passes": false
+    },
+    {
+      "id": "pt.own_files",
+      "deps": [
+        "pt.webrtc"
+      ],
+      "desc": "Each player brings their own Rugby 08 on the party site (the user, 2026-10-19): the site serves the program and a manifest of the game files (chunk sha256, no content); the first visit asks once for the game folder, checks every chunk, keeps them in the browser (OPFS) and boots from them; a wrong folder or another version gets a plain message; the next visit boots without asking.",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/own_copy_check.py",
+      "passes": false
+    },
+    {
+      "id": "pt.private_link",
+      "deps": [
+        "pt.webrtc"
+      ],
+      "desc": "The site is private: without the party link (https://host/k/<password>, sets a cookie) every page is refused; the link works for anyone it is sent to (no prompt, no account); no -password makes it public. Checked by the server tests.",
+      "check": "cd server && go test -run Gate ./...",
+      "passes": true
     }
   ]
 }
