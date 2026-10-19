@@ -503,3 +503,9 @@ Next: `./init.sh next` shows what to fix.
 - Camera: filtering possession events (0xAD, 0xAE, 0x1A) does not stop the end camera following the ball. Each game now draws the shared camera straight down the pitch along its own team's way (d3d8_pov.cpp rt_pov_way), the way read off the camera while that team holds the ball. ls.own_view PASS (scheduling equal over 23642 frames).
 - Kick aim arrow: own_hud.c leaves the other team's aim out of the picture (meshes known by vertex data; acting team = ball holder, else the last event's player). ls.match PASS (pictures equal outside the per-player prompt, 225/225 hashes). Penalty options fall back to the acting team.
 - Master got the general fixes without the online mode (b858e74, the user's request). Next: the 2D prompts (play calls, FEED/BIND, ruck wheel), lag on two machines.
+
+## 2026-10-19 — online with friends: private party site, each player's own Rugby 08 (the user's decision)
+- The user (following cranebeaker/coop-anything's AGENTS.md, triage = finish our own online-ha): friends are non-technical and must host each other without the user's Mac; private site now, public only after a clean-room replacement of EA parts; no hub PR. CLAUDE.md exception recorded.
+- pt.private_link PASS (server/gate.go: /k/PASSWORD sets the party cookie). pt.own_files PASS (own_copy.js + site_manifest.py: folder picked once, chunks checked against sha256 and kept in OPFS; the site serves no game file).
+- Learned: Homebrew python3 is now 3.15 without Playwright: checks run on python3.14. ls.leave: leaving works (233 hashes equal); the newcomer was told but its replay (1.5x real time with 3 headless games on one Mac) did not catch up in the check's fixed 10 min: check now waits while it gains.
+- Next: ls.leave rerun, ls.lag (two machines), pt.deploy (package + host: needs the user's go).
