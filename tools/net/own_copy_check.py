@@ -23,7 +23,8 @@ from web_route import browser
 
 D = os.path.join(ROOT, "logs", "own_copy")
 GAME = os.path.join(ROOT, "Game Files")
-SITE = os.path.join(ROOT, "build", "site")
+SITE = os.path.join(ROOT, os.environ.get("OWN_SITE", "build/site"))  # deploy_check: the package's
+PASSWORD = os.environ.get("OWN_PASSWORD", "")  # the site is private: players come in by the party link
 
 
 class SitePlayer(Player):
@@ -34,6 +35,11 @@ class SitePlayer(Player):
         self.page = ctx.new_page()
         self.page.on("console", lambda m: self.lines.append(m.text))
         self.url = f"http://127.0.0.1:{port}/index.html?log&env={ENV}"
+        if PASSWORD:  # the party link: refused without it, then its cookie lets every request in
+            self.page.goto(f"http://127.0.0.1:{port}/index.html")
+            if "private" not in self.page.inner_text("body"):
+                raise RuntimeError("the private site let a page in without the party link")
+            self.page.goto(f"http://127.0.0.1:{port}/k/{PASSWORD}")
         self.page.goto(self.url)
 
     def pick(self, folder):
@@ -56,7 +62,7 @@ def server():
     s.close()
     exe = os.path.join(ROOT, "build", "rugby08-server")
     srv = subprocess.Popen(
-        [exe, "-addr", f"127.0.0.1:{port}", "-dir", SITE, "-logdir", D],
+        [exe, "-addr", f"127.0.0.1:{port}", "-dir", SITE, "-logdir", D, "-password", PASSWORD],
         stdout=open(os.path.join(D, "server.log"), "w"),
         stderr=subprocess.STDOUT,
     )
