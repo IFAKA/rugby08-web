@@ -790,7 +790,7 @@
       ],
       "desc": "Each player brings their own Rugby 08 on the party site (the user, 2026-10-19): the site serves the program and a manifest of the game files (chunk sha256, no content); the first visit asks once for the game folder, checks every chunk, keeps them in the browser (OPFS) and boots from them; a wrong folder or another version gets a plain message; the next visit boots without asking.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/own_copy_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.private_link",

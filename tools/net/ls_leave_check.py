@@ -16,6 +16,7 @@ One line; details in logs/ls_leave/."""
 import os
 import re
 import sys
+import time
 
 from playwright.sync_api import sync_playwright
 from web_party import ROOT, Player, relay, to_menus, wait_screen
@@ -28,6 +29,7 @@ from ls_party_check import create, in_sync, join, to_join, type_code  # noqa: E4
 
 D = os.path.join(ROOT, "logs", "ls_leave")
 REASSIGN = (0x25E, 0x98, 0x99)
+MATCH_MSG = "the party is in a match"  # ui_badge.c: on the party screen's picture or a black one
 QUIT_AT = "RT_MS_QUIT_AT=240"  # every game (the same match time: in step) leaves the match then
 
 
@@ -115,14 +117,24 @@ def run(br, port, out):
         type_code(newcomer, code)
         n = len(newcomer.lines)
         newcomer.key("Enter", 1000)
-        for _ in range(400):  # the friend plays on (its set pieces wait for it) while the newcomer joins
+        # The friend plays on (its set pieces wait for it) while the newcomer joins. Joining replays the
+        # whole session (ls.fastjoin is about its speed), so wait while the newcomer gains on the friend:
+        # its frame gap must shrink every minute, for 45 minutes at most.
+        gap, since, end = None, time.time(), time.time() + 45 * 60
+        while time.time() < end:
             if any("caught up at frame" in x for x in newcomer.lines[n:]):
                 break
+            if time.time() - since > 60:
+                g = f2.last(r"^frame (\d+)") - newcomer.last(r"^frame (\d+)")
+                if gap is not None and g >= gap:
+                    out.append(f"newcomer: catch-up stopped gaining (frame gap {gap:.0f} -> {g:.0f})")
+                    break
+                gap, since = g, time.time()
             if [x for x in f2.lines if "ms: game state" in x][-1].split()[3] == BACKEND.split()[-1]:
                 play([f2], 1.5)
             else:
                 f2.page.wait_for_timeout(1500)
-        told = any("ms: joining: the party is in a match" in x for x in newcomer.lines[n:])
+        told = any(MATCH_MSG in x.lower() for x in newcomer.lines[n:])
         joined = any("caught up at frame" in x for x in newcomer.lines[n:])
         out.append(f"newcomer during the match: told it joins after the match {told}, joined after it {joined}")
         if not told or not joined:

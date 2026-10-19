@@ -36,18 +36,31 @@ cd server && go run . -addr :8090 -dir ../build/web
 Open http://localhost:8090 in two windows: ONLINE > CREATE PARTY in one, ONLINE > JOIN PARTY and the
 code in the other. Every game's log goes to `logs/play/` (one file per page load) for reading back.
 
-## Run it for your friends (your own server)
-Browsers only run this game over **HTTPS** (or on localhost), so the server needs a certificate for
-your domain (Let's Encrypt, or one you have):
+## The party site (for your friends: private, each player brings their own game)
+Decided with the user (2026-10-19): one website that any friend opens from the party link, so anyone
+can start a party, with nobody's computer needing to stay on. The site serves the program, never the
+game's art, sound or video: each player picks their own Rugby 08 folder once (platform/web/js/own_copy.js;
+every 8 MiB piece is checked against the site's manifest, then kept in that browser).
 ```sh
+./init.sh build-web && .venv/bin/python tools/web/site_manifest.py build/web build/site
 go build -o rugby08-server ./server
-./rugby08-server -addr :443 -dir build/web -password "something-only-your-friends-know" \
+./rugby08-server -addr :443 -dir build/site -stun 3478 -password "a-long-party-password" \
   -cert /etc/letsencrypt/live/YOUR.DOMAIN/fullchain.pem -key /etc/letsencrypt/live/YOUR.DOMAIN/privkey.pem
 ```
-Upload `build/web/` (including `build/web/data/`, the packaged game files) next to the server binary.
-Friends open your address and type the password once. Nothing else is contacted.
+The party link is `https://YOUR.DOMAIN/k/a-long-party-password`: send it to your friends. Without
+it the site only says it is private (server/gate.go). Without `-password` the site is public (meant only
+for after the EA parts are replaced by a clean-room version). Browsers run the game only over **HTTPS**.
+
+## For players (what to tell your friends)
+1. You need a computer with Chrome or Edge, your own Rugby 08 installed (the same version as everyone's),
+   and about 2 GB of free disk space.
+2. Open the party link a friend sent you.
+3. The first time only: press **Choose my Rugby 08 folder** and pick the folder you installed the game
+   in (the one with the Audio and Data folders). The page checks the files and keeps them in your
+   browser; nothing is uploaded. Next time the game starts straight away.
+4. In the game: **ONLINE** > **CREATE PARTY** and tell your friends the code, or **ONLINE** >
+   **JOIN PARTY** and type a friend's code.
 
 ## Limits
 - Joining takes longer the longer the party's session has run (the game replays it at ~4x speed).
-- The camera is the game's, shared (in lockstep it is part of the game; a personal view is to come).
 - Browsers only (the Mac app talks plain ws:// and is a test tool).

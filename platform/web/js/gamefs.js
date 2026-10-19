@@ -3,7 +3,8 @@
 // runtime reads them with plain POSIX calls, which are synchronous and run on the main thread, where
 // fetch/XHR cannot block. So a dedicated worker does the fetching into a SharedArrayBuffer chunk cache
 // and a reader waits (spins, on the main thread) until its chunk is resident. Local only: the chunks
-// are served by tools/web/serve.py from build/web/data, nothing leaves the machine.
+// are served by tools/web/serve.py from build/web/data; on the party site, where the manifest says "own",
+// they come from the player's own copy kept in the browser (own_copy.js).
 (function () {
   const NSLOT = 32; // resident chunks (NSLOT * chunk_size of shared memory)
   const RING = 64; // pending fetch requests
@@ -94,6 +95,7 @@
       const ctl = new Int32Array(m.ctl);
       const data = new Uint8Array(m.data);
       let done = 0;
+      let own = null;
       (async function () {
         for (;;) {
           while (Atomics.load(ctl, 1) === done) Atomics.wait(ctl, 1, done);
@@ -102,9 +104,17 @@
           done++;
           let ok = 0;
           try {
-            const r = await fetch(m.base + m.names[chunk]);
-            if (r.ok) {
-              data.set(new Uint8Array(await r.arrayBuffer()), slot * m.chunkBytes);
+            let buf = null;
+            if (m.own) {
+              // the player's own copy (own_copy.js), kept in the browser's private storage
+              own = own || (await (await navigator.storage.getDirectory()).getDirectoryHandle(m.own));
+              buf = await (await (await own.getFileHandle(m.names[chunk])).getFile()).arrayBuffer();
+            } else {
+              const r = await fetch(m.base + m.names[chunk]);
+              if (r.ok) buf = await r.arrayBuffer();
+            }
+            if (buf) {
+              data.set(new Uint8Array(buf), slot * m.chunkBytes);
               ok = 1;
             }
           } catch {
@@ -116,7 +126,7 @@
     };
   }
 
-  function startWorker() {
+  function startWorker(own) {
     ctl = new Int32Array(new SharedArrayBuffer((S0 + NSLOT * 3 + 16) * 4));
     const dataSab = new SharedArrayBuffer(NSLOT * chunkBytes);
     data = new Uint8Array(dataSab);
@@ -131,6 +141,7 @@
       S0: S0,
       RING: RING,
       base: new URL('data/', location.href).href,
+      own: own ? Module.ownCopy.DIR : '',
     });
   }
 
@@ -201,9 +212,11 @@
           });
           return c0;
         });
-        startWorker();
-        man.files.forEach((f, fi) => mountFile(f, first[fi]));
-        removeRunDependency('gamefs');
+        return (man.own ? Module.ownCopy.prepare(man) : Promise.resolve()).then(function () {
+          startWorker(man.own);
+          man.files.forEach((f, fi) => mountFile(f, first[fi]));
+          removeRunDependency('gamefs');
+        });
       });
   });
 })();
