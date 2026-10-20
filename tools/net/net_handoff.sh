@@ -4,7 +4,7 @@
 # Pass: player 3 joins and catches up, and players 2 and 3 agree on every state hash they share.
 # One summary line; logs/net_handoff_{server,out1,out2,out3}.log.
 cd "$(dirname "$0")/../.." || exit 1
-PORT=8096 ROOM=H$$ TMO=400
+PORT=${PORT:-$(python3 tools/check/free_port.py)} ROOM=H$$ TMO=400
 (cd server && go build -o ../build/rugby08-server .) || {
   echo "net_handoff: FAIL (server build)"
   exit 1

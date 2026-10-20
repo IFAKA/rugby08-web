@@ -4,7 +4,7 @@
 # Optional --native: the second player is the native build instead (cross-play: wasm vs native).
 #   tools/net/net_web_test.sh [--hashes N] [--timeout S] [--native]
 cd "$(dirname "$0")/../.." || exit 1
-N=5 TMO=600 PORT=18092 NATIVE=0
+N=5 TMO=600 PORT=${PORT:-$(python3 tools/check/free_port.py)} NATIVE=0
 while [ $# -gt 0 ]; do
   case "$1" in --hashes)
     N=$2

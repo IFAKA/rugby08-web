@@ -9,6 +9,7 @@ One summary line; console logs in logs/net_live{1,2}.log."""
 
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -16,7 +17,9 @@ import time
 from playwright.sync_api import sync_playwright
 
 os.chdir(os.path.join(os.path.dirname(__file__), "..", ".."))
-port = 18093
+with socket.socket() as _s:  # a free port: checks may run side by side
+    _s.bind(("127.0.0.1", 0))
+    port = _s.getsockname()[1]
 subprocess.run(["go", "build", "-o", "../build/rugby08-server", "."], cwd="server", check=True)
 srv = subprocess.Popen(
     ["build/rugby08-server", "-addr", f"127.0.0.1:{port}", "-dir", "build/web"],

@@ -8,14 +8,22 @@ logs in logs/net_dropin{1,2}.log."""
 
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
 
+
+def free_port():  # checks may run side by side
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 from playwright.sync_api import sync_playwright
 
 os.chdir(os.path.join(os.path.dirname(__file__), "..", ".."))
-port, join_after = 18094, float(os.environ.get("JOIN_AFTER", "20"))
+port, join_after = free_port(), float(os.environ.get("JOIN_AFTER", "20"))
 subprocess.run(["go", "build", "-o", "../build/rugby08-server", "."], cwd="server", check=True)
 srv = subprocess.Popen(
     ["build/rugby08-server", "-addr", f"127.0.0.1:{port}", "-dir", "build/web"],

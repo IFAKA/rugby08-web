@@ -5,7 +5,7 @@
 #   tools/net/net_test.sh [--frames N] [--p1 FILE] [--p2 FILE] [--delay D] [--timeout S]
 # Logs: logs/net_server.log, logs/net_p{1,2}.log (game), logs/net_out{1,2}.log (trace).
 cd "$(dirname "$0")/../.." || exit 1
-FRAMES=3000 P1=tests/replays/net_p1.txt P2=tests/replays/net_p2.txt DELAY=4 TMO=900 PORT=${PORT:-8091}
+FRAMES=3000 P1=tests/replays/net_p1.txt P2=tests/replays/net_p2.txt DELAY=4 TMO=900 PORT=${PORT:-$(python3 tools/check/free_port.py)}
 while [ $# -gt 0 ]; do
   case "$1" in
     --frames)
