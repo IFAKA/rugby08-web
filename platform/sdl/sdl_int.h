@@ -30,6 +30,14 @@ extern int g_activate_pending;           /* plat_window_show in an automated run
 void skip_frame_done(int drawn, double cost_ms, double period_ms);
 int skip_next(void);
 void skip_reset(void);
+int skip_active(void);                   /* some steps go undrawn (fps.interp stays off) */
+/* sdl_interp.c: frames between steps on displays faster than 60 Hz (fps.interp) */
+void interp_fill(double shown, double next, double slot, double (*clock)(void), int (*wait)(double due),
+                 void (*swap)(void));
+int interp_frames_take(void);
+enum { COST_PROGRAM, COST_TEXTURE, COST_BUFFER, COST_DRAW, COST_N };   /* render/webgl/cost.cpp */
+void d3d9w_cost_take(double *ms, int *n);
+double plat_display_hz(void);            /* the display's refresh rate (native/frame.c, web/platform.c) */
 int automated_run(void);                 /* --frames N or a --replay: hidden window, the replay is the input */
 int virtual_cursor(void);                /* automated run or deterministic mode: never touch/read the real cursor */
 uint32_t live_mouse(void);               /* the real mouse buttons (SDL mask), 0 under a virtual cursor */

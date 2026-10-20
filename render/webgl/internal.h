@@ -11,6 +11,8 @@
 #include <map>
 #include <vector>
 #include <string>
+#include <array>
+#include <functional>
 #include <cstring>
 #include <algorithm>
 #include <unordered_set>
@@ -185,3 +187,24 @@ static inline void gl_set_matrix_uniform(GLint location, const D3DMATRIX *matrix
     if (location == -1 || !matrix) return;
     glUniformMatrix4fv(location, 1, GL_FALSE, (const float *)matrix);
 }
+
+// interp.cpp (fps.interp): device calls recorded per game step, replayed between steps
+class D3D9Device;
+bool interp_rec(uint64_t slot, const void *obj, std::function<void(D3D9Device *)> f);
+void interp_transform(D3DTRANSFORMSTATETYPE s, const D3DMATRIX &m);
+void interp_present();
+void interp_forget(const void *obj) noexcept;
+void interp_upload(const void *obj, GLuint buf = 0, UINT len = 0, GLenum target = 0, const uint8_t *old = nullptr);
+size_t prim_vertices(D3DPRIMITIVETYPE t, UINT prims);
+
+// cost.cpp: the renderer's time per kind of work this frame (d3d9w_cost_take)
+enum { COST_PROGRAM, COST_TEXTURE, COST_BUFFER, COST_DRAW, COST_N };
+extern double g_cost_ms[COST_N];
+extern int g_cost_n[COST_N];
+double cost_clock();
+struct CostScope {   // the time until the end of the scope, counted as one call of kind k
+    int k;
+    double t0;
+    explicit CostScope(int kind) : k(kind), t0(cost_clock()) {}
+    ~CostScope() { g_cost_ms[k] += cost_clock() - t0, g_cost_n[k]++; }
+};

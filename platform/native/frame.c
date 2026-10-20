@@ -1,6 +1,7 @@
 /* platform/native/frame.c -- the swap, frame pacing (RT_FPS) and the once-a-second perf line. The web
  * build presents through the browser instead (platform/web/platform.c). */
 #include "../sdl/sdl_int.h"
+#include <OpenGL/gl3.h>   /* glFinish */
 
 /* Present at most 60 frames per second (RT_FPS=N, 0 = uncapped), as on the 60 Hz displays the game
    was made for. Vsync alone runs it at the host's refresh rate (120 Hz on ProMotion Macs), and the
@@ -10,6 +11,25 @@ static double g_wait_ticks;   /* time spent sleeping in frame_pace (not game wor
 static double g_period = -1, g_next;   /* a frame's length and the next frame's slot (ticks) */
 static double g_end;                   /* when the last frame's wait ended: its work since (ticks) */
 static int g_skipped;                  /* frames not drawn this second */
+
+static double clock_ms(void) {
+    return (double)SDL_GetPerformanceCounter() * 1000.0 / (double)SDL_GetPerformanceFrequency();
+}
+static int wait_ms(double due) {
+    double ms = due - clock_ms();
+    if (ms > 1) SDL_Delay((uint32_t)ms - 1);
+    while (clock_ms() < due) {}
+    return 1;
+}
+static void swap_raw(void) {   /* a refresh between steps: shown, and its GPU work done (what it costs) */
+    if (g_win && g_gl) SDL_GL_SwapWindow(g_win), glFinish();
+}
+double plat_display_hz(void) {
+    SDL_DisplayMode m;
+    return g_win && SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(g_win), &m) == 0 && m.refresh_rate > 0
+               ? m.refresh_rate
+               : 60;
+}
 
 static void frame_pace(int drawn) {
     if (g_period < 0) {
@@ -30,6 +50,10 @@ static void frame_pace(int drawn) {
     }
     if (g_next == 0 || now - g_next > 4 * g_period) g_next = now;   /* first frame, or fell far behind: resync */
     g_next += dp < 0 ? g_period : dp * (double)SDL_GetPerformanceFrequency() / 1000.0;
+    if (drawn)
+        interp_fill(now * 1000.0 / f, g_next * 1000.0 / f, (dp < 0 ? g_period * 1000.0 / f : dp), clock_ms, wait_ms,
+                    swap_raw);   /* (fps.interp: refreshes between the steps) */
+    now = (double)SDL_GetPerformanceCounter();
     double wait = g_next - now;
     if (wait > 0) {
         uint32_t ms = (uint32_t)(wait * 1000.0 / (double)SDL_GetPerformanceFrequency());
@@ -58,6 +82,18 @@ static void test_draw_cost(void) {
     while (cost > 0 && (double)SDL_GetPerformanceCounter() < end) {}
 }
 
+/* A frame over 20 ms: where the renderer's part of it went (stutter hunting; render/webgl/cost.cpp).
+   The rest is the game, the D3D8 layer (shader translation included) and the pacer's wait. */
+static void slow_frame(double ms_frame, double ms_swap) {
+    double ms[COST_N];
+    int n[COST_N];
+    d3d9w_cost_take(ms, n);
+    rt_trace("perf: slow frame %.1f ms: programs %.1f ms (%d), textures %.1f (%d), buffers %.1f (%d), draws %.1f "
+             "(%d), swap %.1f",
+             ms_frame, ms[COST_PROGRAM], n[COST_PROGRAM], ms[COST_TEXTURE], n[COST_TEXTURE], ms[COST_BUFFER],
+             n[COST_BUFFER], ms[COST_DRAW], n[COST_DRAW], ms_swap);
+}
+
 /* One "perf:" trace line per second: frames, average and worst frame time, the share of the frame
    spent in the swap itself and in the pacer's wait (the rest is the game and our translation). */
 static void frame_stats(double swap_ticks) {
@@ -67,18 +103,22 @@ static void frame_stats(double swap_ticks) {
     if (last) {
         double dt = now - last;
         if (dt > worst) worst = dt;
-        if (dt > f / 60 * 1.25) over++;
+        if (dt > f / 60 * 1.25) over++, slow_frame(dt * 1000 / f, swap_ticks * 1000 / f);
         n++;
     }
+    double ms[COST_N];
+    int cn[COST_N];
+    d3d9w_cost_take(ms, cn);   /* (this frame's renderer work starts now) */
     last = now;
     swap_sum += swap_ticks;
     if (!t0) t0 = now;
     if (now - t0 >= f && n) {
         double span = now - t0;
         rt_trace("perf: %d fps, %.1f steps/s (%d not drawn), avg %.1f ms, worst %.1f ms, %d frames >20 ms, swap %.1f "
-                 "ms, paced-wait %.1f ms",
+                 "ms, paced-wait %.1f ms, %d frames between steps",
                  (int)(n * f / span + 0.5), (n + g_skipped) * f / span, g_skipped, span * 1000 / f / n,
-                 worst * 1000 / f, (int)over, swap_sum * 1000 / f / n, g_wait_ticks * 1000 / f / n);
+                 worst * 1000 / f, (int)over, swap_sum * 1000 / f / n, g_wait_ticks * 1000 / f / n,
+                 interp_frames_take());
 #ifdef __APPLE__
         /* Three slow seconds in a row: `sample` this process (5 s of stacks) into logs/, at most 3 times a
            run, so a slow scene explains itself without anyone attaching a profiler. */

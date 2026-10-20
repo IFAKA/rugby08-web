@@ -118,10 +118,16 @@ HRESULT D3D9Device::EndScene() { return D3D_OK; }
 
 HRESULT D3D9Device::Present(const void *pSourceRect, const void *pDestRect, HWND hDestWindowOverride,
                             const void *pDirtyRegion) {
+    interp_present();
     return D3D_OK;
 }
 
 HRESULT D3D9Device::Clear(DWORD Count, const void *pRects, DWORD Flags, D3DCOLOR Color, FLOAT Z, DWORD Stencil) {
+    if (rec_draw(
+            20, Flags, Color,
+            [=, r = std::vector<uint8_t>((const uint8_t *)pRects, (const uint8_t *)pRects + (pRects ? Count * 16 : 0))](
+                D3D9Device *d) { d->Clear(Count, pRects ? r.data() : nullptr, Flags, Color, Z, Stencil); }))
+        return D3D_OK;
     float r = ((Color >> 16) & 0xFF) / 255.0f;
     float g = ((Color >> 8) & 0xFF) / 255.0f;
     float b = (Color & 0xFF) / 255.0f;
@@ -162,6 +168,7 @@ HRESULT D3D9Device::Clear(DWORD Count, const void *pRects, DWORD Flags, D3DCOLOR
 }
 
 HRESULT D3D9Device::Reset(D3DPRESENT_PARAMETERS *pPresentationParameters) {
+    d3d9w_interp_mode(0);
     // The app asks for a new back buffer size (a resolution change): follow it, as CreateDevice does.
     if (!pPresentationParameters) return D3DERR_INVALIDCALL;
     int w = (int)pPresentationParameters->BackBufferWidth, h = (int)pPresentationParameters->BackBufferHeight;

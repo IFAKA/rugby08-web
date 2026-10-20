@@ -36,4 +36,6 @@ void skip_frame_done(int drawn, double cost_ms, double period_ms) {
 /* The next frame is undrawn: it is not the one in N that is drawn. */
 int skip_next(void) { return g_every > 1 && g_phase + 1 < g_every; }
 
+int skip_active(void) { return g_every > 1; }
+
 void skip_reset(void) { g_every = 1, g_phase = 0, g_drawn = g_undrawn = -1; }

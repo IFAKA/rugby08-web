@@ -139,12 +139,13 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     const uint8_t *img;
     int changed;
     bool drawn = (!rt_ff || s->ff_drawn) && !s->late;   // catching up: the frames the joining screen shows
-    if (drawn) dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
+    if (drawn) dev9(o)->Present(nullptr, nullptr, nullptr, nullptr), d3d8_interp_present();   // (fps.interp)
     if (!rt_ff && drawn) d3d8_debug_pixels(s->frame + 1, (int)o->w, (int)o->h);   // (RT_PIX: before the overlays)
     fe_party_present(s->frame);   // the party's screens (game state: also while catching up, lockstep)
     // the party's overlays (runtime/core/ui_badge.c), before screenshots see the frame
-    if (!rt_ff && drawn && ui_present(s->frame, (int)o->w, (int)o->h, &img, &changed))
-        d3d9w_overlay_draw(img, (int)o->w, (int)o->h, changed);
+    if (!rt_ff && drawn)
+        d3d8_overlay_draw(ui_present(s->frame, (int)o->w, (int)o->h, &img, &changed) ? img : nullptr, (int)o->w,
+                          (int)o->h, changed);
     s->frame++;
     plat_replay_tick(s->frame);
     net_ha_present(s->frame);   // host-authoritative online play: friends' pads in, this player's out
@@ -162,7 +163,7 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
             plat_gl_swap(), d3d9w_overlay_undo();
         } else plat_frame_yield();
     }   // the party screen, while catching up: the next frame shown is drawn (over it: the joining screen)
-    s->late = !rt_ff && plat_frame_late() && !d3d8_debug_reads_frames();
+    s->late = d3d8_interp_next(!rt_ff && plat_frame_late() && !d3d8_debug_reads_frames());   // (and fps.interp)
     s->ff_drawn = rt_ff && (s->frame + 1) % 16 == 0 && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY;
     return D3D_OK_;
 }
@@ -296,5 +297,4 @@ HLE_D3D(IDirect3DDevice8,
     s->ib = 0;
     return D3D_OK_;
 }
-
 } // extern "C"

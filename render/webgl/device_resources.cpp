@@ -24,6 +24,7 @@ HRESULT D3D9Device::CreateTexture(UINT Width, UINT Height, UINT Levels, DWORD Us
 }
 
 HRESULT D3D9Device::SetTexture(DWORD Stage, IDirect3DTexture9 *pTexture) {
+    interp_rec(12ull << 32 | Stage, pTexture, [=](D3D9Device *d) { d->SetTexture(Stage, pTexture); });
     if (Stage >= 8) return D3D_OK;
 
     GLuint texture_id = 0;
@@ -54,6 +55,7 @@ HRESULT D3D9Device::CreateVertexBuffer(UINT Length, DWORD Usage, DWORD FVF, D3DP
 }
 
 HRESULT D3D9Device::SetIndices(IDirect3DIndexBuffer9 *pIndexData) {
+    interp_rec(13ull << 32, pIndexData, [=](D3D9Device *d) { d->SetIndices(pIndexData); });
     if (pIndexData) {
         D3D9IndexBuffer *ib = static_cast<D3D9IndexBuffer *>(pIndexData);
         m_current_index_buffer = ib->GetGLBuffer();
@@ -67,6 +69,8 @@ HRESULT D3D9Device::SetIndices(IDirect3DIndexBuffer9 *pIndexData) {
 
 HRESULT D3D9Device::SetStreamSource(UINT StreamNumber, IDirect3DVertexBuffer9 *pStreamData, UINT OffsetInBytes,
                                     UINT Stride) {
+    interp_rec(14ull << 32 | StreamNumber, pStreamData,
+               [=](D3D9Device *d) { d->SetStreamSource(StreamNumber, pStreamData, OffsetInBytes, Stride); });
     if (StreamNumber < 16) {          // every stream for programmable shaders (progvs_attribs)
         g_stream_vb[StreamNumber] = pStreamData ? static_cast<D3D9VertexBuffer *>(pStreamData)->GetGLBuffer() : 0;
         g_stream_stride[StreamNumber] = (GLsizei)Stride;
@@ -85,6 +89,7 @@ HRESULT D3D9Device::SetStreamSource(UINT StreamNumber, IDirect3DVertexBuffer9 *p
 }
 
 HRESULT D3D9Device::SetFVF(DWORD FVF) {
+    interp_rec(15ull << 32, nullptr, [=](D3D9Device *d) { d->SetFVF(FVF); });
     g_current_fvf = FVF;
     return D3D_OK;
 }

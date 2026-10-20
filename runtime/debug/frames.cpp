@@ -122,12 +122,12 @@ void d3d8_debug_pixels(uint32_t frame, int w, int h) {
     rt_trace("pix: dump %u %d %d %s", frame, dw, dh, hex.c_str());
 }
 
-/* A test that reads the picture gets every frame drawn (fps.skip leaves late ones undrawn), unless it
-   emulates a slow GPU to test exactly that (RT_TEST_DRAW_MS, fps_skip_check.sh). */
+/* A test that reads the picture gets every frame drawn (fps.skip leaves late ones undrawn, fps.interp draws them one step late), unless it
+   emulates a slow GPU or a fast display to test exactly that (RT_TEST_DRAW_MS, RT_TEST_HZ). */
 bool d3d8_debug_reads_frames(void) {
     static int reads = -1;
     if (reads < 0)
-        reads = !getenv("RT_TEST_DRAW_MS") &&
+        reads = !getenv("RT_TEST_DRAW_MS") && !getenv("RT_TEST_HZ") &&
                 (rt_screenshot_path[0] || rt_replay_path[0] || getenv("RT_PIX") || getenv("RT_TRACE_DRAWS_FRAME"));
     return reads;
 }
@@ -196,4 +196,16 @@ void d3d8_debug_light(uint32_t index, const D3DLIGHT9 *lp, uint32_t caller, uint
         }
         rt_log("  lighting object list=0x%08X cur=0x%08X idx=%u obj=0x%08X:%s", list, cur, idx, obj, buf);
     }
+}
+
+/* RT_TRACE_INTERP=1 (fps_interp_check.sh): every frame fps.interp shows, its t between two steps and the
+   camera it was drawn from, and once a second the steps that rewrote a buffer their own draws read. */
+void d3d8_debug_interp(float t) {
+    static int on = -1;
+    if (on < 0) on = getenv("RT_TRACE_INTERP") != nullptr;
+    float e[3];
+    if (on && d3d9w_interp_eye(e)) printf("interp eye %.3f %.2f %.2f %.2f\n", t, e[0], e[1], e[2]);
+    static int n;
+    int copies, rewrites = on && t == 0 ? d3d9w_interp_rewrites(&copies) : 0;
+    if (on && t == 0 && ++n % 60 == 0) printf("interp rewrites %d copies %d\n", rewrites, copies);
 }

@@ -14,6 +14,7 @@ HRESULT D3D9Device::GetRenderTarget(DWORD Index, IDirect3DSurface9 **ppRenderTar
 }
 
 HRESULT D3D9Device::SetRenderTarget(DWORD Index, IDirect3DSurface9 *pRenderTarget) {
+    interp_rec(10ull << 32 | Index, pRenderTarget, [=](D3D9Device *d) { d->SetRenderTarget(Index, pRenderTarget); });
     if (Index != 0 || !pRenderTarget) return D3DERR_INVALIDCALL;
 
     D3D9Surface *surf = static_cast<D3D9Surface *>(pRenderTarget);
@@ -44,6 +45,7 @@ HRESULT D3D9Device::SetRenderTarget(DWORD Index, IDirect3DSurface9 *pRenderTarge
 }
 
 HRESULT D3D9Device::SetDepthStencilSurface(IDirect3DSurface9 *pZStencilSurface) {
+    interp_rec(11ull << 32, pZStencilSurface, [=](D3D9Device *d) { d->SetDepthStencilSurface(pZStencilSurface); });
     // If backbuffer is active, we assume default DS. If FBO is active, we attach DS.
     m_current_ds = static_cast<D3D9Surface *>(pZStencilSurface);
 
@@ -75,6 +77,7 @@ HRESULT D3D9Device::CreateDepthStencilSurface(UINT Width, UINT Height, D3DFORMAT
 }
 
 HRESULT D3D9Device::SetViewport(const D3DVIEWPORT9 *pViewport) {
+    interp_rec(9ull << 32, nullptr, [v = *pViewport](D3D9Device *d) { d->SetViewport(&v); });
     if (!pViewport) return D3DERR_INVALIDCALL;
     g_viewport = *pViewport;
 

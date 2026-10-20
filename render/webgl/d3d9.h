@@ -644,10 +644,17 @@ extern "C" D3D9WProgPS *d3d9w_progps_create(const char *glsl, const unsigned cha
 extern "C" void d3d9w_progps_use(D3D9WProgPS *p, const float (*consts)[4]);
 // Print every draw's state while on (rugby08: RT_TRACE_DRAWS_FRAME=N traces frame N).
 extern "C" void d3d9w_trace_draws(int on);
+extern "C" void d3d9w_interp_mode(int on);    // fps.interp: record each step; frames come from d3d9w_interp_draw
+extern "C" int d3d9w_interp_draw(float t);    // the last step, blended from the one before by t (0..1)
+extern "C" int d3d9w_interp_rewrites(int *copies);
+extern "C" void d3d9w_interp_flush(void);   // before a GPU readback: the recorded calls run
+extern "C" int d3d9w_interp_eye(
+    float *
+        e); // the camera position of the last replay (checks)   // steps that rewrote a buffer their own earlier draws read
 // GL texture name of a texture (0 if none): lets the D3D8 bridge read a render-target texture back.
 extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t);
 // overlay.cpp: an RGBA image (w x h, the back buffer's size) over the finished frame; changed: re-upload
 extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int changed);
-extern "C" void d3d9w_overlay_undo(void);   // after the swap: the game's frame back under the overlay
+extern "C" void d3d9w_overlay_undo(void); // after the swap: the game's frame back under the overlay
 // overlay.cpp: the finished frame before the overlay, RGBA top row first (w x h); 1 if read
 extern "C" int d3d9w_frame_read(unsigned char *rgba, int w, int h);

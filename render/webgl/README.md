@@ -13,3 +13,7 @@ its only client. Public API: `d3d9.h` (types + interfaces, grep it) plus the `d3
 - `internal.h` shared state and helpers.
 
 Verification: `tools/check/regress.sh` (deterministic runs: every pixel and state hash must match).
+- `cost.cpp` the cost ledger: time spent compiling programs, uploading textures and buffers and drawing, per
+  frame (the native slow-frame lines name what a long frame spent its time on).
+- `interp.cpp` fps.interp: each step's device calls recorded and replayed once per refresh, every draw's
+  transforms blended from the step before (RT64's way; displays faster than 60 Hz).

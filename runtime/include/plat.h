@@ -38,6 +38,11 @@ void plat_gl_swap(void);
  * Real frames only: nothing is shown twice to make a number. */
 int plat_frame_late(void);   /* the next frame is not drawn: step it, draw nothing */
 void plat_frame_skip(void);  /* this frame was not drawn: its slot passes (no swap, no wait) */
+/* A display faster than the game's steps draws a real frame at every refresh between them: the last
+ * step's draws, blended from the step before (platform/sdl/sdl_interp.c, render/webgl/interp.cpp). */
+int plat_interp_wanted(void);       /* the next step is recorded and its frames come from refreshes */
+int rt_interp_frame(float t);       /* the runtime draws the frame between steps at t (0..1); 0: none */
+void rt_interp_frame_end(void);     /* after its swap */
 /* Netplay keyboard and mouse ("desk"): the host's real key and mouse events travel with its input
  * and every instance injects them at the same frame, like replay input (deterministic). */
 typedef struct {

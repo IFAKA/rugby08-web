@@ -116,6 +116,9 @@ class D3D9Device : public IDirect3DDevice9 {
                                            UINT PrimitiveCount, const void *pIndexData, D3DFORMAT IndexDataFormat,
                                            const void *pVertexStreamZeroData, UINT VertexStreamZeroStride) override;
 
+    // interp.cpp: a draw or Clear recorded instead of run (fps.interp)
+    bool rec_draw(unsigned op, unsigned a, unsigned b, std::function<void(D3D9Device *)> f);
+
     // trace.cpp
     void trace_draw(const char *path, unsigned count);
     void trace_blend(GLsizei stride);

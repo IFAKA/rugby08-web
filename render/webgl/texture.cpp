@@ -111,6 +111,7 @@ D3D9Texture::D3D9Texture(UINT width, UINT height, UINT levels, D3DFORMAT format)
 }
 
 D3D9Texture::~D3D9Texture() {
+    interp_forget(this);
     if (m_texture) {   // GL may recycle the name: forget it in the caches
         if (g_last_bound_texture_id == m_texture) g_last_bound_texture_id = 0xFFFFFFFF;
         if (g_last_bound_lightmap_id == m_texture) g_last_bound_lightmap_id = 0xFFFFFFFF;
@@ -151,7 +152,9 @@ HRESULT D3D9Texture::LockRect(UINT Level, D3DLOCKED_RECT *pLockedRect, const voi
 }
 
 HRESULT D3D9Texture::UnlockRect(UINT Level) {
+    CostScope cost(COST_TEXTURE);
     if (!m_locked_data) return -1;
+    interp_upload(this);
     glBindTexture(GL_TEXTURE_2D, m_texture);
     invalidate_binding_caches();
     UINT w = std::max(1u, m_width >> Level), h = std::max(1u, m_height >> Level);

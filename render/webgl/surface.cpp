@@ -7,6 +7,7 @@ D3D9Surface::D3D9Surface(UINT width, UINT height, GLuint gl_obj, bool is_rb, boo
       m_refCount(1) {}
 
 D3D9Surface::~D3D9Surface() {
+    interp_forget(this);
     if (m_is_renderbuffer && m_gl_object != 0 && !m_is_backbuffer) { glDeleteRenderbuffers(1, &m_gl_object); }
     // If it's a texture surface, D3D9Texture owns the GL object, so we don't delete it here.
 }

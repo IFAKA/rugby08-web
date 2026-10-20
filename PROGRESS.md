@@ -538,3 +538,8 @@ Next: `./init.sh next` shows what to fix.
 2026-10-20 ls.camera recheck PASS on the merged web build (daf7973). The check summed only the player the friend controls at the end of the hold, but the game hands control to the player nearest the ball, so it judged an AI run (-59°). It now sums each step of whichever player the friend controls at that step: 743 cm at -6° from the friend's own look.
 features.json: ls.ha_out back to passes:false (84fbede flipped it, but tools/check/no_ha.sh does not exist). pt.freeze/controllers/webrtc/menu/sides/camera/pause_leave are noted as superseded by ls.* since ls.boot (their host room never opens); they go with ls.ha_out.
 Next: verify and commit master's gamefs boot fix; then fps.interp.
+
+## 2026-10-21 fps.interp built (passes stays false)
+- Frames between steps (RT64 way): each step's device calls recorded, replayed per refresh with transforms blended; buffers rewritten after a recorded draw keep a copy (CPU mirror + pooled GL buffer, no glCopyBufferSubData on Apple GL 4.1); a render-target readback (stadium shadow map) first runs the step's recorded calls. 144 Hz run: 225 state hashes the same as the plain run.
+- Learned: on this Mac a match step costs ~10 ms game + ~2 ms renderer, so a 144 Hz refresh (6.9 ms) has no room: interp frames need cheaper steps (hot functions decompiled/optimized) or a render thread. Slow frames (~40 ms, ~6/s) are outside the renderer (cost ledger, cost.cpp).
+- Next: profile the match's hottest guest functions (first decompilation candidates); fps_skip_check on a quiet machine.

@@ -49,6 +49,34 @@ EM_ASYNC_JS(void, js_frame_wait, (double ms), {
 });
 // clang-format on
 void plat_frame_yield(void) { js_frame_wait(0); }
+/* fps.interp: one display refresh (0: the page is hidden, none comes); the display's refresh rate,
+   counted from the browser's animation frames while the page is in view. */
+// clang-format off
+EM_ASYNC_JS(int, js_refresh_wait, (double due), {
+    if (document.hidden) return 0;
+    await new Promise(r => requestAnimationFrame(r));
+    return 1;
+});
+EM_JS(double, js_display_hz, (void), {
+    if (!Module.rtHzOn) {
+        Module.rtHzOn = 1, Module.rtHz = 60;
+        let n = 0, t0 = 0;
+        const f = t => {
+            if (!t0) t0 = t;
+            if (++n, t - t0 >= 1000) {
+                if (!document.hidden) Module.rtHz = n * 1000 / (t - t0);
+                n = 0, t0 = t;
+            }
+            requestAnimationFrame(f);
+        };
+        requestAnimationFrame(f);
+    }
+    return Module.rtHz;
+});
+// clang-format on
+double plat_display_hz(void) { return js_display_hz(); }
+static double clock_ms(void) { return emscripten_get_now(); }
+static void swap_none(void) {}   /* (the browser shows the canvas at the next wait) */
 
 /* RT_TEST_DRAW_MS=N (tests only, ?env=): every drawn frame costs N ms more, a slow GPU (fps_skip_check) */
 static void test_draw_cost(void) {
@@ -75,7 +103,9 @@ static void frame_slot(int drawn) {
     }
     if (g_next == 0 || now - g_next > 4 * period) g_next = now;   /* first frame, or fell far behind: resync */
     g_next += dp < 0 ? period : dp;
-    if (drawn || g_next > now + 1) js_frame_wait(g_next - now);
+    if (drawn) interp_fill(now, g_next, dp < 0 ? period : dp, clock_ms, js_refresh_wait, swap_none); /* fps.interp */
+    double back = emscripten_get_now();
+    if (drawn || g_next > back + 1) js_frame_wait(g_next - back);
     double t1 = emscripten_get_now(), late = t1 - (g_next > now ? g_next : now);
     if (g_end > 0) skip_frame_done(drawn, now - g_end + (late > 0 ? late : 0), dp < 0 ? period : dp);
     g_end = t1;

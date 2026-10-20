@@ -147,6 +147,7 @@ static void gpu_read(Obj *t, uint32_t l);
 // Lockstep (runtime/core/net_external.c): one game reads its GPU, every game gets the same pixels.
 void readback_level(Obj *t, uint32_t l) {
     if (!(t->usage & 1u) || !t->host || compressed(t->fmt)) return;      // D3DUSAGE_RENDERTARGET
+    d3d9w_interp_flush();   // (fps.interp: what was drawn so far, drawn)
     uint32_t w = std::max(1u, t->w >> l), h = std::max(1u, t->h >> l), b = bpp(t->fmt) / 8, pitch = t->lvl_pitch[l];
     uint8_t *dst = (uint8_t *)G2H(t->lvl_shadow[l]);
     std::vector<uint8_t> rows((size_t)w * h * b);

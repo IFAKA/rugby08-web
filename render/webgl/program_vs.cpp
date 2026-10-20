@@ -89,6 +89,7 @@ void ff_blend_attrib(size_t base, GLsizei stride) {
 
 extern "C" D3D9WProgVS *d3d9w_progvs_create(const char *glsl, const unsigned char *regs, int nregs,
                                             const D3D9WElem *elems, int nelems) {
+    CostScope cost(COST_PROGRAM);
     if (g_shader_program == 0) init_shaders();
     std::vector<D3D9WElem> ev(elems, elems + nelems);
     std::string vsrc = progvs_vertex_source(glsl, ev);
@@ -134,6 +135,7 @@ extern "C" D3D9WProgVS *d3d9w_progvs_create(const char *glsl, const unsigned cha
 }
 
 extern "C" void d3d9w_progvs_use(D3D9WProgVS *p, const float (*consts)[4]) {
+    interp_rec(16ull << 32, nullptr, [=](D3D9Device *) { d3d9w_progvs_use(p, consts); });
     g_progvs_active = p;
     g_progvs_consts = consts;
 }

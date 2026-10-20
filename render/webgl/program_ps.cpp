@@ -28,6 +28,7 @@ std::string ff_vertex_source_es3() {
 D3D9WLinked *progps_link(D3D9WProgVS *vsp, D3D9WProgPS *psp) {
     auto it = psp->links.find(vsp);
     if (it != psp->links.end()) return it->second;
+    CostScope cost(COST_PROGRAM);
     D3D9WLinked *L = nullptr;
     std::string vsrc = vsp ? vsp->vsrc : ff_vertex_source_es3();
     GLuint vs = compile_shader(GL_VERTEX_SHADER, vsrc.c_str());
@@ -124,6 +125,7 @@ std::string progps_fragment_source(const char *glsl) {
 }
 
 extern "C" D3D9WProgPS *d3d9w_progps_create(const char *glsl, const unsigned char *regs, int nregs) {
+    CostScope cost(COST_PROGRAM);
     if (g_shader_program == 0) init_shaders();
     std::string f = progps_fragment_source(glsl);
     if (f.empty()) return nullptr;
@@ -160,6 +162,7 @@ extern "C" D3D9WProgPS *d3d9w_progps_create(const char *glsl, const unsigned cha
 }
 
 extern "C" void d3d9w_progps_use(D3D9WProgPS *p, const float (*consts)[4]) {
+    interp_rec(17ull << 32, nullptr, [=](D3D9Device *) { d3d9w_progps_use(p, consts); });
     g_progps_active = p;
     g_progps_consts = consts;
 }

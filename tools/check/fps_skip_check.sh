@@ -1,13 +1,13 @@
 #!/bin/sh
 # fps_skip_check.sh -- fps.skip: a device too slow to draw every step still steps the game 60 times a
 # second, and its frames come at an even rate. Two paced deterministic native runs of a PLAY NOW match
-# (tests/replays/match_play.txt, FRAMES default 12000): plain, then with every drawn frame costing 25 ms
+# (tests/replays/match_play.txt, FRAMES default 16500: open play from 14400): plain, then with every drawn frame costing 25 ms
 # more (RT_TEST_DRAW_MS, a slow GPU: about 35 fps if every step were drawn). Pass: the guest state hashes
 # are the same; the plain run draws every step; the slow run keeps 60 steps a second within 2% and draws
 # one step in a steady N (every second's drawn frames within 2 of the median, which is below 45). Only
 # the last 30 seconds (the match: the front end steps at the game's own 30 a second) are judged. One summary line; details in logs/fps_skip.log, runs in logs/fps_skip/.
 cd "$(dirname "$0")/../.." || exit 1
-LOG=logs/fps_skip.log OUT=logs/fps_skip BIN=${FPS_BIN:-build/native/rugby08} FRAMES=${FRAMES:-12000}
+LOG=logs/fps_skip.log OUT=logs/fps_skip BIN=${FPS_BIN:-build/native/rugby08} FRAMES=${FRAMES:-16500}
 mkdir -p $OUT
 : >$LOG
 [ -x "$BIN" ] || {
@@ -16,7 +16,7 @@ mkdir -p $OUT
 }
 run() { # name, extra ms per drawn frame
   rm -rf "$OUT/user.$1" && mkdir -p "$OUT/user.$1"
-  RT_DET=1 RT_DET_HASH=60 RT_TEST_DRAW_MS=$2 SDL_AUDIODRIVER=dummy timeout 900 "$BIN" --frames "$FRAMES" \
+  RT_DET=1 RT_DET_HASH=60 RT_TEST_DRAW_MS=$2 SDL_AUDIODRIVER=dummy timeout 1500 "$BIN" --frames "$FRAMES" \
     --replay tests/replays/match_play.txt \
     --log "$OUT/$1.log" --user-dir "$OUT/user.$1" >"$OUT/$1.out" 2>&1
   echo "$1: exit $?" >>$LOG

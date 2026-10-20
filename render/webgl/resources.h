@@ -46,11 +46,12 @@ struct GLBufferStore {
     uint8_t *locked = nullptr;
     UINT locked_offset = 0, locked_size = 0;
     DWORD locked_flags = 0;
+    std::vector<uint8_t> mirror;   // the contents, for fps.interp's copies (interp_upload)
 
     void create(GLenum target, UINT len);
     void destroy();
     HRESULT lock(UINT offset, UINT size, void **ppbData, DWORD flags);
-    HRESULT unlock(GLenum target);
+    HRESULT unlock(GLenum target, const void *owner);
 };
 
 class D3D9IndexBuffer : public IDirect3DIndexBuffer9 {
@@ -61,7 +62,10 @@ class D3D9IndexBuffer : public IDirect3DIndexBuffer9 {
     D3D9IndexBuffer(UINT length, D3DFORMAT format) : m_format(format) {
         m_store.create(GL_ELEMENT_ARRAY_BUFFER, length);
     }
-    virtual ~D3D9IndexBuffer() { m_store.destroy(); }
+    virtual ~D3D9IndexBuffer() {
+        interp_forget(this);
+        m_store.destroy();
+    }
     virtual ULONG AddRef() override { return 1; }   // the D3D8 layer owns the lifetime
     virtual ULONG Release() override {
         delete this;
@@ -70,7 +74,7 @@ class D3D9IndexBuffer : public IDirect3DIndexBuffer9 {
     virtual HRESULT Lock(UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags) override {
         return m_store.lock(OffsetToLock, SizeToLock, ppbData, Flags);
     }
-    virtual HRESULT Unlock() override { return m_store.unlock(GL_ELEMENT_ARRAY_BUFFER); }
+    virtual HRESULT Unlock() override { return m_store.unlock(GL_ELEMENT_ARRAY_BUFFER, this); }
     GLuint GetGLBuffer() const { return m_store.buffer; }
     D3DFORMAT GetFormat() const { return m_format; }
 };
@@ -80,7 +84,10 @@ class D3D9VertexBuffer : public IDirect3DVertexBuffer9 {
 
   public:
     explicit D3D9VertexBuffer(UINT length) { m_store.create(GL_ARRAY_BUFFER, length); }
-    virtual ~D3D9VertexBuffer() { m_store.destroy(); }
+    virtual ~D3D9VertexBuffer() {
+        interp_forget(this);
+        m_store.destroy();
+    }
     virtual ULONG AddRef() override { return 1; }   // the D3D8 layer owns the lifetime
     virtual ULONG Release() override {
         delete this;
@@ -89,6 +96,6 @@ class D3D9VertexBuffer : public IDirect3DVertexBuffer9 {
     virtual HRESULT Lock(UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags) override {
         return m_store.lock(OffsetToLock, SizeToLock, ppbData, Flags);
     }
-    virtual HRESULT Unlock() override { return m_store.unlock(GL_ARRAY_BUFFER); }
+    virtual HRESULT Unlock() override { return m_store.unlock(GL_ARRAY_BUFFER, this); }
     GLuint GetGLBuffer() const { return m_store.buffer; }
 };

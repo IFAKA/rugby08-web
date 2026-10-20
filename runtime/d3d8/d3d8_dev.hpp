@@ -62,5 +62,11 @@ extern int rt_trace_vsc; // runtime/debug/frames.cpp: RT_TRACE_DRAWS_FRAME is on
 void d3d8_debug_present(uint32_t frame, int w, int h);
 void d3d8_debug_pixels(uint32_t frame, int w, int h);   // RT_PIX: hash of the game's picture
 extern "C" void rt_coverage_frame(uint32_t frame);   // RT_COVERAGE (runtime/debug)
-bool d3d8_debug_reads_frames(void);   // a test reads the picture (screenshots, RT_PIX): every frame is drawn
+void d3d8_interp_present(void);   // d3d8_interp.cpp (fps.interp): the step's frame, from its recording
+void d3d8_overlay_draw(const uint8_t *img, int w, int h, int changed);   // the party's overlay, kept for refreshes
+bool d3d8_interp_next(bool late);   // whether the next step is recorded; returns late
+bool d3d8_debug_reads_frames(void);
+void d3d8_debug_interp(
+    float
+        t); // RT_TRACE_INTERP: each frame's t and camera (fps_interp_check)   // a test reads the picture (screenshots, RT_PIX): every frame is drawn
 void d3d8_debug_light(uint32_t index, const D3DLIGHT9 *l, uint32_t caller, uint32_t light_va);
