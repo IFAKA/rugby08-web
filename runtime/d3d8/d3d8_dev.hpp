@@ -30,6 +30,7 @@ struct DevState {
     uint32_t frame = 0;
     bool ff_drawn = false; // catching up (netplay): this frame is drawn all the same (ui_catchup shows it)
     bool skip = false;     // this draw is left out of this player's picture (draw_who.c: RT_DRAW_HIDE_VB)
+    bool late = false;     // this frame steps the game but is not drawn: the device is behind (fps.skip)
 };
 
 bool d3d8_pov_pre(const uint32_t *a); // d3d8_pov.cpp: this player's camera around a draw
@@ -41,8 +42,8 @@ bool d3d8_left_out(const uint32_t *a, int kind, uint32_t prims);   // d3d8_pov.c
 
 static inline DevState *S(const uint32_t *a) { return d3d8_obj(a[0])->dev; }
 static inline IDirect3DDevice9 *D(const uint32_t *a) { return dev9(d3d8_obj(a[0])); }
-static inline bool hidden(const uint32_t *a) {   // catching up, or left out of this player's picture: not drawn
-    return S(a)->skip || (rt_ff && !S(a)->ff_drawn);
+static inline bool hidden(const uint32_t *a) {   // catching up, late or left out of this player's picture
+    return S(a)->skip || S(a)->late || (rt_ff && !S(a)->ff_drawn);
 }
 static inline void addref(uint32_t g) {
     if (g) {
@@ -60,4 +61,6 @@ static inline void release(uint32_t g) {
 extern int rt_trace_vsc; // runtime/debug/frames.cpp: RT_TRACE_DRAWS_FRAME is on for this frame
 void d3d8_debug_present(uint32_t frame, int w, int h);
 void d3d8_debug_pixels(uint32_t frame, int w, int h);   // RT_PIX: hash of the game's picture
+extern "C" void rt_coverage_frame(uint32_t frame);   // RT_COVERAGE (runtime/debug)
+bool d3d8_debug_reads_frames(void);   // a test reads the picture (screenshots, RT_PIX): every frame is drawn
 void d3d8_debug_light(uint32_t index, const D3DLIGHT9 *l, uint32_t caller, uint32_t light_va);

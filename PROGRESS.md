@@ -524,3 +524,9 @@ Next: `./init.sh next` shows what to fix.
 - File views get their own mspace (heap.c, RT_VIEWS_LO..HI): a freed 127 MiB script.big view was split by small allocations, match 2's MapViewOfFile failed.
 - Tri Nations (solo too) loaded into a never-lifted switch: stubemu's unicorn CPU kept state junk had set (ring 0), so in a full catalog build stubs stopped resolving; each run now restores the CPU (catalog 56373 -> 60630 entries). analysis/ in this tree is now its own copy (was a symlink to master's).
 - Next: master gets the views/stubemu/camera-forget fixes (+ re-lift there, regress); then ls.ha_out; a frame-time stability check in a party match (the user: real vsync'd frames, stable first).
+
+## 2026-10-20 — fps.skip PASS (branch fps)
+- A device too slow to draw every step still steps the game 60 times a second: it draws one step in N (platform/sdl/sdl_skip.c: the smallest N its measured draw and step costs fit, at most 4); late steps run with draws and Clear skipped and no swap (d3d8 Present, plat_frame_late/plat_frame_skip, native and web). Each frame's slot is the game's own step length (its front end steps at 30 a second).
+- Check tools/check/fps_skip_check.sh: a PLAY NOW match (replay), plain vs a slow GPU (RT_TEST_DRAW_MS=25): 59.96 steps/s, 30 fps steady every second, 200 hashes the same; it says when the machine is too busy to judge.
+- Learned: the game's front end presents 30 times a second (det_period_ms 33 ms), so step rates are only comparable in a match.
+- Next: fps.interp (draw between steps on 120/144 Hz), then fps.party.

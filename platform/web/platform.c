@@ -1,6 +1,7 @@
 /* platform/web/platform.c -- browser host glue. Window, events and input: platform/sdl/. */
 #include "rt.h"
 #include "plat.h"
+#include "../sdl/sdl_int.h"
 #include <emscripten.h>
 #include <stdlib.h>
 
@@ -49,38 +50,65 @@ EM_ASYNC_JS(void, js_frame_wait, (double ms), {
 // clang-format on
 void plat_frame_yield(void) { js_frame_wait(0); }
 
-/* The browser presents the canvas when control returns to it: count the frame for the page's fps
- * counter (shell Module.rtFrames), then wait for its slot: 60 frames per second of wall time; in
- * deterministic mode (netplay) the virtual time each Present advanced (det_period_ms). */
-void plat_gl_swap(void) {
-    EM_ASM(Module.rtFrames = (Module.rtFrames | 0) + 1);
-    static double next;
+/* RT_TEST_DRAW_MS=N (tests only, ?env=): every drawn frame costs N ms more, a slow GPU (fps_skip_check) */
+static void test_draw_cost(void) {
+    static double cost = -1;
+    if (cost < 0) cost = getenv("RT_TEST_DRAW_MS") ? atof(getenv("RT_TEST_DRAW_MS")) : 0;
+    double end = emscripten_get_now() + cost;
+    while (cost > 0 && emscripten_get_now() < end) {}
+}
+
+static double g_next, g_end;   /* the next frame's slot; when the last one came back from the browser */
+
+/* A frame's slot: 60 frames per second of wall time; in deterministic mode (netplay) the virtual time
+ * each Present advanced (det_period_ms). Drawn: the browser presents the canvas when control returns
+ * to it (count the frame for the page's fps counter, shell Module.rtFrames). Not drawn (fps.skip):
+ * control stays with the game, unless the slot is still ahead. What the frame cost (sdl_skip.c): its
+ * work since the last one came back, and the browser's time past the slot (a slow GPU's backlog). */
+static void frame_slot(int drawn) {
     double now = emscripten_get_now(), period = 1000.0 / 60.0, dp = det_period_ms();
-    if (rt_ff) next = 0, js_frame_wait(0);   /* catching up: the joining screen, shown but never paced */
-    else {
-        if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
-        next += dp < 0 ? period : dp;
-        js_frame_wait(next - now);
+    if (rt_ff) {   /* catching up: the joining screen, shown but never paced */
+        g_next = g_end = 0;
+        skip_reset();
+        if (drawn) js_frame_wait(0);
+        return;
     }
+    if (g_next == 0 || now - g_next > 4 * period) g_next = now;   /* first frame, or fell far behind: resync */
+    g_next += dp < 0 ? period : dp;
+    if (drawn || g_next > now + 1) js_frame_wait(g_next - now);
+    double t1 = emscripten_get_now(), late = t1 - (g_next > now ? g_next : now);
+    if (g_end > 0) skip_frame_done(drawn, now - g_end + (late > 0 ? late : 0), dp < 0 ? period : dp);
+    g_end = t1;
     /* perf: game work per frame (resume to Present) vs time handed to the browser, every 600 frames */
     static double last, work, worst, wait;
-    static int n;
-    double t1 = emscripten_get_now();
+    static int n, undrawn;
     if (last > 0) {
         double w = now - last;
         work += w;
         if (w > worst) worst = w;
         wait += t1 - now;
         n++;
+        undrawn += !drawn;
     }
     last = t1;
     if (n == 600) {
-        rt_trace("web perf: %.0f fps, work %.1f ms/frame (worst %.1f), browser %.1f ms/frame", 600000.0 / (work + wait),
-                 work / n, worst, wait / n);
+        rt_trace(
+            "web perf: %.0f fps (%d of 600 steps not drawn), work %.1f ms/frame (worst %.1f), browser %.1f ms/frame",
+            600000.0 / (work + wait) * (600 - undrawn) / 600, undrawn, work / n, worst, wait / n);
         work = worst = wait = 0;
-        n = 0;
+        n = undrawn = 0;
     }
 }
+
+void plat_gl_swap(void) {
+    EM_ASM(Module.rtFrames = (Module.rtFrames | 0) + 1);
+    test_draw_cost();
+    frame_slot(1);
+}
+
+int plat_frame_late(void) { return !rt_ff && skip_next(); }
+
+void plat_frame_skip(void) { frame_slot(0); }
 
 /* wasm32: guest VAs wrap mod 2^32 through ADDR(); the first 1 GiB is backed. */
 void *plat_guest_arena(uint32_t *size) {
