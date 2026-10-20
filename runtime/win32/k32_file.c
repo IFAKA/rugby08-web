@@ -206,7 +206,7 @@ HLE(GetFileType) {
     return o->type == H_STD ? 2 /* FILE_TYPE_CHAR */ : o->type == H_FILE ? 1 /* FILE_TYPE_DISK */ : 0;
 }
 
-/* ---- file mappings: a view is a guest-heap copy of the file range (read-only use) ---------------- */
+/* ---- file mappings: a view is a copy of the file range in the views' region (heap.c; read-only use) */
 typedef struct {
     uint32_t file;
     uint32_t size;
@@ -230,14 +230,15 @@ HLE(MapViewOfFile) {   /* (hmap, access, offhi, offlo, size) */
     mapping_t *m = o->p;
     file_t *f = fget(m->file);
     uint32_t size = a[4] ? a[4] : m->size - a[3];
-    uint32_t va = gcalloc(size);
-    rt_log("MapViewOfFile(map 0x%X, off 0x%X, size 0x%X) -> 0x%08X", a[0], a[3], size, va);
+    uint32_t va = gview_alloc(size);
+    rt_log("MapViewOfFile(map 0x%X, off 0x%X, size 0x%X) -> 0x%08X (heap top 0x%08X)", a[0], a[3], size, va,
+           rt_heap_top());
     if (!va) return set_err(ERROR_NOT_ENOUGH_MEMORY_);
     pread(f->fd, G2H(va), size, (off_t)a[3]);
     return va;
 }
 HLE(UnmapViewOfFile) {
-    gfree(a[0]);
+    gview_free(a[0]);
     return TRUE_;
 }
 

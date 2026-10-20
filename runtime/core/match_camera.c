@@ -169,3 +169,7 @@ void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj) {
     memcpy(G2H(ctrl + C_STATE), g_host, MS_CAMERA_BYTES);   /* its next step starts from the host's */
     memcpy(g_last, g_host, MS_CAMERA_BYTES);
 }
+
+/* Out of the match (every Present, own_camera.c): its camera objects are freed with it; none is kept for
+   the next match (whose first step would otherwise reach the freed ones). */
+void ms_camera_forget(void) { g_listener = g_manager = g_cam = g_proj = 0; }

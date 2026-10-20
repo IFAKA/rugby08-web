@@ -44,6 +44,7 @@ static int in_match(void) {
 
 /* Screens where every player moves their own controller's icon to a side. */
 static int sides_screen(int id) { return id == 0x6 || id == 0xF || id == 0x31D || id == 0x1A0A; }
+static void sides_trace(void);
 
 int ls_roles_may_pause(int slot) {   /* a player with pauses left (no limit outside a party) */
     return !ls_on() || __builtin_popcount(ls_members()) < 2 || (slot >= 0 && slot < RT_MAX_PADS && g_left[slot] > 0);
@@ -93,6 +94,7 @@ int ls_roles_filter(const plat_desk_ev_t *d, int nd) {
     (void)d, (void)nd;
     int match = in_match(), id = fe_screen_id();
     pause_step(match, id);
+    if (!match && sides_screen(id)) sides_trace();
     int only = -1;   /* the one slot whose controller acts, or -1: everyone */
     if (match && g_paused) only = g_pauser;
     else if (!match && fe_in_menus() && !sides_screen(id)) only = ls_host();
@@ -108,6 +110,14 @@ int ls_roles_filter(const plat_desk_ev_t *d, int nd) {
 
 /* The side of slot K's player: its keyboard's if it has the desk, else its pad's ('H', 'A', 0). */
 static char side_of(int k) { return k == rt_net_desk() && rt_pads_side(-1) ? rt_pads_side(-1) : rt_pads_side(k); }
+
+/* Team Select: each active slot's side when it changes ("ms: ls sides HA--": checks, ls_modes_check.py). */
+static void sides_trace(void) {
+    static char was[RT_MAX_PADS + 1];
+    char now[RT_MAX_PADS + 1] = { 0 };
+    for (int k = 0; k < RT_MAX_PADS; k++) now[k] = rt_net_active(k) && side_of(k) ? side_of(k) : '-';
+    if (memcmp(now, was, sizeof now) != 0) memcpy(was, now, sizeof now), rt_trace("ms: ls sides %s", now);
+}
 int ls_team_of(int slot) { return side_of(slot) == 'H' ? 0 : side_of(slot) == 'A' ? 1 : -1; }
 int ls_team_has_players(int team) {
     for (int k = 0; k < RT_MAX_PADS; k++)

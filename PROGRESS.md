@@ -518,3 +518,9 @@ Next: `./init.sh next` shows what to fix.
 
 ## 2026-10-20 pt.deploy PASS
 - deploy_check: the private party site package builds, the server tests pass, a player brings their own Rugby 08 through the link and boots. Going live (host, account, domain) waits for the user's go. Next: ls.modes.
+
+2026-10-20 ls.modes PASS: all eight modes in a lockstep party (PLAY NOW, World Cup, Challenge, the five GAME MODES tournaments), two matches each, the friend back in the party view, 0 of ~950 hashes different.
+- Party-only memory corruption: own_camera.c kept match 1's freed LookAtCamera and its first step in match 2 wrote 0x110 bytes into it (match_camera.c's manager/listener too); out of a match they are now forgotten every Present.
+- File views get their own mspace (heap.c, RT_VIEWS_LO..HI): a freed 127 MiB script.big view was split by small allocations, match 2's MapViewOfFile failed.
+- Tri Nations (solo too) loaded into a never-lifted switch: stubemu's unicorn CPU kept state junk had set (ring 0), so in a full catalog build stubs stopped resolving; each run now restores the CPU (catalog 56373 -> 60630 entries). analysis/ in this tree is now its own copy (was a symlink to master's).
+- Next: master gets the views/stubemu/camera-forget fixes (+ re-lift there, regress); then ls.ha_out; a frame-time stability check in a party match (the user: real vsync'd frames, stable first).

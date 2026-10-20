@@ -17,7 +17,9 @@ extern "C" {
 #define RT_STACK0_LO     0x00100000u   /* main thread stack [LO, HI) */
 #define RT_STACK0_HI     0x00300000u
 #define RT_TIB0_VA       0x00310000u   /* main thread TIB page */
-#define RT_HEAP_LO       0x02000000u
+#define RT_HEAP_LO       0x02000000u   /* the guest heap: [RT_HEAP_LO, RT_VIEWS_LO) */
+#define RT_VIEWS_LO      0x11000000u   /* file views (MapViewOfFile): [RT_VIEWS_LO, RT_VIEWS_HI), every target */
+#define RT_VIEWS_HI      0x3F000000u
 #define RT_BRIDGE_IMPORT 0xFFF00000u   /* IAT slot i  -> RT_BRIDGE_IMPORT + 16*i */
 #define RT_BRIDGE_HOST   0xFFE00000u   /* host bridges (COM methods, callbacks) -> + 16*i */
 
@@ -32,12 +34,15 @@ static inline uint8_t rd8(uint32_t va) { return MEM8(va); }
 static inline void wr8(uint32_t va, uint8_t v) { MEM8(va) = v; }
 static inline const char *gstr(uint32_t va) { return va ? (const char *)G2H(va) : NULL; }
 
-/* guest heap (dlmalloc mspace over [RT_HEAP_LO, rt_guest_size)); thread-safe */
+/* guest heap (dlmalloc mspace over [RT_HEAP_LO, RT_VIEWS_LO)); thread-safe */
 uint32_t gmalloc(uint32_t size);
 uint32_t gcalloc(uint32_t size);
 uint32_t grealloc(uint32_t va, uint32_t size);
 void gfree(uint32_t va);
 uint32_t gmsize(uint32_t va);
+uint32_t gview_alloc(uint32_t size);   /* file views: their own region (heap.c) */
+void gview_free(uint32_t va);
+uint32_t rt_heap_top(void);
 uint32_t gmemalign(uint32_t align, uint32_t size);
 uint32_t gstrdup(const char *s);
 

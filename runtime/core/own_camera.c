@@ -111,7 +111,12 @@ void own_camera_after(uint32_t cam) {
 
 /* After drawing (every Present, before the match's next step): the match's camera. */
 void own_camera_present(void) {
-    if (!on() || !g_cam || !in_match()) return;
+    if (!in_match()) {   /* (the match freed its camera: the next match's first step must not get it back) */
+        g_cam = 0, g_have_mine = 0, g_stepped = 0, g_own_set = 0;
+        ms_camera_forget();
+        return;
+    }
+    if (!on() || !g_cam) return;
     uint32_t lv = look_va();
     if (g_stepped) {   /* (the step ran: its result is this player's camera; else it is the match's still) */
         memcpy(g_mine_cam, G2H(g_cam), CAM_BYTES);

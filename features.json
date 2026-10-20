@@ -641,7 +641,7 @@
       ],
       "desc": "Tournaments and the other multi-player modes in a party (shared menus).",
       "check": "/opt/homebrew/bin/python3.14 tools/net/ls_modes_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ls.ha_out",
@@ -650,7 +650,7 @@
       ],
       "desc": "The host-authoritative puppet and its checks are removed; docs updated.",
       "check": "tools/check/no_ha.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "pt.modes",
