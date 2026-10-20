@@ -515,3 +515,6 @@ Next: `./init.sh next` shows what to fix.
 - Catch-up was paced to virtual time (the joining screen's swap every 16 frames slept ~100 ms): now unpaced, web and native. Friend joins in 24 s (was 81), a relay-only one in 154 s.
 - Pings answered across a page block (a load) no longer count as trips: the input delay jumped to the cap (20 frames) after each load. Pace trace now reports time waited for inputs (two games on one Mac: ~18 ms/frame is real work, not waiting).
 - ls_lag_check: a browser per player; stable = <=3 stalls/600 frames, >=45 fps; delay bound counts a frame of handling at each end. Next: pt.deploy (needs the user's go to go live), then ls.fastjoin.
+
+## 2026-10-20 pt.deploy PASS
+- deploy_check: the private party site package builds, the server tests pass, a player brings their own Rugby 08 through the link and boots. Going live (host, account, domain) waits for the user's go. Next: ls.modes.

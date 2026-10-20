@@ -715,7 +715,7 @@
       ],
       "desc": "Deploy-ready private party site (the user, 2026-10-19): one package (program from build/site, the Go lobby/relay server with STUN, HTTPS) that friends reach by a private link; each player brings their own Rugby 08 (pt.own_files); public with one setting (only after a clean-room replacement of the EA parts). docs/ONLINE.md is the players' guide in plain words. Going live (host, account, domain) needs the user's go.",
       "check": "tools/net/deploy_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ls.cursor",
