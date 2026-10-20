@@ -105,7 +105,7 @@ int ui_present(uint32_t frame, int w, int h, const uint8_t **img, int *changed) 
     if (ls) snprintf(you, sizeof you, "YOU: PLAYER %d", rt_net_slot() + 1);
     int jslot, join = fe_party_joining(&jslot) && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY;
     int pct[4], first, joiners = joining(pct, &first);
-    int mine = !join && rk != LS_BANNER_LOBBY && own_row();
+    int mine = !join && own_row();   /* (a friend too: the host on the PARTY screen is not covered) */
     if (w <= 0 || h <= 0 || (!badge && !toast && !ls && !join && !joiners && !mine)) return 0;
     static char last[256];
     char b[64], all[256];

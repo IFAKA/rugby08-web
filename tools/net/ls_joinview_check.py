@@ -23,7 +23,7 @@ from web_party import ROOT, Player, relay, to_menus
 from web_route import browser
 
 D = os.path.join(ROOT, "logs", "ls_joinview")
-MINE = {"host": "1  PLAYER 1 (HOST) (YOU)", "friend": "2  PLAYER 2 (YOU)"}  # each game's own row
+MINE = {"host": "tag YOU on row 1", "friend": "tag YOU on row 2"}  # each game's own row (drawn: ui_badge.c)
 
 
 def rows(p):
@@ -108,7 +108,7 @@ def run(br, port, out):
         host.page.wait_for_timeout(8000)
         for p in (host, friend):
             rs = rows(p)
-            if MINE[p.name] not in rs or any("(YOU)" in r and r != MINE[p.name] for r in rs):
+            if [r for r in rs if r.startswith("tag YOU")][-1:] != [MINE[p.name]]:
                 return f"the {p.name}'s rows: {rs[-4:]}"
         out.append("(YOU) on each game's own row")
         if not in_sync([host, friend], out, "two players"):
