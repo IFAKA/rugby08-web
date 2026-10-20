@@ -493,7 +493,8 @@
       ],
       "desc": "The game keeps running when its tab is not visible (it stops today: requestAnimationFrame pacing, user-observed), so the host switching tabs never stops a party's match; the automated browser tests (background pages) become reliable. Pass: a background tab keeps running; two pages, menus into a match, 10 minutes, no freeze.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/web_soak.py",
-      "passes": true
+      "passes": true,
+      "notes": "2026-10-20: superseded by the lockstep party (ls.boot b533db5: every web page is a lockstep session from boot, so the host-authoritative room this check drives never opens); the behaviour is covered by ls.party, ls.match, ls.camera, ls.leave, ls.modes. The check goes with ls.ha_out."
     },
     {
       "id": "pt.research",
@@ -511,7 +512,8 @@
       ],
       "desc": "Controllers follow the party: solo is the original (no virtual pads); a friend joining adds a controller Team Select shows, leaving removes it; all 4 players can take a side.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/party_controllers_check.py",
-      "passes": true
+      "passes": true,
+      "notes": "2026-10-20: superseded by the lockstep party (ls.boot b533db5: every web page is a lockstep session from boot, so the host-authoritative room this check drives never opens); the behaviour is covered by ls.party, ls.match, ls.camera, ls.leave, ls.modes. The check goes with ls.ha_out."
     },
     {
       "id": "pt.webrtc",
@@ -520,7 +522,8 @@
       ],
       "desc": "Party traffic over WebRTC data channels between browsers (frames unordered/unreliable, setup and flow reliable); the server only signals and relays as fallback; latency measured.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/party_webrtc_check.py",
-      "passes": true
+      "passes": true,
+      "notes": "2026-10-20: superseded by the lockstep party (ls.boot b533db5: every web page is a lockstep session from boot, so the host-authoritative room this check drives never opens); the behaviour is covered by ls.party, ls.match, ls.camera, ls.leave, ls.modes. The check goes with ls.ha_out."
     },
     {
       "id": "pt.menu",
@@ -529,7 +532,8 @@
       ],
       "desc": "ONLINE in the game's main menu: CREATE PARTY (code, slots, CONTINUE, badge, LEAVE), JOIN PARTY (letter grid), friends' lobby; pad, mouse, keyboard and touch; the F2 overlay is gone.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/party_menu_check.py",
-      "passes": true
+      "passes": true,
+      "notes": "2026-10-20: superseded by the lockstep party (ls.boot b533db5: every web page is a lockstep session from boot, so the host-authoritative room this check drives never opens); the behaviour is covered by ls.party, ls.match, ls.camera, ls.leave, ls.modes. The check goes with ls.ha_out."
     },
     {
       "id": "pt.sides",
@@ -538,7 +542,8 @@
       ],
       "desc": "Team Select on every party member's own screen, synced: only party controllers, each moves its own icon, each side's captain picks its team and kit, the host picks the AI side's and presses CONTINUE.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/party_sides_check.py",
-      "passes": true
+      "passes": true,
+      "notes": "2026-10-20: superseded by the lockstep party (ls.boot b533db5: every web page is a lockstep session from boot, so the host-authoritative room this check drives never opens); the behaviour is covered by ls.party, ls.match, ls.camera, ls.leave, ls.modes. The check goes with ls.ha_out."
     },
     {
       "id": "pt.camera",
@@ -547,7 +552,8 @@
       ],
       "desc": "Each player's own camera and personal settings in the match (no copy of the host's camera); the personal settings audited and listed.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/party_camera_check.py",
-      "passes": true
+      "passes": true,
+      "notes": "2026-10-20: superseded by the lockstep party (ls.boot b533db5: every web page is a lockstep session from boot, so the host-authoritative room this check drives never opens); the behaviour is covered by ls.party, ls.match, ls.camera, ls.leave, ls.modes. The check goes with ls.ha_out."
     },
     {
       "id": "pt.pause_leave",
@@ -556,7 +562,8 @@
       ],
       "desc": "Start/Esc/touch pauses the match for everyone, the pauser drives the menu, personal settings there; closing the page leaves (AI takes the player), the host leaving ends the party, a mid-match joiner watches until the next Team Select.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/party_pause_leave_check.py",
-      "passes": true
+      "passes": true,
+      "notes": "2026-10-20: superseded by the lockstep party (ls.boot b533db5: every web page is a lockstep session from boot, so the host-authoritative room this check drives never opens); the behaviour is covered by ls.party, ls.match, ls.camera, ls.leave, ls.modes. The check goes with ls.ha_out."
     },
     {
       "id": "ls.boot",
@@ -604,7 +611,7 @@
       ],
       "check": "/opt/homebrew/bin/python3.14 tools/net/ls_camera_check.py",
       "description": "Each player's own camera in a party (their own settings, their own view; the match reads one shared camera; friends' sticks turned into it): same match (hashes), own pictures, own controls.",
-      "notes": "2026-10-13: ok (Side vs Truck: 162 hashes equal, 97/100 pictures differ, the friend's Up runs within 35 degrees of its own look)."
+      "notes": "2026-10-20: ok (friend caught up in 23 s; the friend's own players ran 743 cm at -6 degrees from its own look; 134 hashes equal; 100/100 pictures differ)"
     },
     {
       "id": "ls.joinview",
@@ -677,7 +684,8 @@
       ],
       "desc": "The host-authoritative puppet and its checks are removed; docs updated.",
       "check": "tools/check/no_ha.sh",
-      "passes": true
+      "passes": false,
+      "notes": "2026-10-20: set back to false: 84fbede flipped it with ls.modes, but tools/check/no_ha.sh does not exist yet."
     },
     {
       "id": "pt.modes",

@@ -534,3 +534,7 @@ Next: `./init.sh next` shows what to fix.
 - Check tools/check/fps_skip_check.sh: a PLAY NOW match (replay), plain vs a slow GPU (RT_TEST_DRAW_MS=25): 59.96 steps/s, 30 fps steady every second, 200 hashes the same; it says when the machine is too busy to judge.
 - Learned: the game's front end presents 30 times a second (det_period_ms 33 ms), so step rates are only comparable in a match.
 - Next: fps.interp (draw between steps on 120/144 Hz), then fps.party.
+
+2026-10-20 ls.camera recheck PASS on the merged web build (daf7973). The check summed only the player the friend controls at the end of the hold, but the game hands control to the player nearest the ball, so it judged an AI run (-59°). It now sums each step of whichever player the friend controls at that step: 743 cm at -6° from the friend's own look.
+features.json: ls.ha_out back to passes:false (84fbede flipped it, but tools/check/no_ha.sh does not exist). pt.freeze/controllers/webrtc/menu/sides/camera/pause_leave are noted as superseded by ls.* since ls.boot (their host room never opens); they go with ls.ha_out.
+Next: verify and commit master's gamefs boot fix; then fps.interp.

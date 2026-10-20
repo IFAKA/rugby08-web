@@ -37,34 +37,44 @@ def positions(p):
 
 
 def run_up(friend, host, out):
-    """In open play the friend holds Up: the away player that moves most, against the friend's own look."""
+    """In open play the friend holds Up: its own player runs along the friend's own look."""
     for _ in range(40):
         if phases(host)[-1:] == ["Free"]:
             break
         play([host, friend], 1.5)
     f0 = max(positions(friend) or [0])
     friend.page.keyboard.down("ArrowUp")
-    friend.page.wait_for_timeout(1500)
+    friend.page.wait_for_timeout(2500)  # (a player running the other way turns first: about half a second)
     friend.page.keyboard.up("ArrowUp")
-    friend.page.wait_for_timeout(300)
+    friend.page.wait_for_timeout(1000)
     ps = positions(friend)
     f1 = max(ps)
-    a, b = ps.get(f0), ps.get(f1)
     looks = [
-        (int(m.group(1)), float(m.group(2)), float(m.group(3))) for x in friend.lines for m in [LOOK.search(x)] if m
+        (int(m.group(1)), float(m.group(2)), float(m.group(3)), int(m.group(4)))
+        for x in friend.lines
+        for m in [LOOK.search(x)]
+        if m
     ]
-    look = [lk for lk in looks if lk[0] <= f1][-1:]
-    if not a or not b or not look:
-        return f"no measure (positions {bool(a)}/{bool(b)}, look {bool(look)})"
-    moves = [
-        (math.hypot(q[0] - p[0], q[1] - p[1]), i, q[0] - p[0], q[1] - p[1])
-        for i, (p, q) in enumerate(zip(a, b))
-        if i >= 15 and p and q
-    ]
-    d, i, dx, dz = max(moves)
+    # The friend's own player (the away side's first human: own_camera.c) at each step, not the AI's: the game
+    # hands the friend's control to the player nearest the ball as play moves, so each step counts its own.
+    frames = [f for f in sorted(ps) if f0 <= f <= f1]
+    dx = dz = 0.0
+    for p, q in zip(frames, frames[1:]):
+        lk = [x for x in looks if x[0] <= p][-1:]
+        if not lk or lk[0][3] < 0 or not ps[p][15 + lk[0][3]] or not ps[q][15 + lk[0][3]]:
+            continue
+        i = 15 + lk[0][3]
+        dx, dz = dx + ps[q][i][0] - ps[p][i][0], dz + ps[q][i][1] - ps[p][i][1]
+    look = [x for x in looks if x[0] <= f1][-1:]
+    if len(frames) < 2 or not look:
+        return f"no measure ({len(frames)} positions, look {bool(look)})"
+    i = 15 + look[0][3]
+    d = math.hypot(dx, dz)
     ang = math.degrees(math.atan2(dx, dz) - math.atan2(look[0][1], look[0][2]))
     ang = (ang + 180) % 360 - 180
-    out.append(f"own controls: player {i} ran {d:.0f} cm at {ang:.0f} degrees from the friend's own look")
+    out.append(
+        f"own controls: the friend's players (last {i}) ran {d:.0f} cm at {ang:.0f} degrees from the friend's own look"
+    )
     return None if d > 200 and abs(ang) < 45 else "the friend's Up did not run up its own screen"
 
 
