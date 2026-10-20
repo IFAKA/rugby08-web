@@ -116,12 +116,27 @@
         }
       };
       setStatus('Downloading...');
-      // fps: game Presents per second (Module.rtFrames is bumped by IDirect3DDevice8::Present)
+      // fps: Module.rtFrames is bumped by IDirect3DDevice8::Present, but several Presents can land between
+      // two browser paints (the pacer yields by message when behind) and only the last one shows. So each
+      // paint (rAF) checks whether a new Present arrived and counts those (the fps you see); 'worst' is the
+      // longest gap between new images in the window.
       var fpsElement = document.getElementById('fps'), fpsLast = { t: performance.now(), n: 0 };
+      var paintSeen = 0, shown = 0, lastNew = 0, worstGap = 0;
+      (function paint(t) {
+        var n = Module.rtFrames | 0;
+        if (n !== paintSeen) {
+          paintSeen = n;
+          shown++;
+          if (lastNew) worstGap = Math.max(worstGap, t - lastNew);
+          lastNew = t;
+        }
+        requestAnimationFrame(paint);
+      })(performance.now());
       setInterval(() => {
-        var t = performance.now(), n = Module.rtFrames | 0;
-        if (n) fpsElement.textContent = Math.round((n - fpsLast.n) * 1000 / (t - fpsLast.t)) + ' fps';
+        var t = performance.now(), n = Module.rtFrames | 0, s = 1000 / (t - fpsLast.t);
+        if (n) fpsElement.textContent = Math.round(shown * s) + ' fps, worst ' + Math.round(worstGap) + ' ms';
         fpsLast = { t: t, n: n };
+        shown = worstGap = 0;
       }, 500);
       // fullscreen puts the canvas in its own container: move the counter along with it
       document.addEventListener('fullscreenchange', () => {
