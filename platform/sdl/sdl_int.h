@@ -26,6 +26,10 @@ extern SDL_GLContext g_gl;
 extern int g_vcur_x, g_vcur_y;           /* the virtual cursor of automated runs (screen coordinates) */
 extern int g_rel, g_cx, g_cy;            /* captured-pointer mode and in-window position */
 extern int g_activate_pending;           /* plat_window_show in an automated run: WM_ACTIVATE* at the next pump */
+/* sdl_skip.c: a slow device draws one step in N (fps.skip); the pacers report every frame */
+void skip_frame_done(int drawn, double cost_ms, double period_ms);
+int skip_next(void);
+void skip_reset(void);
 int automated_run(void);                 /* --frames N or a --replay: hidden window, the replay is the input */
 int virtual_cursor(void);                /* automated run or deterministic mode: never touch/read the real cursor */
 uint32_t live_mouse(void);               /* the real mouse buttons (SDL mask), 0 under a virtual cursor */

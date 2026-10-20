@@ -650,7 +650,7 @@
       ],
       "desc": "No 60 fps cap downwards: the game keeps 60 steps a second of real time on a slow device (the steering is tuned to 1/60 s); a step whose drawing would make it late is simulated but not drawn, so a potato shows a steady ~30 fps in step with everyone. Check: native RT_DET with an emulated slow GPU (test-only draw cost): 60 game steps per real second (within 2%), steady shown frame times, the same state hashes as an unslowed run.",
       "check": "tools/check/fps_skip_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "fps.interp",

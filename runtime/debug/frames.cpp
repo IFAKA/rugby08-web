@@ -122,6 +122,16 @@ void d3d8_debug_pixels(uint32_t frame, int w, int h) {
     rt_trace("pix: dump %u %d %d %s", frame, dw, dh, hex.c_str());
 }
 
+/* A test that reads the picture gets every frame drawn (fps.skip leaves late ones undrawn), unless it
+   emulates a slow GPU to test exactly that (RT_TEST_DRAW_MS, fps_skip_check.sh). */
+bool d3d8_debug_reads_frames(void) {
+    static int reads = -1;
+    if (reads < 0)
+        reads = !getenv("RT_TEST_DRAW_MS") &&
+                (rt_screenshot_path[0] || rt_replay_path[0] || getenv("RT_PIX") || getenv("RT_TRACE_DRAWS_FRAME"));
+    return reads;
+}
+
 void d3d8_debug_present(uint32_t frame, int w, int h) {
     ms_probe_frame(frame);   // match_probe.c: RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP
     if (rt_replay_path[0]) menu_change_probe(frame, w, h);

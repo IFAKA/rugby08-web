@@ -1,7 +1,6 @@
 // d3d8_device.cpp -- IDirect3DDevice8: lifetime and info, Reset and Present, render targets, scene,
 // draws. States: d3d8_state.cpp; shaders: d3d8_dev_shaders.cpp; shared state: d3d8_dev.hpp.
 #include "d3d8_dev.hpp"
-extern "C" void rt_coverage_frame(uint32_t frame);
 #include "match_state.h"
 #include "ui.h"
 #include "fe_party.h"
@@ -139,12 +138,12 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     DevState *s = o->dev;
     const uint8_t *img;
     int changed;
-    bool drawn = !rt_ff || s->ff_drawn;   // catching up: only the frames the joining screen shows the game in
+    bool drawn = (!rt_ff || s->ff_drawn) && !s->late;   // catching up: the frames the joining screen shows
     if (drawn) dev9(o)->Present(nullptr, nullptr, nullptr, nullptr);
-    if (!rt_ff) d3d8_debug_pixels(s->frame + 1, (int)o->w, (int)o->h);   // (RT_PIX: before the local overlays)
+    if (!rt_ff && drawn) d3d8_debug_pixels(s->frame + 1, (int)o->w, (int)o->h);   // (RT_PIX: before the overlays)
     fe_party_present(s->frame);   // the party's screens (game state: also while catching up, lockstep)
     // the party's overlays (runtime/core/ui_badge.c), before screenshots see the frame
-    if (!rt_ff && ui_present(s->frame, (int)o->w, (int)o->h, &img, &changed))
+    if (!rt_ff && drawn && ui_present(s->frame, (int)o->w, (int)o->h, &img, &changed))
         d3d9w_overlay_draw(img, (int)o->w, (int)o->h, changed);
     s->frame++;
     plat_replay_tick(s->frame);
@@ -155,14 +154,15 @@ HLE_D3D(IDirect3DDevice8, Present) {   // (this, src, dst, hwnd, dirty)
     rt_coverage_frame(s->frame);
     ms_frame(s->frame);
     d3d8_debug_present(s->frame, (int)o->w, (int)o->h);   // runtime/debug/frames.cpp
-    if (!rt_ff)
-        plat_gl_swap(), d3d9w_overlay_undo(); // web: also yields to the browser; catching up: not shown nor paced
+    if (!rt_ff)   // web: the swap also yields to the browser; late (fps.skip): the slot passes undrawn
+        s->late ? plat_frame_skip() : (plat_gl_swap(), d3d9w_overlay_undo());
     else if (s->frame % 16 == 0) {   // catching up (netplay): the joining screen, and the page breathes
         if (ui_catchup((int)o->w, (int)o->h, drawn, &img)) {
             d3d9w_overlay_draw(img, (int)o->w, (int)o->h, 1);
             plat_gl_swap(), d3d9w_overlay_undo();
         } else plat_frame_yield();
     }   // the party screen, while catching up: the next frame shown is drawn (over it: the joining screen)
+    s->late = !rt_ff && plat_frame_late() && !d3d8_debug_reads_frames();
     s->ff_drawn = rt_ff && (s->frame + 1) % 16 == 0 && fe_in_menus() && fe_screen_id() == FE_SCR_PARTY;
     return D3D_OK_;
 }

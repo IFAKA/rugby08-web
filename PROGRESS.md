@@ -528,3 +528,9 @@ Next: `./init.sh next` shows what to fix.
 - Learned: run_native's 120 s timeout sent SIGTERM, which the game ignores (a hung run blocked the queue 1 h 51 min); stdout to a file is buffered, so the early-stop verdict reads the game's own log too; Python checks write __pycache__ into hashed dirs.
 - Full clean run (16:00): 24 of 73 failed, nearly all the web boot hang (gamefs worker vs first chunk read, found by the rugby08-25 session); on.match_map / on.match_setup / oracle.wine / ls.ha_out failed as before.
 - Next: a full check-all once the gamefs fix is in (fresh, then cached) for the real wall time.
+
+## 2026-10-20 — fps.skip PASS (branch fps)
+- A device too slow to draw every step still steps the game 60 times a second: it draws one step in N (platform/sdl/sdl_skip.c: the smallest N its measured draw and step costs fit, at most 4); late steps run with draws and Clear skipped and no swap (d3d8 Present, plat_frame_late/plat_frame_skip, native and web). Each frame's slot is the game's own step length (its front end steps at 30 a second).
+- Check tools/check/fps_skip_check.sh: a PLAY NOW match (replay), plain vs a slow GPU (RT_TEST_DRAW_MS=25): 59.96 steps/s, 30 fps steady every second, 200 hashes the same; it says when the machine is too busy to judge.
+- Learned: the game's front end presents 30 times a second (det_period_ms 33 ms), so step rates are only comparable in a match.
+- Next: fps.interp (draw between steps on 120/144 Hz), then fps.party.

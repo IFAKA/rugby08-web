@@ -32,6 +32,12 @@ int plat_gl_create(void);                                   /* 0 = ok */
 void plat_gl_size(int *w, int *h);                           /* drawable size in pixels */
 void plat_gl_set_size(int w, int h);                         /* resize the window to w x h */
 void plat_gl_swap(void);
+/* A device too slow to draw every step at 60 a second still steps the game at 60: it draws one step in
+ * N (the smallest N its measured draw and step costs fit in, at most 4: platform/sdl/sdl_skip.c), the
+ * others step without drawing (plat_frame_late) and their slots pass without a swap (plat_frame_skip).
+ * Real frames only: nothing is shown twice to make a number. */
+int plat_frame_late(void);   /* the next frame is not drawn: step it, draw nothing */
+void plat_frame_skip(void);  /* this frame was not drawn: its slot passes (no swap, no wait) */
 /* Netplay keyboard and mouse ("desk"): the host's real key and mouse events travel with its input
  * and every instance injects them at the same frame, like replay input (deterministic). */
 typedef struct {
