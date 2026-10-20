@@ -644,6 +644,33 @@
       "passes": true
     },
     {
+      "id": "fps.skip",
+      "deps": [
+        "ls.modes"
+      ],
+      "desc": "No 60 fps cap downwards: the game keeps 60 steps a second of real time on a slow device (the steering is tuned to 1/60 s); a step whose drawing would make it late is simulated but not drawn, so a potato shows a steady ~30 fps in step with everyone. Check: native RT_DET with an emulated slow GPU (test-only draw cost): 60 game steps per real second (within 2%), steady shown frame times, the same state hashes as an unslowed run.",
+      "check": "tools/check/fps_skip_check.sh",
+      "passes": false
+    },
+    {
+      "id": "fps.interp",
+      "deps": [
+        "fps.skip"
+      ],
+      "desc": "No 60 fps cap upwards: on a 120/144 Hz display every refresh draws a real frame between the last two game steps (each step's draws recorded in the renderer, their transforms blended by the refresh's time; RT64's way for N64 recomps). Check: native with an emulated 144 Hz display: ~144 distinct frames a second, the camera moving smoothly between steps, the same state hashes as at 60.",
+      "check": "tools/check/fps_interp_check.sh",
+      "passes": false
+    },
+    {
+      "id": "fps.party",
+      "deps": [
+        "fps.interp"
+      ],
+      "desc": "A party with a 30 fps player and a 144 Hz player: both at their own rate, steady frame times, the match in step (no stalls from the rate difference), hashes equal.",
+      "check": "/opt/homebrew/bin/python3.14 tools/net/fps_party_check.py",
+      "passes": false
+    },
+    {
       "id": "ls.ha_out",
       "deps": [
         "ls.modes"
