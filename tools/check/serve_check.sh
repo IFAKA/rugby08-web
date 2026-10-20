@@ -1,7 +1,7 @@
 #!/bin/sh
 # web.serve check: serve build/web on a free local port and verify headers + wasm MIME. One summary line.
 cd "$(dirname "$0")/../.." || exit 1
-PORT=18080
+PORT=${PORT:-$(python3 tools/check/free_port.py)}
 python3 tools/web/serve.py build/web $PORT >logs/serve_check.log 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null' EXIT

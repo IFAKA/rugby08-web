@@ -35,9 +35,12 @@ GROUPS = [
     ("det_synctest", r"det_synctest\.sh"),
     ("fidelity", r"fidelity_report\.py"),
     ("difftest", r"difftest\.(sh|py)"),
-    ("port18093", r"net_live_input\.py|web_selftest\.py"),
 ]
 BROWSER = r"python3\.14|net_web_test\.sh|web_check\.sh"
+# Checks that judge timing (lockstep input delay, sync, frame pacing) fail on a loaded machine: one at a
+# time, with at most BESIDE other checks next to it
+TIMING = os.environ.get("CHECK_TIMING_IDS", r"^(ls|fps)\.|^net\.(web_lockstep|live_input|handoff)$")
+BESIDE = int(os.environ.get("CHECK_BESIDE_TIMING", "2"))
 NEVER_CACHE = os.environ.get("CHECK_NO_CACHE_IDS", r"^oracle\.wine$")
 # Inputs by kind (paths under ROOT; directories are hashed by name, size and mtime of every file)
 LIFT = ["gen/recomp", "analysis", "tools/lift", "tools/analysis", "runtime/include", "REVERSE.md"]
@@ -87,8 +90,12 @@ def input_key(name):
         ).stdout.strip()
     else:
         p = ROOT / name
-        if p.is_dir():  # every file but what Python leaves behind when a check imports a module
-            files = (q for q in sorted(p.rglob("*")) if q.is_file() and "__pycache__" not in q.parts)
+        if p.is_dir():  # every file but Python's leftovers and this runner (scheduling is not a check input)
+            files = (
+                q
+                for q in sorted(p.rglob("*"))
+                if q.is_file() and "__pycache__" not in q.parts and q.name != "check_all.py"
+            )
             v = "\n".join(f"{q.relative_to(ROOT)}:{file_hash(q)}" for q in files)
         else:
             v = file_hash(p) if p.exists() else "missing"
@@ -125,6 +132,7 @@ class Runner:
         self.browsers = threading.Semaphore(BROWSERS)
         self.mu, self.fails, self.times, self.cached = threading.Lock(), [], {}, 0
         self.use_cache = use_cache
+        self.running, self.timing = 0, False
 
     def take(self):
         """The longest waiting check whose group is free (its group lock taken), or None if all done."""
@@ -133,9 +141,16 @@ class Runner:
                 if not self.todo:
                     return None
                 for i, (cid, cmd) in enumerate(self.todo):
+                    tim = bool(re.search(TIMING, cid))
+                    if tim and not self.timing and self.running > BESIDE:
+                        break  # the next timing check goes first: let the others drain
+                    if (self.timing or tim) and (tim and self.timing or self.running > BESIDE):
+                        continue
                     grp = next((g for g, rx in GROUPS if re.search(rx, cmd)), None)
                     if grp and not self.locks[grp].acquire(blocking=False):
                         continue
+                    self.running += 1
+                    self.timing |= tim
                     return self.todo.pop(i), grp
             time.sleep(0.2)
 
@@ -197,6 +212,10 @@ class Runner:
             finally:
                 if grp:
                     self.locks[grp].release()
+                with self.mu:
+                    self.running -= 1
+                    if re.search(TIMING, cid):
+                        self.timing = False
 
 
 def main():

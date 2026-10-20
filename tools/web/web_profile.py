@@ -9,9 +9,17 @@ One summary line (top 3 by self time); the full table in logs/web_profile.log.""
 import argparse
 import collections
 import os
+import socket
 import subprocess
 import sys
 import time
+
+
+def free_port():  # checks may run side by side
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
 
 from playwright.sync_api import sync_playwright
 
@@ -24,7 +32,7 @@ ap.add_argument("--timeout", type=float, default=180)
 a = ap.parse_args()
 
 os.chdir(os.path.join(os.path.dirname(__file__), "..", ".."))
-port = 18094
+port = free_port()
 srv = subprocess.Popen(
     [sys.executable, "tools/web/serve.py", "build/web", str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
 )

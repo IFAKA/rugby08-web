@@ -7,13 +7,16 @@ One summary line; console in logs/web_selftest.log."""
 
 import os
 import re
+import socket
 import subprocess
 import sys
 
 from playwright.sync_api import sync_playwright
 
 os.chdir(os.path.join(os.path.dirname(__file__), "..", ".."))
-port = 18093
+with socket.socket() as _s:  # a free port: checks may run side by side
+    _s.bind(("127.0.0.1", 0))
+    port = _s.getsockname()[1]
 srv = subprocess.Popen(
     [sys.executable, "tools/web/serve.py", "build/web", str(port)], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
 )

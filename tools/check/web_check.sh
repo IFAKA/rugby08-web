@@ -6,7 +6,7 @@
 #   tools/check/web_check.sh --expect 'TEXT' [--timeout S]
 # The game's stdout (rt_trace, e.g. tools/hooks.json "WinMain entered") reaches console.log.
 cd "$(dirname "$0")/../.." || exit 1
-EXPECT='' TMO=120 PORT=18081
+EXPECT='' TMO=120 PORT=${PORT:-$(python3 tools/check/free_port.py)}
 while [ $# -gt 0 ]; do
   case "$1" in
     --expect)

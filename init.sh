@@ -19,6 +19,10 @@ next_item() {
     | select(all(.deps[]; . as $d | ($all[] | select(.id==$d) | .passes)))][0].id // empty' "$F"
 }
 
+# The reason a check failed: its last FAIL/error/exception line, else its last line
+fail_reason() {
+  { grep -E 'FAIL|Error|Exception|error:' "$1" || tail -1 "$1"; } | tail -1 | cut -c1-160
+}
 run_check() {
   local id="$1" cmd
   cmd=$(jq -r --arg id "$id" '.items[] | select(.id==$id) | .check' "$F")
@@ -26,12 +30,18 @@ run_check() {
     echo "check: unknown id $id"
     return 2
   }
+  for s in $(grep -oE '(tools|scripts)/[A-Za-z0-9_./-]+\.(sh|py)' <<<"$cmd"); do
+    [ -f "$s" ] || {
+      echo "check $id: FAIL (no script: $s)"
+      return 1
+    }
+  done
   if bash -c "$cmd" >"logs/check_$id.log" 2>&1; then
     tmp=$(mktemp)
     jq --arg id "$id" '(.items[] | select(.id==$id) | .passes) = true' "$F" >"$tmp" && mv "$tmp" "$F"
     echo "check $id: PASS"
   else
-    echo "check $id: FAIL (see logs/check_$id.log: $(tail -1 "logs/check_$id.log" | cut -c1-160))"
+    echo "check $id: FAIL (see logs/check_$id.log: $(fail_reason "logs/check_$id.log"))"
     return 1
   fi
 }
