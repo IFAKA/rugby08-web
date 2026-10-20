@@ -146,13 +146,14 @@ static uint64_t wall_ms(void) {   /* (only to decide when to report a stall, nev
 #define STALL_MS 3000
 static void wait_inputs(uint32_t frame) {
     uint32_t waited = 0;
-    uint64_t since = 0;
+    uint64_t since = 0, t0 = 0;
     if (N.idle_hi && frame >= N.idle_lo && frame <= N.idle_hi && !net_have_input(N.slot, frame))
         net_store_input(N.slot, frame, &N.idle_pad, 0, NULL);   /* the idle input sent while catching up */
     for (;;) {
         net_roster_at(frame);
         int who = missing(frame);
         if (who < 0 || N.offline) break;
+        if (!t0) t0 = wall_ms();
         if (!rt_ff && waited == 20) since = wall_ms();
         if (since && wall_ms() - since > STALL_MS) {
             char m[48];
@@ -163,9 +164,13 @@ static void wait_inputs(uint32_t frame) {
         }
         net_pump(waited ? 5 : 0);
         if (++waited == 20 && !rt_ff) net_tx_status(1, who);   /* ~0.1 s late: the page shows who we wait for */
-        if (waited % 2000 == 0) rt_trace("netplay: waiting for player %d at frame %u", who + 1, frame);
+        if (waited % 2000 == 0)   /* (with the stream's next message: what it holds back) */
+            rt_trace("netplay: waiting for player %d at frame %u (stream: %d bytes, next %c frame %u)", who + 1, frame,
+                     N.rx_n, N.rx_n ? N.rx[0] : '-',
+                     N.rx_n >= 6 ? (unsigned)(N.rx[2] | N.rx[3] << 8 | N.rx[4] << 16 | (uint32_t)N.rx[5] << 24) : 0u);
     }
     if (waited >= 20 && !rt_ff && !N.offline) net_tx_status(0, 0), N.stalls++;
+    if (t0 && !rt_ff) N.wait_ms += wall_ms() - t0;
 }
 
 static void apply_inputs(uint32_t frame) {
@@ -261,9 +266,9 @@ void net_frame(uint32_t frame) {
         check_hashes(frame - NET_HASH_EVERY);
     catch_up(frame);
     if (frame % 600 == 0 && !rt_ff && !N.offline) {   /* (checks: tools/net/ls_lag_check.py) */
-        rt_trace("netplay: pace at frame %u: delay %d inputs first by peer %u by relay %u stalls %u", frame, N.delay,
-                 N.by_peer, N.by_relay, N.stalls);
+        rt_trace("netplay: pace at frame %u: delay %d inputs first by peer %u by relay %u stalls %u waited %llu ms",
+                 frame, N.delay, N.by_peer, N.by_relay, N.stalls, (unsigned long long)N.wait_ms);
         tune_delay(frame);
-        N.by_peer = N.by_relay = N.stalls = 0;
+        N.by_peer = N.by_relay = N.stalls = 0, N.wait_ms = 0;
     }
 }

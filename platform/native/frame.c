@@ -19,6 +19,10 @@ static void frame_pace(void) {
     if (period <= 0) return;
     /* deterministic mode: the virtual time this Present advanced (det_period_ms) */
     double now = (double)SDL_GetPerformanceCounter(), dp = det_period_ms();
+    if (rt_ff) {   /* catching up (netplay): the joining screen, shown but never paced */
+        next = 0;
+        return;
+    }
     if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
     next += dp < 0 ? period : dp * (double)SDL_GetPerformanceFrequency() / 1000.0;
     double wait = next - now;

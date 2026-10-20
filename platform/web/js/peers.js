@@ -9,7 +9,8 @@
 // (shell.html rugbyNetDelay) covers the slowest peer's trip and its jitter.
 // The server (server/signal.go) passes the offers, answers and ICE candidates and answers STUN itself.
 // Test switches: ?rtc=0 (the relay alone), ?netlag=MS[,JITTER] (this page holds back everything it sends,
-// peer to peer and to the server, for MS +- JITTER ms: a slow network on one machine).
+// peer to peer and to the server, and what the server relays to it, for MS +- JITTER ms: a slow network
+// on one machine).
 
 Module.peers = (function () {
   const P = { me: -1, members: [], conns: {}, ice: [], inq: [], stats: { tx: 0, rx: 0, used: 0 } };
@@ -19,14 +20,25 @@ Module.peers = (function () {
   P.lag = lag[0] > 0 ? { ms: lag[0], jitter: lag[1] || 0 } : null;
 
   // a test's slow network: everything this page sends leaves later (ordered: the server's socket keeps
-  // its order, as TCP would)
-  let due = 0;
-  P.later = function (fn, ordered) {
+  // its order, as TCP would), and what the server relays to it arrives later too: a relayed message
+  // crosses the network twice (sender to server, server to this page), a peer's once.
+  // An ordered direction is a queue drained by one timer: a timer each would not keep the order (each
+  // delay is cut to whole ms from when it was set, so of two messages due at once the later may run first).
+  const fifo = { out: [], in: [] };
+  function drain(q) {
+    while (q.length && q[0].t <= performance.now()) q.shift().fn();
+    if (q.length) setTimeout(() => drain(q), Math.max(0, q[0].t - performance.now()));
+  }
+  function hold(fn, ordered, dir) {
     if (!P.lag) return fn();
-    let t = performance.now() + Math.max(0, P.lag.ms + (Math.random() * 2 - 1) * P.lag.jitter);
-    if (ordered) t = due = Math.max(due, t);
-    setTimeout(fn, t - performance.now());
-  };
+    const t = performance.now() + Math.max(0, P.lag.ms + (Math.random() * 2 - 1) * P.lag.jitter);
+    if (!ordered) return void setTimeout(fn, t - performance.now());
+    const q = fifo[dir];
+    q.push({ t: q.length ? Math.max(q[q.length - 1].t, t) : t, fn });
+    if (q.length === 1) setTimeout(() => drain(q), t - performance.now());
+  }
+  P.later = (fn, ordered) => hold(fn, ordered, 'out');
+  P.relayed = (fn) => hold(fn, true, 'in');
 
   function signal(to, data) {
     const n = Module.rugbyNet;
@@ -46,12 +58,17 @@ Module.peers = (function () {
     ch.onmessage = function (ev) {
       const u8 = new Uint8Array(ev.data);
       if (u8[0] === 0xfe) {
-        // a ping: back at once
-        u8[0] = 0xff;
-        P.later(() => c.open && c.ch.send(u8));
+        // a ping: back at once (marked if this page was just blocked: it waited here, not on the way)
+        const b = new Uint8Array(10);
+        b.set(u8.subarray(0, 9));
+        b[0] = 0xff;
+        b[9] = awake() ? 0 : 1;
+        P.later(() => c.open && c.ch.send(b));
       } else if (u8[0] === 0xff) {
-        // our ping back: the round trip
-        const r = performance.now() - new DataView(u8.buffer).getFloat64(1, true);
+        // our ping back: the round trip, unless a page was blocked on the way
+        const sent = new DataView(u8.buffer).getFloat64(1, true);
+        if (!awake() || u8[9] || woke >= sent) return;
+        const r = performance.now() - sent;
         c.jit = c.rtt === undefined ? 0 : c.jit * 0.8 + Math.abs(r - c.rtt) * 0.2;
         c.rtt = c.rtt === undefined ? r : c.rtt * 0.8 + r * 0.2;
       } else {
@@ -147,6 +164,18 @@ Module.peers = (function () {
     }
     return P.members.length ? worst : null;
   };
+
+  // A page blocked (a load: no yield for a second or more) answers its pings late. That is no network
+  // trip, and counted as one it would raise the input delay to the cap for the next seconds.
+  let beat = performance.now(),
+    woke = -1e9;
+  function awake() {
+    const t = performance.now();
+    if (t - beat > 150) woke = t;
+    beat = t;
+    return t - woke > 200;
+  }
+  setInterval(awake, 50);
 
   setInterval(() => {
     for (const s of P.members) {

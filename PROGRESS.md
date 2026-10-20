@@ -509,3 +509,9 @@ Next: `./init.sh next` shows what to fix.
 - pt.private_link PASS (server/gate.go: /k/PASSWORD sets the party cookie). pt.own_files PASS (own_copy.js + site_manifest.py: folder picked once, chunks checked against sha256 and kept in OPFS; the site serves no game file).
 - Learned: Homebrew python3 is now 3.15 without Playwright: checks run on python3.14. ls.leave: leaving works (233 hashes equal); the newcomer was told but its replay (1.5x real time with 3 headless games on one Mac) did not catch up in the check's fixed 10 min: check now waits while it gains.
 - Next: ls.leave rerun, ls.lag (two machines), pt.deploy (package + host: needs the user's go).
+
+## 2026-10-20 ls.lag PASS
+- Joins over a slow network: the test's lag model held each message with its own timer, which reorders them (delays cut to whole ms); one queue per direction now. The server sends idle inputs for a catching-up game gone quiet in a load (server/idle.go), so it is not dropped as stalled.
+- Catch-up was paced to virtual time (the joining screen's swap every 16 frames slept ~100 ms): now unpaced, web and native. Friend joins in 24 s (was 81), a relay-only one in 154 s.
+- Pings answered across a page block (a load) no longer count as trips: the input delay jumped to the cap (20 frames) after each load. Pace trace now reports time waited for inputs (two games on one Mac: ~18 ms/frame is real work, not waiting).
+- ls_lag_check: a browser per player; stable = <=3 stalls/600 frames, >=45 fps; delay bound counts a frame of handling at each end. Next: pt.deploy (needs the user's go to go live), then ls.fastjoin.

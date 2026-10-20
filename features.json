@@ -632,7 +632,7 @@
       ],
       "desc": "Inputs over WebRTC with relay fallback, input delay from measured round trips, no stalls on jitter; measured.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/ls_lag_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ls.modes",

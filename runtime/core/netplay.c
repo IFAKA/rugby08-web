@@ -96,6 +96,8 @@ void net_handle(const uint8_t *m) {
         }
         net_store_input(k, f, &p, nd, d);
         if (f > N.max_seen) N.max_seen = f;
+        if (k == N.slot && !N.joined && N.my_from >= 0 && (int64_t)f >= N.next_send)
+            N.next_send = (int64_t)f + 1;   /* idle ones the server sent for it while it loaded (server/idle.go) */
         if (k != N.slot && N.joined && !rt_ff && (int32_t)(f - N.frame) < N.slack_min)
             N.slack_min = (int32_t)(f - N.frame);   /* (how early it came: net_frame.c tunes the delay) */
         break;

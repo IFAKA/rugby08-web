@@ -56,9 +56,12 @@ void plat_gl_swap(void) {
     EM_ASM(Module.rtFrames = (Module.rtFrames | 0) + 1);
     static double next;
     double now = emscripten_get_now(), period = 1000.0 / 60.0, dp = det_period_ms();
-    if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
-    next += dp < 0 ? period : dp;
-    js_frame_wait(next - now);
+    if (rt_ff) next = 0, js_frame_wait(0);   /* catching up: the joining screen, shown but never paced */
+    else {
+        if (next == 0 || now - next > 4 * period) next = now;   /* first frame, or fell far behind: resync */
+        next += dp < 0 ? period : dp;
+        js_frame_wait(next - now);
+    }
     /* perf: game work per frame (resume to Present) vs time handed to the browser, every 600 frames */
     static double last, work, worst, wait;
     static int n;

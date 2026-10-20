@@ -10,7 +10,8 @@
 // Lobby messages (JSON text):
 //
 //	-> {"t":"host","name":N}                         create a room (you are player 1)
-//	-> {"t":"join","room":C,"name":N[,"auto":true]}  join (auto: create C if missing; tests)
+//	-> {"t":"join","room":C,"name":N[,"auto":true][,"progress":true]}  join (auto: create C if missing; tests;
+//	   progress: it reports its catch-up, so the server sends its idle inputs while it loads: idle.go)
 //	<- {"t":"joined","room":C,"slot":S,"creator":bool,"since":F}  then the room's log, then live messages
 //	   (since: where the slot's previous player left, -1 none: the log's 'A'/'D' for S before it are that player's)
 //	<- {"t":"members","room":C,"players":[{slot,name,rtt,joining,pct}]}
@@ -77,23 +78,28 @@ type client struct {
 	rtt      int // ms, as the client last measured it
 	pct      int // catching up: percent done
 	caughtUp bool
+	catching bool // has said it catches up (web games: progress), and not that it is done
 }
 
 type room struct {
 	code    string
 	build   string // the creator's game build: lockstep needs the same game everywhere
 	slots   [maxPlayers]*client
-	auth    int               // slot that grants joins
-	log     []byte            // every game message since frame 0, in relay order
-	from    [maxPlayers]int64 // slot plays from this frame (-1: not granted)
-	last    [maxPlayers]int64 // last input frame received from the slot
-	pending [maxPlayers]bool  // waiting for a grant
-	freed   [maxPlayers]int64 // the slot's last player left at this frame: its 'A'/'D' before it are not a newcomer's (-1)
-	granted [maxPlayers]int64 // the slot's latest grant frame (-1)
-	forks   []forkReq         // players leaving into a room of their own, waiting for inputs (fork.go)
-	setup   []byte            // host mode: the latest 'S' message, for newcomers
-	key     []byte            // host mode: the latest key 'F' message, for newcomers
-	menu    []byte            // host mode: the latest 'M' (the host's front-end screen), for newcomers
+	auth    int                   // slot that grants joins
+	log     []byte                // every game message since frame 0, in relay order
+	from    [maxPlayers]int64     // slot plays from this frame (-1: not granted)
+	last    [maxPlayers]int64     // last input frame received from the slot
+	pending [maxPlayers]bool      // waiting for a grant
+	freed   [maxPlayers]int64     // the slot's last player left at this frame: its 'A'/'D' before it are not a newcomer's (-1)
+	granted [maxPlayers]int64     // the slot's latest grant frame (-1)
+	forks   []forkReq             // players leaving into a room of their own, waiting for inputs (fork.go)
+	setup   []byte                // host mode: the latest 'S' message, for newcomers
+	key     []byte                // host mode: the latest key 'F' message, for newcomers
+	menu    []byte                // host mode: the latest 'M' (the host's front-end screen), for newcomers
+	idle    [maxPlayers][]byte    // the slot's latest input message (idle.go)
+	heard   [maxPlayers]time.Time // when it came
+	filling [maxPlayers]bool      // the server sends the slot's idle inputs (idle.go)
+	sent    [maxPlayers]int64     // the frame after the last of them (0: none)
 }
 
 var (
@@ -395,6 +401,7 @@ type request struct {
 	Room  string          `json:"room"`
 	Name  string          `json:"name"`
 	Auto  bool            `json:"auto"`
+	Tells bool            `json:"progress"` // reports how far it caught up (web games): idle.go may fill for it
 	Build string          `json:"build"`
 	TS    any             `json:"ts"`
 	RTT   int             `json:"rtt"`
@@ -462,6 +469,7 @@ func (c *client) handle(req request) {
 			return
 		}
 		c.room, c.slot, c.name, c.caughtUp = r, slot, cleanName(req.Name, slot), creator
+		c.catching = !creator && req.Tells
 		r.slots[slot] = c
 		c.send(map[string]any{"t": "joined", "room": r.code, "slot": slot, "creator": creator, "stun": stunPort,
 			"since": r.freed[slot]})
@@ -506,7 +514,9 @@ func (c *client) handle(req request) {
 			return
 		}
 		if p := r.slots[req.Slot]; p != nil && !r.pending[req.Slot] {
-			log.Printf("room %s: player %d stalled (reported by player %d): dropped", r.code, req.Slot+1, c.slot+1)
+			log.Printf("room %s: player %d stalled (reported by player %d): dropped (catching up %v, plays from %d, "+
+				"inputs to %d, last heard %v ago)", r.code, req.Slot+1, c.slot+1, p.catching, r.from[req.Slot],
+				r.last[req.Slot], time.Since(r.heard[req.Slot]).Round(time.Millisecond))
 			p.send(map[string]any{"t": "error", "msg": "Your connection was too slow: you left the game"})
 			p.conn.Close()
 		}
@@ -531,7 +541,7 @@ func (c *client) handle(req request) {
 		}
 	case "progress":
 		if c.room != nil {
-			c.pct, c.caughtUp = req.Pct, req.Pct >= 100
+			c.pct, c.caughtUp, c.catching = req.Pct, req.Pct >= 100, req.Pct < 100
 			c.room.members()
 		}
 	}
@@ -565,8 +575,8 @@ func (c *client) game(b []byte) {
 			if k != c.slot {
 				continue
 			}
-			if f := int64(binary.LittleEndian.Uint32(m[2:])); m[0] == 'I' && f > r.last[k] {
-				r.last[k] = f
+			if m[0] == 'I' && !r.heardInput(k, m, int64(binary.LittleEndian.Uint32(m[2:]))) {
+				continue
 			}
 			r.relay(m, c.slot)
 			if len(r.forks) > 0 { // (a leaver waiting for this input: fork.go)
@@ -632,6 +642,7 @@ func (r *room) drop(c *client) {
 		r.relay(frameMsg('D', k, l), -1)
 		r.from[k], r.last[k], r.freed[k] = -1, -1, l
 	}
+	r.idle[k], r.filling[k], r.sent[k] = nil, false, 0
 	log.Printf("room %s: %s (player %d) left", r.code, c.name, k+1)
 	if k == 0 && (r.setup != nil || r.menu != nil) { // a party's host: the party is over
 		for _, p := range r.slots {
@@ -745,10 +756,11 @@ func main() {
 	log.Fatal(http.ListenAndServe(*addr, handler))
 }
 
-// frontHints: every 200 ms each game still catching up hears how far the others' inputs go ("front"), so
-// it can send idle inputs that far (runtime/core/netplay.c hint) and nobody waits for it.
+// frontHints: every 100 ms each game still catching up hears how far the others' inputs go ("front"), so
+// it can send idle inputs that far (runtime/core/netplay.c hint) and nobody waits for it; a quiet one gets
+// them from the server (idle.go).
 func frontHints() {
-	for range time.Tick(200 * time.Millisecond) {
+	for range time.Tick(100 * time.Millisecond) {
 		roomsMu.Lock()
 		for _, r := range rooms {
 			front := int64(-1)
@@ -761,6 +773,9 @@ func frontHints() {
 				if p != nil && !p.caughtUp && front >= 0 {
 					p.send(map[string]any{"t": "front", "frame": front})
 				}
+			}
+			if front >= 0 {
+				r.fillIdle(front)
 			}
 		}
 		roomsMu.Unlock()

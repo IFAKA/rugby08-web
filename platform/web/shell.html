@@ -195,12 +195,16 @@
         function offline() { if (started) return; net = null; if (join) say('CANNOT REACH THE GAME SERVER'); play([]); }
         ws.onopen = () => {
           opened = true; clearTimeout(fallback);
-          ws.send(JSON.stringify(join ? { t: 'join', room: join, auto, build: BUILD } : { t: 'host', build: BUILD }));
+          ws.send(JSON.stringify(join ? { t: 'join', room: join, auto, build: BUILD, progress: true } : { t: 'host', build: BUILD }));
         };
         ws.onerror = () => { if (!opened) { clearTimeout(fallback); offline(); } };
         ws.onclose = () => { net && (net.closed = true); };
         ws.onmessage = (ev) => {
-          if (typeof ev.data !== 'string') { net.queue.push(new Uint8Array(ev.data)); return; }   // game messages: netplay.c
+          if (typeof ev.data !== 'string') {   // game messages: netplay.c (a test's slow network: js/peers.js)
+            const u8 = new Uint8Array(ev.data);
+            if (Module.peers) Module.peers.relayed(() => net.queue.push(u8)); else net.queue.push(u8);
+            return;
+          }
           var m = JSON.parse(ev.data);
           if (Module.peers && Module.peers.text(m)) return;   // WebRTC signaling (js/peers.js)
           if (m.t === 'error' && !started) { say(m.msg.toUpperCase()); reload(''); return; }   // could not join: own game
