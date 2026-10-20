@@ -14,14 +14,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp, g_ebx, g_esi, g_edi, g_ebp;
-RECOMP_TLS double   g_st[8];
-RECOMP_TLS int      g_fp_top;
-RECOMP_TLS uint16_t g_fpu_cw = 0x027F;
-RECOMP_TLS uint32_t g_flag_k, g_flag_a, g_flag_b, g_flag_cf;
-RECOMP_TLS uint32_t g_fs_base;
-RECOMP_TLS uint64_t g_mm[8];
-RECOMP_TLS uint32_t g_cur_func;
+RECOMP_TLS recomp_cpu_t g_cpu = {.c_g_fpu_cw = 0x027F};
 uint16_t g_seg_cs, g_seg_ds, g_seg_es, g_seg_fs, g_seg_gs, g_seg_ss;
 uint32_t g_gs_base;
 ptrdiff_t g_mem_base;
@@ -50,8 +43,6 @@ recomp_func_t recomp_lookup_manual(uint32_t va) { (void)va; return 0; }
 recomp_func_t recomp_lookup_import(uint32_t va) { (void)va; return 0; }
 uint64_t recomp_host_rdtsc(void) { return 0; }
 RECOMP_TLS rt_ehpad_t *g_eh_top;
-RECOMP_TLS int g_eh_active;
-RECOMP_TLS uint32_t g_eh_resume;
 void rt_eh_jump(uint32_t va) { (void)va; }
 
 static sigjmp_buf g_case_env;

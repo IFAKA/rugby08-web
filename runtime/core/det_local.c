@@ -7,8 +7,6 @@
  * without the section. The section must not wait for other threads or allocate shared memory. */
 #include "rt.h"
 
-extern RECOMP_TLS uint32_t t_enter_idx;   /* trace.c: guest function entries on this thread */
-
 RECOMP_TLS int t_det_local;   /* nesting depth (det.c, cpu.c: no preemption, no clock polls) */
 static RECOMP_TLS uint32_t t_mark;
 

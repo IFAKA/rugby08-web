@@ -16,8 +16,6 @@
 #include <string.h>
 
 RECOMP_TLS rt_ehpad_t *g_eh_top;
-RECOMP_TLS int g_eh_active;
-RECOMP_TLS uint32_t g_eh_resume;
 
 extern const uint32_t recomp_eh_cont[];      /* gen/recomp/recomp_dispatch.c, sorted */
 extern const uint32_t recomp_eh_cont_count;

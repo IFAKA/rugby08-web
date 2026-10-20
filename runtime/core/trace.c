@@ -11,7 +11,6 @@
 #define ENTER_RING 256
 volatile uint32_t rt_present_frame;
 static RECOMP_TLS uint32_t t_enter[ENTER_RING][3];
-RECOMP_TLS uint32_t t_enter_idx; /* counted inline by RECOMP_ENTER (recomp_types.h) */
 
 /* Functions entered on this thread since the index rt_enter_mark() returned (oldest first, up to
  * the ring's size) into out[]; returns how many. The shadow check names a mismatch's callees. */
