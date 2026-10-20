@@ -92,6 +92,7 @@
   function workerMain() {
     onmessage = function (e) {
       const m = e.data;
+      postMessage('ready'); // running: the game may start reading (startWorker)
       const ctl = new Int32Array(m.ctl);
       const data = new Uint8Array(m.data);
       let done = 0;
@@ -126,6 +127,9 @@
     };
   }
 
+  // The game starts only once the worker runs: a read spins the main thread until its chunk is there,
+  // and a worker still starting needs that thread to load its script. A read first deadlocked the page
+  // (headless Chrome 155, several pages at once: 2 boots in 3 hung at the first lazy read, 2026-10-20).
   function startWorker(own) {
     ctl = new Int32Array(new SharedArrayBuffer((S0 + NSLOT * 3 + 16) * 4));
     const dataSab = new SharedArrayBuffer(NSLOT * chunkBytes);
@@ -143,6 +147,7 @@
       base: new URL('data/', location.href).href,
       own: own ? Module.ownCopy.DIR : '',
     });
+    return new Promise((ready) => (w.onmessage = ready));
   }
 
   function mkdirs(path) {
@@ -213,9 +218,8 @@
           return c0;
         });
         return (man.own ? Module.ownCopy.prepare(man) : Promise.resolve()).then(function () {
-          startWorker(man.own);
           man.files.forEach((f, fi) => mountFile(f, first[fi]));
-          removeRunDependency('gamefs');
+          return startWorker(man.own).then(() => removeRunDependency('gamefs'));
         });
       });
   });
