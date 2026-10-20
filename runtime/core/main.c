@@ -32,6 +32,8 @@ static void usage(void) {
 int main(int argc, char **argv) {
     const char *log_path = "logs/native_run.log";
     if (getenv("RT_LOG_INPUT")) rt_log_input = 1;
+    if (getenv("RT_USER_DIR"))
+        snprintf(rt_user_dir, sizeof rt_user_dir, "%s", getenv("RT_USER_DIR")); /* tests; --user-dir wins */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--exe") && i + 1 < argc) snprintf(rt_exe_path, sizeof rt_exe_path, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--game-dir") && i + 1 < argc)

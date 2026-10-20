@@ -6,7 +6,7 @@
 # Muted: SDL's dummy audio driver still runs the mixer callback in real time but plays nothing
 # (set SDL_AUDIODRIVER to override; scripts/play.sh is the interactive run with sound).
 cd "$(dirname "$0")/../.." || exit 1
-FRAMES=0 TMO=120 EXPECT='' EXTRA=''
+FRAMES=0 TMO=${RUN_NATIVE_TIMEOUT:-120} EXPECT='' EXTRA=''
 while [ $# -gt 0 ]; do
   case "$1" in
     --frames)
@@ -37,9 +37,29 @@ done
   echo "run_native: FAIL (build/native/rugby08 missing; ./init.sh build-native)"
   exit 1
 }
-SDL_AUDIODRIVER=${SDL_AUDIODRIVER:-dummy} timeout "$TMO" build/native/rugby08 --frames "$FRAMES" --log logs/native_run.log $EXTRA "$@" >logs/run_native.log 2>&1
-RC=$?
-if grep -qF -- "$EXPECT" logs/run_native.log; then
+# RUN_NATIVE_MEMO=DIR (check_all.sh): a run with the same args and the same binary runs once; the
+# repeats reuse its logs. Runs with an output file (--replay, --screenshot, --audio-capture) always run.
+M=
+[ -n "$RUN_NATIVE_MEMO" ] && [ -z "$EXTRA" ] &&
+  M="$RUN_NATIVE_MEMO/$(echo "$FRAMES $TMO $EXPECT $* $(stat -f %m build/native/rugby08 2>/dev/null || stat -c %Y build/native/rugby08)" | cksum | cut -d" " -f1)"
+rm -f logs/icall_miss.txt logs/native_run.log # this run's misses only (the game writes the file at its first miss)
+if [ -n "$M" ] && [ -f "$M/rc" ]; then
+  cp "$M/native_run.log" "$M/run_native.log" logs/
+  [ ! -f "$M/icall_miss.txt" ] || cp "$M/icall_miss.txt" logs/
+  RC=$(cat "$M/rc")
+else
+  SDL_AUDIODRIVER=${SDL_AUDIODRIVER:-dummy} timeout -s KILL "$TMO" build/native/rugby08 --frames "$FRAMES" --log logs/native_run.log $EXTRA "$@" >logs/run_native.log 2>&1 &
+  PID=$!
+  if [ "$FRAMES" -eq 0 ]; then # no last frame: done once the line is there (not at the timeout)
+    while kill -0 $PID 2>/dev/null && ! grep -qF -- "$EXPECT" logs/run_native.log logs/native_run.log; do sleep 0.2; done
+    pkill -KILL -P $PID 2>/dev/null # the game (SDL turns SIGTERM into a quit event the game ignores)
+  fi
+  wait $PID
+  RC=$?
+  [ -z "$M" ] || { mkdir -p "$M" && cp logs/native_run.log logs/run_native.log "$M/" &&
+    { [ ! -f logs/icall_miss.txt ] || cp logs/icall_miss.txt "$M/"; } && echo "$RC" >"$M/rc"; }
+fi
+if grep -qF -- "$EXPECT" logs/run_native.log logs/native_run.log; then # stdout to a file is buffered
   echo "run_native: ok ('$EXPECT' seen, exit $RC)"
   exit 0
 fi

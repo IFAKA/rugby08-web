@@ -43,18 +43,7 @@ case "${1:-status}" in
     ;;
   next) next_item ;;
   check) run_check "${2:?id}" ;;
-  check-all)
-    fails=0
-    for id in $(jq -r '.items[]|select(.passes)|.id' "$F"); do
-      cmd=$(jq -r --arg id "$id" '.items[]|select(.id==$id)|.check' "$F")
-      bash -c "$cmd" >"logs/check_$id.log" 2>&1 || {
-        echo "REGRESSION $id"
-        fails=1
-      }
-    done
-    [ $fails = 0 ] && echo "check-all: no regressions"
-    exit $fails
-    ;;
+  check-all) exec .venv/bin/python tools/check/check_all.py "${@:2}" ;;
   build-native) cmake -S . -B build/native -DCMAKE_BUILD_TYPE=RelWithDebInfo >logs/native_cmake.log 2>&1 && cmake --build build/native -j >logs/native_build.log 2>&1 && echo "build-native: ok" || {
     echo "build-native: FAIL ($(grep -m1 -i error logs/native_build.log logs/native_cmake.log | cut -c1-200))"
     exit 1

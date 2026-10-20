@@ -57,7 +57,7 @@ void recomp_miss(int tail, uint32_t va, uint32_t from) {
             g_nmiss++;
         } /* full: report, but do not remember */
     }
-    if (!g_miss_f) g_miss_f = fopen("logs/icall_miss.txt", "w");
+    if (!g_miss_f) g_miss_f = fopen(getenv("RT_MISS_FILE") ? getenv("RT_MISS_FILE") : "logs/icall_miss.txt", "w");
     if (g_miss_f) {
         fprintf(g_miss_f, "0x%08X %s from 0x%08X\n", va, tail ? "ITAIL" : "ICALL", from);
         fflush(g_miss_f);
