@@ -5,3 +5,4 @@ code's exact arithmetic (same results bit for bit, checked by the deterministic 
 
 - `vec3_transform.c` FUN_0079B230: a point through a 4x4 matrix (CPU skinning's inner call).
 - `matrix_multiply.c` FUN_007BA0D6: D3DXMatrixMultiply (x87 path), the hottest function in a match.
+- `skin_loop.c` GAME_BLOCK in FUN_00773FD0: the CPU skinning vertex loop (x87 path).

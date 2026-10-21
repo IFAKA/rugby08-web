@@ -118,3 +118,28 @@ def fp_locals(code):
     if not FP_USE.search(code):
         return code
     return code.replace("RECOMP_REGS_LOCALS\n", "RECOMP_REGS_LOCALS\n    RECOMP_FP_LOCALS\n", 1)
+
+
+GOTO_RE = re.compile(r"goto L_([0-9A-F]{8});\s*/\* 0x([0-9A-F]{8}):")
+
+
+def game_blocks(code, blocks):
+    """GAME_BLOCK(start, end) (game/include/game.h): the lifted code from `start` up to `end` runs as the
+    hand-written block_<start>() instead. Entered only at `start`: a jump from outside into the range
+    would skip the C, so that fails the lift."""
+    for start, end in blocks:
+        label = f"L_{start:08X}:\n"
+        if label not in code:
+            continue
+        if f"L_{end:08X}:\n" not in code:
+            raise ValueError(f"GAME_BLOCK {start:08X}: no label at its end {end:08X}")
+        for m in GOTO_RE.finditer(code):
+            tgt, at = int(m.group(1), 16), int(m.group(2), 16)
+            if start < tgt < end and not start <= at < end:
+                raise ValueError(f"GAME_BLOCK {start:08X}: 0x{at:08X} jumps into it at 0x{tgt:08X}")
+        call = (
+            f"    RECOMP_FLAGS_OUT(); RECOMP_REGS_OUT(); block_{start:08X}(); RECOMP_REGS_IN(); RECOMP_FLAGS_IN();"
+            f" goto L_{end:08X}; /* game/overrides: GAME_BLOCK */\n"
+        )
+        code = code.replace(label, label + call, 1)
+    return code

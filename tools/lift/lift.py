@@ -30,6 +30,7 @@ from lift_passes import (  # noqa: E402
     carry_flags,
     eh_wrap,
     fp_locals,
+    game_blocks,
     overlap_fallthroughs,
     overlap_gotos,
     ret_jumps,
@@ -44,6 +45,7 @@ _G = {}
 
 
 OVERRIDE_RE = re.compile(r"GAME_OVERRIDE\(sub_([0-9A-F]{8})\)")
+BLOCK_RE = re.compile(r"GAME_BLOCK\(([0-9A-F]{8}), ([0-9A-F]{8})\)")
 
 
 def game_overrides():
@@ -55,8 +57,18 @@ def game_overrides():
     return found
 
 
+def game_block_ranges():
+    """Address ranges inside lifted functions that game/overrides/ writes in C (GAME_BLOCK, lift_passes.game_blocks)."""
+    return sorted(
+        (int(m.group(1), 16), int(m.group(2), 16))
+        for f in sorted((root / "game/overrides").rglob("*.c"))
+        for m in BLOCK_RE.finditer(f.read_text())
+    )
+
+
 def _init():
     _G["overrides"] = game_overrides()
+    _G["blocks"] = game_block_ranges()
     info = analyze_pe(EXE)
     # One buffer over both code ranges (tools/lift/ranges.py): .text and the protector region inside
     # .data. The dump is flat (raw == virtual), so image bytes are file bytes from ImageBase.
@@ -200,6 +212,7 @@ def lift_one(idx):
         code = generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr)
         code = overlap_gotos(code, falls, starts)
         code = fp_locals(zero_fill_tails(carry_flags(ret_jumps(code)), _G["code"], _G["code_start"]))
+        code = game_blocks(code, _G["blocks"])
         hook = _G["hooks"].get(addr)
         if hook:  # tools/hooks.json: announce entry (checks grep for "<name> entered")
             code = code.replace(
@@ -241,6 +254,7 @@ def main():
             print(f"chunk {fi}: {n} funcs, {e} errors", file=log, flush=True)
     names = [f"sub_{a:08X}" for a in E]
     lifted = "".join(f"void sub_{a:08X}_lifted(void);\n" for a in sorted(_G["overrides"]))
+    lifted += "".join(f"void block_{a:08X}(void);\n" for a, _ in _G["blocks"])
     (OUT / "recomp_funcs.h").write_text(
         "#pragma once\n#include <stdint.h>\n\n" + "".join(f"void {n}(void);\n" for n in names) + lifted
     )
