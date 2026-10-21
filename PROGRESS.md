@@ -557,3 +557,8 @@ identical to the base run. Next: D3DXMatrixMultiply (0x7BA0D6) override, then CP
 1465 -> 76 samples, 225 det hashes identical. Learned: the det hash covers the whole main stack, so an
 override also writes the bytes the original frame leaves below esp (saved registers, the aliasing copy)
 and the x87 stack it leaves (FFREE frees, does not pop). Next: CPU skinning 0x773FD0 (1389 samples).
+2026-10-21 (fps) GAME_BLOCK: part of a lifted function in C (game/include/game.h, lift_passes.game_blocks;
+like N64Recomp's instruction hooks). First use: FUN_00773FD0's x87 skinning loop (game/overrides/math/
+skin_loop.c): 1389 -> 156 samples, vec3 455 -> 234; 225 det hashes identical; lift.difftest/fidelity/
+crt_math pass. Open play game code since the start of this work: 10826 -> 4898 samples (-55%); the
+profile is flat now (top 243). Next: port these to main, web check, then fps.interp headroom.

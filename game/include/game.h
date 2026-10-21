@@ -26,4 +26,9 @@
         return;                                                                                                        \
     } while (0)
 
+/* A range inside a lifted function in C: GAME_BLOCK(00774300, 007743A2) { ... } runs instead of the
+ * lifted code from 0x774300 and continues at 0x7743A2 (tools/lift/lift_passes.py game_blocks). It sees
+ * the guest registers, flags and x87 stack in the g_* globals and leaves them as that code would. */
+#define GAME_BLOCK(start, end) void block_##start(void)
+
 #endif
