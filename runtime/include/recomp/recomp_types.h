@@ -156,8 +156,8 @@ extern const uint32_t recomp_dispatch_count;
 #define edi l_edi
 #define ebp l_ebp
 #define RECOMP_REGS_LOCALS uint32_t l_eax = g_eax, l_ecx = g_ecx, l_edx = g_edx, l_ebx = g_ebx, l_esp = g_esp, l_esi = g_esi, l_edi = g_edi, l_ebp = g_ebp;
-#define RECOMP_REGS_OUT() (g_eax = l_eax, g_ecx = l_ecx, g_edx = l_edx, g_ebx = l_ebx, g_esp = l_esp, g_esi = l_esi, g_edi = l_edi, g_ebp = l_ebp)
-#define RECOMP_REGS_IN() (l_eax = g_eax, l_ecx = g_ecx, l_edx = g_edx, l_ebx = g_ebx, l_esp = g_esp, l_esi = g_esi, l_edi = g_edi, l_ebp = g_ebp)
+#define RECOMP_REGS_OUT() (g_eax = l_eax, g_ecx = l_ecx, g_edx = l_edx, g_ebx = l_ebx, g_esp = l_esp, g_esi = l_esi, g_edi = l_edi, g_ebp = l_ebp, RECOMP_FP_OUT())
+#define RECOMP_REGS_IN() (l_eax = g_eax, l_ecx = g_ecx, l_edx = g_edx, l_ebx = g_ebx, l_esp = g_esp, l_esi = g_esi, l_edi = g_edi, l_ebp = g_ebp, RECOMP_FP_IN())
 #else
 #define RECOMP_REGS_LOCALS
 #define RECOMP_REGS_OUT() ((void)0)
@@ -176,8 +176,7 @@ extern const uint32_t recomp_dispatch_count;
 #endif
 #ifdef RECOMP_GENERATED_CODE
 /* x87 FPU stack is global; _fpu_cmp stays per-function (set+used within one fn) */
-#define _st g_st
-#define _fp_top g_fp_top
+#include "recomp_fp.h"
 #define _fpu_cw g_fpu_cw
 /* MMX file is global too. The lifter emits _mm[n] (see lift32.MMX_REGS), so the
  * alias has to exist alongside the others or every MMX body fails to compile. */

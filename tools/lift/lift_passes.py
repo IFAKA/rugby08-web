@@ -108,3 +108,13 @@ def overlap_gotos(code, falls, starts):
         )
         code = code.replace(lab, f"\n{jump} /* fall-through of an overlapping decode */{lab}", 1)
     return code
+
+
+FP_USE = re.compile(r"\b(_st|_fp_top)\b|\bfp_(push|pop)\(")
+
+
+def fp_locals(code):
+    """A body that touches the x87 stack keeps it in locals (runtime/include/recomp/recomp_fp.h)."""
+    if not FP_USE.search(code):
+        return code
+    return code.replace("RECOMP_REGS_LOCALS\n", "RECOMP_REGS_LOCALS\n    RECOMP_FP_LOCALS\n", 1)
