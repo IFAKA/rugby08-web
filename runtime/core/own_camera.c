@@ -42,9 +42,19 @@ static int on(void) {
 }
 int own_camera_on(void) { return on(); }
 
-/* Changes to the camera options since the last look: every game takes them, a pauser's CHANGE CAMERA too
-   (the game's camera is the same in every game: one game's own camera parted the games, the user's play
-   test 2026-10-14; each player's own view is drawn: own_end.c, ui_camera.c). */
+/* A camera setting chosen now is the acting player's own (the user, 2026-10-21: each player's camera is
+   theirs, as when playing alone): on a camera screen (the pause menu's CHANGE CAMERA, the menus' camera
+   options) driven by another player of the party, this game keeps its player's settings and its camera
+   does not hear the change (own_camera_personal). Anything else (a profile loaded) is this player's. */
+#define SCR_CHANGE_CAMERA 0x2C
+#define SCR_MENU_CAMERA   0x1BA
+static int theirs(void) {
+    int id = fe_screen_id() & 0xFFFF;
+    return __builtin_popcount(ls_members()) > 1 && (id == SCR_CHANGE_CAMERA || id == SCR_MENU_CAMERA) &&
+           ls_roles_actor() != rt_net_slot();
+}
+
+/* Changes to the camera options since the last look (every Present and before the camera hears of one). */
 void own_camera_options(void) {
     if (!on()) return;
     uint8_t *o = (uint8_t *)G2H(OPTIONS + O_CAM_LO);
@@ -54,10 +64,25 @@ void own_camera_options(void) {
     }
     if (!memcmp(o, g_seen, sizeof g_seen)) return;
     int id = fe_screen_id(), actor = ls_roles_actor();
-    rt_trace("ms: own camera options changed on screen %04X by player %d", id & 0xFFFF, actor + 1);
-    memcpy(g_mine, o, sizeof g_mine);   /* (shared in a party: a game camera of each game's own parted the games,
-                                          2026-10-14; each player's own view is drawn only: own_end.c, ui_camera.c) */
+    if (theirs()) {
+        rt_trace("ms: own camera options of player %d on screen %04X: kept this player's", actor + 1, id & 0xFFFF);
+        memcpy(o, g_mine, sizeof g_mine);
+    } else {
+        rt_trace("ms: own camera options changed on screen %04X by player %d", id & 0xFFFF, actor + 1);
+        memcpy(g_mine, o, sizeof g_mine);
+    }
     memcpy(g_seen, o, sizeof g_seen);
+}
+
+/* The camera hears event ID: 0 a match event, 1 a camera setting of this player's, 2 another player's
+   (camera_events.c: not this game's camera; both personal kinds run outside the lockstep's scheduling,
+   det_local, as one game runs them and the others do not). */
+int own_camera_personal(uint32_t id) {
+    if (id != 0x118 && id != 0x119) return 0;   /* (camera style, auto zoom: FUN_00574B60, docs/PARTY_RESEARCH.md) */
+    own_camera_options();
+    if (!on() || !theirs()) return 1;
+    rt_trace("ms: own camera: player %d's camera change %X not heard here", ls_roles_actor() + 1, id);
+    return 2;
 }
 
 void own_camera_adopt(void) {

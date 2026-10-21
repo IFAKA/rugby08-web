@@ -93,7 +93,7 @@ uint32_t ms_ball_va(void); /* BallManager* or 0 */
 void ms_camera_after(uint32_t ctrl, uint32_t cam, uint32_t proj);   /* game/overrides/match/camera_update.c */
 void ms_camera_last(uint8_t *out);        /* this game's view at the last Present */
 void ms_camera_game(uint8_t *out);        /* the game camera's own computed view (its controller's 16 floats) */
-void ms_camera_event(uint32_t listener, uint32_t event);  /* the CameraManager hears a match event */
+int ms_camera_event(uint32_t listener, uint32_t event);   /* the CameraManager hears an event (own_camera_personal) */
 void ms_camera_event_done(uint32_t event);                 /* ... and has picked its camera (RT_MS_CAMEV) */
 void ms_camera_host(const uint8_t *cam);                  /* a friend shows this view (NULL: its own) */
 void ms_camera_remote(uint32_t id, uint32_t param);       /* a friend: the host's camera event ('C') */

@@ -1,7 +1,7 @@
 /* ls_simhash.c -- the state hash of a party whose players each have their own camera (own_camera.c).
  * Their games then differ in what each one draws (camera, culling, the drawing's buffers: measured, 84
  * of 14079 pages at one frame), so the hash covers what the match is, as lockstep games check sync:
- * the match setup (teams, stadium, conditions), the options outside the camera's, the front end's
+ * the match setup (teams, stadium, conditions), the options outside the camera's (and its dirty flag), the front end's
  * screen, and in a match every player (position, heading, state), the ball, score, clock and phase. */
 #include "rt.h"
 #include "fe_party.h"
@@ -12,6 +12,7 @@
 #define O_SIZE  0x2E0u
 #define O_CAM   0x230u /* .. 0x258: each player's camera (own_camera.c) */
 #define O_CAM_E 0x258u
+#define O_DIRTY 0x2D8u /* the options changed since saved (FUN_006C5E40): this player's own, as the camera's */
 
 static uint64_t mix(uint64_t h, const void *p, size_t n) {
     const uint8_t *b = (const uint8_t *)p;
@@ -23,7 +24,8 @@ uint64_t ls_simhash(void) {
     uint64_t h = 0xCBF29CE484222325ull;
     h = mix(h, G2H(ms_setup_va()), ms_setup_size());
     h = mix(h, G2H(OPTIONS), O_CAM);
-    h = mix(h, G2H(OPTIONS + O_CAM_E), O_SIZE - O_CAM_E);
+    h = mix(h, G2H(OPTIONS + O_CAM_E), O_DIRTY - O_CAM_E);
+    h = mix(h, G2H(OPTIONS + O_DIRTY + 1), O_SIZE - O_DIRTY - 1);
     int id = fe_screen_id();
     h = mix(h, &id, sizeof id);
     for (int t = 0; t < MS_TEAMS; t++)

@@ -52,7 +52,7 @@ static int forwarded(uint32_t id) {
     return 0;
 }
 
-void ms_camera_event(uint32_t listener, uint32_t event) {
+int ms_camera_event(uint32_t listener, uint32_t event) {
     own_camera_options();   /* (this player's camera settings, before the camera hears of a change) */
     own_hud_event(event);   /* (who acts: a party's prompts, own_hud.c) */
     g_listener = listener;
@@ -61,6 +61,7 @@ void ms_camera_event(uint32_t listener, uint32_t event) {
         uint32_t v[2] = { id, rd32(event + 0xC) };
         net_ha_send('C', 0, v, sizeof v);
     }
+    return own_camera_personal(id);
 }
 
 /* RT_MS_CAMEV=1: every match event the cameras hear, and the camera after it (what flips an end camera). */

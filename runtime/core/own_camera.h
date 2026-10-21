@@ -11,6 +11,7 @@ extern int rt_own_camera;                       /* --own-camera: each player's o
 int own_camera_on(void);                        /* on: the state hash is the match's (ls_simhash.c) */
 uint64_t ls_simhash(void);                      /* ls_simhash.c */
 void own_camera_options(void);                  /* every Present and before the camera hears or steps */
+int own_camera_personal(uint32_t id);           /* a camera event: 0 match, 1 this player's setting, 2 another's */
 void own_camera_adopt(void);                    /* the options as they are now are this player's (tests) */
 void own_camera_before(void);                   /* the camera step begins (match_camera.c) */
 void own_camera_after(uint32_t cam);            /* the camera step is done (its LookAtCamera) */
