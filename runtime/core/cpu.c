@@ -1,6 +1,5 @@
-/* cpu.c -- the CPU state the lifted code reads, dispatch lookups, bridges, guest_call. */
+/* cpu.c -- the CPU state the lifted code reads, manual and import lookups, bridges, guest_call. */
 #include "rt.h"
-#include "aems.h"
 #include <pthread.h>
 #include <stdlib.h>
 #include <time.h>
@@ -152,19 +151,6 @@ recomp_func_t recomp_lookup_manual(uint32_t va) {
 recomp_func_t recomp_lookup_import(uint32_t va) {
     (void)va;
     return NULL;
-}
-
-recomp_func_t recomp_lookup(uint32_t va) {
-    uint32_t lo = 0, hi = recomp_dispatch_count;
-    while (lo < hi) {
-        uint32_t mid = (lo + hi) >> 1;
-        uint32_t m = recomp_dispatch_table[mid].address;
-        if (m == va) return recomp_dispatch_table[mid].func;
-        if (m < va) lo = mid + 1;
-        else hi = mid;
-    }
-    /* outside the image: run-time loaded sound-bank code (runtime/core/aems.c) */
-    return (va < RT_IMAGE_BASE || va >= RT_IMAGE_END) ? aems_lookup(va) : NULL;
 }
 
 /* ---- guest_call ------------------------------------------------------------ */

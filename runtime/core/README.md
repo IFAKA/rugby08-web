@@ -1,7 +1,8 @@
 # runtime/core/ — boot and the machine the lifted code runs on
 
 - `main.c` boot: arena, PE image, imports, main thread, the game's entry point.
-- `cpu.c` CPU state globals, dispatch lookup, import/COM bridges, the guest lock, `guest_call`, dispatch misses.
+- `dispatch.c` `recomp_lookup`: guest VA to lifted function through a hash built once from the sorted table.
+- `cpu.c` CPU state globals, manual/bridge lookup, import/COM bridges, the guest lock, `guest_call`, dispatch misses.
 - `cpu_ext.c` helpers for instructions `tools/lift_ext.py` adds (faults, BCD, packed BCD).
 - `mem.c` guest arena + PE loader · `heap.c` guest heap (dlmalloc mspace) · `thread.c` per-thread CPU state.
 - `det.c` deterministic mode (`RT_DET=1`: virtual clock, guest scheduler, state hash) · `pads.c` virtual pads.
