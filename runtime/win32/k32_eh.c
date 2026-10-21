@@ -45,7 +45,7 @@ void rt_eh_jump(uint32_t va) {
             g_eh_active = 0;
             p->resume = va;
             g_eh_top = p;
-            longjmp(p->jb, 1);
+            RT_LONGJMP(p->jb, 1);
         }
     }
     rt_log("EH: continuation 0x%08X for ebp 0x%08X has no landing pad", va, g_ebp);

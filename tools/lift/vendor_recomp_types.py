@@ -136,6 +136,10 @@ t = t.replace(
 t = t.replace(
     "/* Lookup functions */",
     """#include <setjmp.h>
+#ifndef RT_SETJMP /* native builds pass _setjmp/_longjmp: no signal mask saved (two system calls each on macOS) */
+#define RT_SETJMP setjmp
+#define RT_LONGJMP longjmp
+#endif
 typedef struct rt_ehpad { struct rt_ehpad *prev; jmp_buf jb; uint32_t ebp, resume; } rt_ehpad_t;
 extern RECOMP_TLS rt_ehpad_t *g_eh_top;
 extern RECOMP_TLS int g_eh_active;                 /* > 0 while RaiseException runs guest handlers */
@@ -144,7 +148,7 @@ void rt_eh_jump(uint32_t va);                      /* longjmps to the pad of the
 /* The body stays void(void) so its tail jumps remain musttail; the pad lives in this wrapper frame. */
 #define RECOMP_EH_WRAP(body) do { \\
     rt_ehpad_t _p; _p.prev = g_eh_top; _p.ebp = 0; _p.resume = 0; g_eh_top = &_p; \\
-    if (setjmp(_p.jb)) g_eh_resume = _p.resume; else g_eh_resume = 0; \\
+    if (RT_SETJMP(_p.jb)) g_eh_resume = _p.resume; else g_eh_resume = 0; \\
     body(); \\
     g_eh_top = _p.prev; \\
 } while (0)

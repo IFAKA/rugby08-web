@@ -562,3 +562,8 @@ like N64Recomp's instruction hooks). First use: FUN_00773FD0's x87 skinning loop
 skin_loop.c): 1389 -> 156 samples, vec3 455 -> 234; 225 det hashes identical; lift.difftest/fidelity/
 crt_math pass. Open play game code since the start of this work: 10826 -> 4898 samples (-55%); the
 profile is flat now (top 243). Next: port these to main, web check, then fps.interp headroom.
+2026-10-21 (fps) C++ EH pads use _setjmp/_longjmp natively (RT_SETJMP, CMake): macOS setjmp saves the
+signal mask with two system calls (sigprocmask 230 + sigaltstack 122 main-thread samples, gone); no
+longjmp ever leaves a signal handler (on_fault exits). Hashes identical. fps.interp still FAILS: its bar
+(median 70 in-between frames/s at 144 Hz) needs the drawing on its own thread (RT64, Dolphin dual core,
+PCSX2 MTGS, Mesa glthread): serially a step would have to cost < 3 ms; it is ~8 ms now (was ~12).
