@@ -4,7 +4,7 @@ Each is armed by an environment variable or a `tools/hooks.json` name and costs 
 
 - `probes.c` RT_PROBE, RT_PROBE_DUMP, RT_DUMP · `coverage.c` RT_COVERAGE (and the per-Present frame hook).
 - `hooks.c` hooks.json names (`NAME entered`, args:, list:, ctl:, stick:, shadow:) · `selftest_crt.c` RT_SELFTEST_CRT.
-- `shadow.c` the shadow check (interpreter vs lifted code) · `frames.cpp` per-Present: `--frames`/`--screenshot`,
+- `shadow.c` the shadow check (interpreter vs lifted code) · `trace_rig.c` RT_TRACE_RIG (JSON per match frame for ../rugby-cleanroom) · `frames.cpp` per-Present: `--frames`/`--screenshot`,
   replay shots, the menu-change probe, RT_TRACE_DRAWS_FRAME, RT_LOG_LIGHTS, RT_PIX / RT_PIX_DUMP (the game's
   picture hashed or dumped before local overlays: players of a lockstep party must see the same).
 - `match_probe.c` RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP (finding match objects) · `match_stream_check.c`

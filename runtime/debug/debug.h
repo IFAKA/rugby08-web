@@ -13,6 +13,7 @@ void rt_dump_at(uint32_t frame);      /* probes.c: RT_DUMP memory ranges at a pr
 void rt_coverage_mark(uint32_t va);   /* coverage.c: RT_COVERAGE, a function entered */
 void rt_selftest_crt(void);           /* selftest_crt.c: RT_SELFTEST_CRT, then exit */
 void ms_probe_frame(uint32_t frame);  /* match_probe.c: RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP at a Present */
+void trace_rig_frame(uint32_t frame); /* trace_rig.c: RT_TRACE_RIG, one JSON line per match frame */
 void ms_stream_check_frame(void);     /* match_stream_check.c: RT_MS_STREAM_CHECK */
 void ms_quit_frame(uint32_t frame);   /* match_quit.c: RT_MS_QUIT_AT, RT_MS_RELAUNCH */
 void net_ha_test_press(rt_pad_t *local, int host_phase, uint32_t frame);   /* net_ha_press.c */

@@ -140,6 +140,7 @@ bool d3d8_debug_reads_frames(void) {
 
 void d3d8_debug_present(uint32_t frame, int w, int h) {
     ms_probe_frame(frame);   // match_probe.c: RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP
+    trace_rig_frame(frame);  // trace_rig.c: RT_TRACE_RIG (clean-room measuring rig)
     if (rt_replay_path[0]) menu_change_probe(frame, w, h);
     if (frame == 1 || frame % 60 == 0 || (int)frame == rt_frame_limit) rt_trace("frame %u", frame);
     if (rt_frame_limit > 0 && (int)frame >= rt_frame_limit) {
