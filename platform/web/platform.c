@@ -3,6 +3,9 @@
 #include "plat.h"
 #include "../sdl/sdl_int.h"
 #include <emscripten.h>
+#include <emscripten/threading.h>
+#include <stdatomic.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 void rt_platform_init(int argc, char **argv) {
@@ -75,7 +78,12 @@ EM_JS(double, js_display_hz, (void), {
     return Module.rtHz;
 });
 // clang-format on
-double plat_display_hz(void) { return js_display_hz(); }
+static atomic_int g_hz_mhz;   /* (counted on the page thread; the render thread reads it) */
+double plat_display_hz(void) {
+    if (emscripten_is_main_browser_thread()) atomic_store(&g_hz_mhz, (int)(js_display_hz() * 1000));
+    int v = atomic_load(&g_hz_mhz);
+    return v ? v / 1000.0 : 60;
+}
 static double clock_ms(void) { return emscripten_get_now(); }
 static void swap_none(void) {}
 /* RT_TEST_HZ=N (tests only, ?env=): an emulated display's refreshes come on a timer (fps.party) */
@@ -92,6 +100,7 @@ static void test_draw_cost(void) {
     while (cost > 0 && emscripten_get_now() < end) {}
 }
 
+double d3d9w_rq_hand_waited_take(void);
 static double g_next, g_end;   /* the next frame's slot; when the last one came back from the browser */
 
 /* A frame's slot: 60 frames per second of wall time; in deterministic mode (netplay) the virtual time
@@ -99,8 +108,8 @@ static double g_next, g_end;   /* the next frame's slot; when the last one came 
  * to it (count the frame for the page's fps counter, shell Module.rtFrames). Not drawn (fps.skip):
  * control stays with the game, unless the slot is still ahead. What the frame cost (sdl_skip.c): its
  * work since the last one came back, and the browser's time past the slot (a slow GPU's backlog). */
-static void frame_slot(int drawn) {
-    double now = emscripten_get_now(), period = 1000.0 / 60.0, dp = det_period_ms();
+static void frame_slot(int drawn, double dp) {   /* (dp: det_period_ms, read once a frame) */
+    double now = emscripten_get_now(), period = 1000.0 / 60.0;
     if (rt_ff) {   /* catching up: the joining screen, shown but never paced */
         g_next = g_end = 0;
         skip_reset();
@@ -109,12 +118,14 @@ static void frame_slot(int drawn) {
     }
     if (g_next == 0 || now - g_next > 4 * period) g_next = now;   /* first frame, or fell far behind: resync */
     g_next += dp < 0 ? period : dp;
-    if (drawn) interp_fill(now, g_next, dp < 0 ? period : dp, clock_ms, refresh_wait, swap_none); /* fps.interp */
+    if (drawn && render_threaded()) skip_render_done(render_drawn_ms()), plat_display_hz();   /* (the worker draws) */
+    else if (drawn) interp_fill(now, g_next, dp < 0 ? period : dp, clock_ms, refresh_wait, swap_none); /* fps.interp */
     double back = emscripten_get_now();
     if (drawn || g_next > back + 1) js_frame_wait(g_next - back);
     double t1 = emscripten_get_now(), late = t1 - (g_next > now ? g_next : now);
-    if (g_end > 0)   /* (a lockstep wait for others' inputs is pacing, not work) */
-        skip_frame_done(drawn, now - g_end + (late > 0 ? late : 0) - rt_net_waited_take(), dp < 0 ? period : dp);
+    if (g_end > 0) /* (a lockstep wait for others' inputs is pacing, not work) */
+        skip_frame_done(drawn, now - g_end + (late > 0 ? late : 0) - rt_net_waited_take() - d3d9w_rq_hand_waited_take(),
+                        dp < 0 ? period : dp);
     g_end = t1;
     /* perf: game work per frame (resume to Present) vs time handed to the browser, every 600 frames */
     static double last, work, worst, wait;
@@ -131,22 +142,34 @@ static void frame_slot(int drawn) {
     if (n == 600) {
         rt_trace(
             "web perf: %.0f fps (%d of 600 steps not drawn, %d frames between steps), work %.1f ms/frame (worst %.1f), "
-            "browser %.1f ms/frame",
-            600000.0 / (work + wait) * (600 - undrawn) / 600, undrawn, interp_frames_take(), work / n, worst, wait / n);
+            "browser %.1f ms/frame, drawing %.1f ms/frame",
+            600000.0 / (work + wait) * (600 - undrawn) / 600, undrawn, interp_frames_take(), work / n, worst, wait / n,
+            render_drawn_ms());
         work = worst = wait = 0;
         n = undrawn = 0;
     }
 }
 
+void d3d9w_rq_post(void (*f)(void *), void *arg);
+void d3d9w_rq_hand(void);
+static void swap_posted(void *slot_us) { /* (render thread) the step's frame */
+    test_draw_cost();
+    render_swapped((double)(intptr_t)slot_us / 1000.0);
+}
+
 void plat_gl_swap(void) {
     EM_ASM(Module.rtFrames = (Module.rtFrames | 0) + 1);
-    test_draw_cost();
-    frame_slot(1);
+    double dp = det_period_ms();
+    if (render_threaded()) { /* the step's calls to the render thread (platform/web/render_thread.c) */
+        d3d9w_rq_post(swap_posted, (void *)(intptr_t)((dp >= 0 ? dp : 1000.0 / 60.0) * 1000.0));
+        d3d9w_rq_hand();
+    } else test_draw_cost();
+    frame_slot(1, dp);
 }
 
 int plat_frame_late(void) { return !rt_ff && skip_next(); }
 
-void plat_frame_skip(void) { frame_slot(0); }
+void plat_frame_skip(void) { frame_slot(0, det_period_ms()); }
 
 /* wasm32: guest VAs wrap mod 2^32 through ADDR(); the first 1 GiB is backed. */
 void *plat_guest_arena(uint32_t *size) {
@@ -155,13 +178,3 @@ void *plat_guest_arena(uint32_t *size) {
     if (!arena) rt_fatal("arena: cannot allocate %u bytes", *size);
     return arena;
 }
-
-/* The render thread is native only for now (the browser's needs an OffscreenCanvas: docs/plans/2026-10-21-render-thread.md) */
-void plat_render_start(void) {}
-int render_threaded(void) { return 0; }
-void render_swapped(double slot_ms) { (void)slot_ms; }
-int render_defer_size(int w, int h) {
-    (void)w, (void)h;
-    return 0;
-}
-void render_pump(void) {}

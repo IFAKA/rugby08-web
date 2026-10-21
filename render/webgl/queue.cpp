@@ -28,9 +28,19 @@ float g_sent_vsc[100][4], g_sent_psc[8][4];
 bool g_sent_any;
 int g_syncs;   // the game's waits for the render thread since d3d9w_rq_syncs_take
 
+// The game's thread waits for the render thread; the window system's calls queued for the game's thread
+// (the main one: a resized context's update, which the render thread waits for at its swap) run meanwhile
+template <class P> void wait_render(std::unique_lock<std::mutex> &l, P done) {
+    while (!g_cv.wait_for(l, std::chrono::milliseconds(1), done)) {
+        l.unlock();
+        plat_render_waiting();
+        l.lock();
+    }
+}
+
 void hand(void) {   // g_fill to the render thread, once it took the batch before
     std::unique_lock<std::mutex> l(g_mu);
-    g_cv.wait(l, [] { return !g_has_ready; });
+    wait_render(l, [] { return !g_has_ready; });
     std::swap(g_ready, g_fill);
     g_fill.clear();
     g_has_ready = true;
@@ -73,7 +83,7 @@ void rq_sync(void) {
     g_syncs++;
     hand();
     std::unique_lock<std::mutex> l(g_mu);
-    g_cv.wait(l, [] { return g_done == g_handed; });
+    wait_render(l, [] { return g_done == g_handed; });
 }
 
 void rq_call(const std::function<void()> &f) {   // run on the render thread, return when it ran
@@ -94,8 +104,21 @@ extern "C" int d3d9w_rq_syncs_take(void) {   // (perf line: how often the game w
     return n;
 }
 
+static double g_hand_waited;   // ms the game waited at Present for the render thread to take a batch
+
 extern "C" void d3d9w_rq_hand(void) {   // at Present: the step's calls to the render thread
-    if (rq_game() && !g_fill.empty()) hand();
+    if (!rq_game() || g_fill.empty()) return;
+    auto t0 = std::chrono::steady_clock::now();
+    hand();
+    g_hand_waited += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+}
+
+// Since asked: the render thread takes one step's frame a refresh, so two steps in one refresh wait
+// for the next; that is the display's pacing, not the game's work (fps.skip)
+extern "C" double d3d9w_rq_hand_waited_take(void) {
+    double w = g_hand_waited;
+    g_hand_waited = 0;
+    return w;
 }
 
 // The render thread: run the next batch, waiting for it at most `ms`. How long it ran (ms), < 0 if none.

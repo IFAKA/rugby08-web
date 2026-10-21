@@ -127,7 +127,7 @@ if(NOT EMSCRIPTEN)
   find_package(Threads REQUIRED)
   target_link_libraries(rugby08 PRIVATE Threads::Threads)
   find_package(SDL2 REQUIRED CONFIG)
-  target_link_libraries(rugby08 PRIVATE SDL2::SDL2 "-framework OpenGL")
+  target_link_libraries(rugby08 PRIVATE SDL2::SDL2 "-framework OpenGL" "-framework CoreFoundation")
 else()
   target_compile_options(rugby08 PRIVATE -sUSE_SDL=2)
 endif()
@@ -147,6 +147,7 @@ if(EMSCRIPTEN)
   # -O0 at link skips the wasm-opt -O3 pass (>1h and >24 GB on the 91 MB module); revisit for release builds.
   target_link_options(rugby08 PRIVATE -O0 -pthread -sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=16 -sEXIT_RUNTIME=1
+    -sOFFSCREENCANVAS_SUPPORT=1   # the canvas moves to the render thread (platform/web/render_thread.c)
     -sJSPI   # the Windows loop yields to the browser at every Present (d3d8_device.cpp) without Asyncify
     -sEXPORTED_RUNTIME_METHODS=callMain   # the page (shell.html) starts the game: solo, or an online session
     -sSUPPORT_LONGJMP=wasm -fwasm-exceptions

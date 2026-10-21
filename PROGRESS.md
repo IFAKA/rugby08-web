@@ -579,3 +579,8 @@ PCSX2 MTGS, Mesa glthread): serially a step would have to cost < 3 ms; it is ~8 
 - Fixed: the faster player's lockstep wait for inputs counted as its frame cost, so its skipper went to 30 fps too (rt_net_waited_take, subtracted on native and web).
 - Learned: two web pages on one Mac cannot show this (shared CPU), and the web build's in-between frames are serial (~88 frames/s at 144 Hz): the web render thread (plan gap 3) is what a browser 144 Hz friend needs. RT_TEST_HZ now times web refreshes too (relative ms: emscripten_get_now has another origin).
 - Next: web render thread (OffscreenCanvas), then port general fixes to main.
+
+2026-10-21 fps (web render thread): the browser draws on its own worker (platform/web/render_thread.c, OffscreenCanvas). Chrome makes a worker's WebGL context only while the page thread is free, so the worker makes it at start while the page yields; the worker runs its own refresh loop (rAF, or a timer grid for RT_TEST_HZ). Solo at 144 Hz: ~136 frames/s shown (88 before), 0 of 600 steps undrawn, drawing ~1 ms/frame.
+- Native Metal abort ("command encoder already encoding") fixed at the root: no SDL async-dispatch hint; the game thread runs the main run loop while it waits for the render thread (plat_render_waiting). Regress under load identical.
+- Skip controller: the wait at Present for the render thread to take a batch is display pacing, not work (d3d9w_rq_hand_waited_take); ls.boot host match 36 -> 60 fps.
+- Checks: web.smoke, ls.boot, net.web_lockstep, fps.interp, fps.skip, fps.party PASS (pt.freeze: superseded, fails "no room" as noted). Next: Safari worker WebGL test, port to main/online-ha.

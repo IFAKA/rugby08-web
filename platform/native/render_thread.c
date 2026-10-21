@@ -4,6 +4,7 @@
  * frames (interp_fill), beside the game instead of after it. The game's thread keeps the window and
  * its events: a resize asked from here is done at its next pump. */
 #include "../sdl/sdl_int.h"
+#include <CoreFoundation/CoreFoundation.h>
 #include <OpenGL/gl3.h>   /* glFinish */
 
 void d3d9w_rq_start(void);
@@ -74,14 +75,19 @@ static int render_main(void *unused) {
     return 0;
 }
 
+/* SDL's swap has a resized context updated on the main thread (the game's) and waits for it there: the
+   game's thread runs it while it waits for this one (render/webgl/queue.cpp). (Queued instead, with
+   SDL_MAC_OPENGL_ASYNC_DISPATCH, the update ran while this thread drew: Metal aborted, "A command
+   encoder is already encoding to this command buffer".) */
+void plat_render_waiting(void) { CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, true); }
+
+void plat_render_early(void) {}   /* (the browser's starts before the device: platform/web/) */
+
 /* After the device exists (render/webgl/factory.cpp). RT_RENDER_THREAD=0 (tests): all on one thread. */
 void plat_render_start(void) {
     const char *e = getenv("RT_RENDER_THREAD");
     if ((e && !atoi(e)) || !g_win || !g_gl || render_threaded()) return;
     g_tid = SDL_ThreadID();
-    /* SDL's swap updates a resized context on the main thread; waiting for it there deadlocks while the
-       game's thread (the main one) waits for this one, so it is queued instead */
-    SDL_SetHint("SDL_MAC_OPENGL_ASYNC_DISPATCH", "1");
     SDL_GL_MakeCurrent(g_win, NULL);
     g_up = SDL_CreateSemaphore(0);
     SDL_DetachThread(SDL_CreateThread(render_main, "render", NULL));

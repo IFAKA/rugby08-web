@@ -9,7 +9,7 @@ game's "perf:" line a second (frame.c):
   slow    60 steps a second (within 2%), fewer than 45 drawn and steady (each second within 2 of the median);
   144 Hz  60 steps a second, at least 120 frames a second shown (steps and frames between them);
   both    the netplay state hashes the same and no DESYNC.
-(Two web pages on one Mac cannot show this: they share its CPU, and the web build has no render thread yet.)
+(Two web pages on one Mac cannot show this: they share its CPU.)
 One line; details in logs/fps_party/."""
 
 import os

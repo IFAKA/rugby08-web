@@ -57,7 +57,11 @@ D3D8 layer calls ~40 of its entry points; GL has 90 functions at ~400 call sites
 - Gap 1: readbacks (gpu_read, screenshots, frame read) run through `d3d9w_on_render`, which waits
   for the queue to drain. Regress with the thread on is identical to the thread off.
 - Gap 2: SDL3 Cocoa's swap does dispatch_sync to the main thread, which deadlocked while the main
-  thread waited in a sync call. Filled by `SDL_MAC_OPENGL_ASYNC_DISPATCH=1` (found with `sample`).
+  thread waited in a sync call. First filled by `SDL_MAC_OPENGL_ASYNC_DISPATCH=1` (found with `sample`),
+  but then the context update ran on the main thread while the render thread drew: Metal aborted
+  ("command encoder is already encoding", more often under load). Filled for good: no hint, and the
+  game thread runs the main run loop while it waits for the render thread (`plat_render_waiting`,
+  `CFRunLoopRunInMode`), so SDL's dispatch_sync is served. Regress under load: identical.
 - New gap, refresh timing: refreshes timed from the swap gave 68 frames/s at 144 Hz. Filled by a
   display-grid loop on the render thread: batches run as they arrive, and at each refresh that has
   no new step frame it draws an in-between frame (78-80 frames/s).
@@ -85,3 +89,19 @@ D3D8 layer calls ~40 of its entry points; GL has 90 functions at ~400 call sites
   OffscreenCanvas in the worker), SDL2's emscripten window keeping its events on the main thread,
   the fallback without OffscreenCanvas (no render thread: today's serial path), and Safari's
   OffscreenCanvas WebGL2 in workers (16.4+).
+
+## Gap 3 filled (2026-10-21; platform/web/render_thread.c)
+- Chrome makes a worker's WebGL context only while the page thread is free (a busy page thread hung
+  the first CreateDevice; repro: a worker getContext while main spins never returns). Once made, the
+  worker draws and presents while the page thread is busy. So the worker makes the context as it
+  starts (`d3d9w_context_create`), and the page thread yields (`plat_frame_yield`) until it is made.
+- The worker's own loop: `emscripten_request_animation_frame_loop` (one tick a refresh: the steps'
+  batches that came, the open step to its end, else one in-between frame), or for RT_TEST_HZ a timer
+  grid with the last ms waited out (worker timers come up to a ms late: 114 ticks/s asked 144).
+- The display's Hz is measured on the page thread (a worker has no `document`) and shared atomically.
+- `det_period_ms` returns the time since its last call: read it once a frame (twice drew none of 600).
+- Measured, solo match: 0 of 600 steps not drawn, the drawing ~1 ms a frame; at RT_TEST_HZ=144 about
+  132 frames a second shown (88 before). Without OffscreenCanvas, or RT_RENDER_THREAD=0: the page
+  thread draws, as before.
+- Still open: Safari (16.4+ has worker WebGL2 in OffscreenCanvas; untested here), the shell's
+  backdrop snapshot (toDataURL cannot read a transferred canvas; caught), gap 4.

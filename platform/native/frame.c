@@ -6,6 +6,7 @@
 void d3d9w_rq_post(void (*f)(void *), void *arg);
 void d3d9w_rq_hand(void);
 int d3d9w_rq_syncs_take(void);
+double d3d9w_rq_hand_waited_take(void); /* (with the lockstep waits: pacing, not work) */
 
 /* Present at most 60 frames per second (RT_FPS=N, 0 = uncapped), as on the 60 Hz displays the game
    was made for. Vsync alone runs it at the host's refresh rate (120 Hz on ProMotion Macs), and the
@@ -50,7 +51,7 @@ static void frame_pace(int drawn, double dp) {
     double now = (double)SDL_GetPerformanceCounter(), f = (double)SDL_GetPerformanceFrequency();
     if (drawn && render_threaded()) skip_render_done(render_drawn_ms());
     if (g_end > 0 && !rt_ff)
-        skip_frame_done(drawn, (now - g_end) * 1000.0 / f - rt_net_waited_take(),   /* (a lockstep wait: pacing) */
+        skip_frame_done(drawn, (now - g_end) * 1000.0 / f - rt_net_waited_take() - d3d9w_rq_hand_waited_take(),
                         dp < 0 ? g_period * 1000.0 / f : dp);                       /* (its slot) */
     if (rt_ff) {   /* catching up (netplay): the joining screen, shown but never paced */
         g_next = g_end = 0;
