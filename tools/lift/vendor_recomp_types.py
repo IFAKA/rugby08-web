@@ -71,8 +71,8 @@ t = t.replace(
     1,
 )
 
-# Unresolved dispatch goes to recomp_miss() (runtime/core/cpu.c): recorded once per target in
-# logs/icall_miss.txt, which tools/lift/icall_seed.py feeds back into the lift catalog.
+# Unresolved dispatch goes to recomp_miss() (runtime/core/cpu.c): recorded once per target in logs/icall_miss.txt,
+# which tools/lift/icall_seed.py feeds back into the lift catalog.
 for a, b in (
     (
         'fprintf(stderr, "ICALL: unresolved VA 0x%08X from 0x%08X\\n", _va, g_cur_func);',
@@ -90,9 +90,8 @@ t = t.replace(
     "/* Lookup functions */", "void recomp_miss(int tail, uint32_t va, uint32_t from);\n/* Lookup functions */", 1
 )
 
-# A miss is then run by the interpreter fallback (runtime/core/interp.c, Unicorn on the same guest
-# memory) until it returns to lifted code. ICALL pushes RECOMP_RETADDR as a hit does; rt_interp
-# returns 0 for a target outside guest memory, which keeps pcrecomp's old miss behaviour.
+# The interpreter fallback (runtime/core/interp.c, Unicorn on the same memory) then runs a miss until lifted code; ICALL pushes
+# RECOMP_RETADDR as a hit does; rt_interp returns 0 for a target outside guest memory (pcrecomp's old miss behaviour).
 for a, b in (
     (
         """        recomp_miss(0, _va, g_cur_func); \\
@@ -157,11 +156,9 @@ void rt_eh_jump(uint32_t va);                      /* longjmps to the pad of the
     1,
 )
 
-# A jmp to another lifted function is a jump, not a call: x86 does not grow the stack, so neither may
-# the host. As a plain call, a loop whose back-edge crosses an entry recursed once per iteration: the
-# protector split the byte-copy loop at 0x71BA50 into 0x71BA6D/0x71BA76, and copying the 482616-byte
-# motion sequence table overflowed the 64 MB host stack (play 2026-10-04 11:14). musttail makes every
-# tail jump reuse the frame; REGS_IN then REGS_OUT after the callee was a no-op copy, so it is exact.
+# A jmp to another lifted function is a jump, not a call (x86 does not grow the stack, so neither may the host): as a
+# call, the protector's byte-copy loop split at 0x71BA50/0x71BA6D/0x71BA76 recursed per iteration and overflowed the
+# 64 MB host stack (play 2026-10-04 11:14). musttail reuses the frame; REGS_IN/OUT around it were a no-op: exact.
 itail_old = "    if (_fn) { RECOMP_REGS_OUT(); _fn(); RECOMP_REGS_IN(); } \\\n    else if (_va == RECOMP_RETADDR)"
 itail_new = "    if (_fn) { RECOMP_REGS_OUT(); RECOMP_TAIL_RETURN(_fn); } \\\n    else if (_va == RECOMP_RETADDR)"
 if t.count(itail_old) != 1:
