@@ -105,6 +105,10 @@ static void restore(const SavedGL &s) {
 }
 
 extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int changed) {
+    if (rq_game() && rgba && w > 0 && h > 0) {
+        auto img = std::make_shared<std::vector<unsigned char>>(rgba, rgba + (size_t)w * h * 4);
+        return rq_post([=] { d3d9w_overlay_draw(img->data(), w, h, changed); });
+    }
     static int state;   // 0 not yet, 1 ready, -1 failed
     if (!rgba || w <= 0 || h <= 0 || state < 0) return;
     SavedGL s;
@@ -150,6 +154,7 @@ extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int 
 
 // After the frame is shown (the swap): the game's frame back where the overlay was drawn over it.
 extern "C" void d3d9w_overlay_undo(void) {
+    if (rq_game()) return rq_post([] { d3d9w_overlay_undo(); });
     if (!g_under_kept) return;
     g_under_kept = 0;
     SavedGL s;
@@ -175,6 +180,7 @@ extern "C" void d3d9w_overlay_undo(void) {
 // d3d9w_frame_read: the finished frame before the overlay (the default framebuffer), RGBA, top row
 // first, opaque; 1 if read. A party keeps the party screen with it (runtime/core/ui_party_view.c).
 extern "C" int d3d9w_frame_read(unsigned char *rgba, int w, int h) {
+    RQ_CALL(int, d3d9w_frame_read(rgba, w, h));
     if (!rgba || w <= 0 || h <= 0) return 0;
     GLint rd = 0;
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &rd);

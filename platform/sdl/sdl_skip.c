@@ -9,6 +9,7 @@
 #define SKIP_MAX 4
 
 static double g_drawn = -1, g_undrawn = -1;   /* what a drawn and an undrawn step cost lately (ms) */
+static double g_render = -1;                  /* what a drawn frame cost a render thread lately (ms) */
 static int g_every = 1, g_phase;              /* one step in g_every is drawn; steps since the last */
 
 /* The fewest steps per drawn frame that fit: d + (n - 1) u <= n p. */
@@ -19,6 +20,14 @@ static int steps_needed(double d, double u, double p) {
     return n < 1 ? 1 : n > SKIP_MAX ? SKIP_MAX : n;
 }
 
+/* With a render thread the drawing runs beside the game: besides the game's own work, the thread's
+ * work for one drawn frame must fit the N slots it has (a two-stage pipeline). */
+static int pipe_needed(int n, double r, double p) {
+    while (r > n * p && n < SKIP_MAX) n++;
+    return n;
+}
+void skip_render_done(double ms) { g_render = g_render < 0 ? ms : g_render + (ms - g_render) / 16; }
+
 /* After each frame: whether it was drawn and what it cost (its work, not the pacer's wait), and the
  * length of a step (ms). Costs are smoothed over about 16 frames; N grows at once when the costs
  * call for it and shrinks only with a 15% margin (no flicker between two rates). */
@@ -27,7 +36,9 @@ void skip_frame_done(int drawn, double cost_ms, double period_ms) {
     *avg = *avg < 0 ? cost_ms : *avg + (cost_ms - *avg) / 16;
     double d = g_drawn < 0 ? 0 : g_drawn;
     double u = g_undrawn < 0 ? d / 2 : g_undrawn;   /* (none undrawn yet: about half, the drawing) */
-    int up = steps_needed(d, u, period_ms), down = steps_needed(d * 1.15, u * 1.15, period_ms);
+    double r = g_render < 0 ? 0 : g_render;
+    int up = pipe_needed(steps_needed(d, u, period_ms), r, period_ms);
+    int down = pipe_needed(steps_needed(d * 1.15, u * 1.15, period_ms), r * 1.15, period_ms);
     if (up > g_every) g_every = up;
     else if (down < g_every) g_every = down;
     g_phase = drawn ? 0 : g_phase + 1;
@@ -38,4 +49,4 @@ int skip_next(void) { return g_every > 1 && g_phase + 1 < g_every; }
 
 int skip_active(void) { return g_every > 1; }
 
-void skip_reset(void) { g_every = 1, g_phase = 0, g_drawn = g_undrawn = -1; }
+void skip_reset(void) { g_every = 1, g_phase = 0, g_drawn = g_undrawn = g_render = -1; }

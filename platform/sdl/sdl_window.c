@@ -198,7 +198,7 @@ void plat_set_gamma(const uint16_t *ramp) {
 }
 
 void plat_gl_set_size(int w, int h) {
-    if (g_win && w > 0 && h > 0) SDL_SetWindowSize(g_win, w, h);
+    if (g_win && w > 0 && h > 0 && !render_defer_size(w, h)) SDL_SetWindowSize(g_win, w, h);
 }
 
 void plat_cursor_pos(int *x, int *y) {

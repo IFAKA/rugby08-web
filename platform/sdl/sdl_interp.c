@@ -43,6 +43,18 @@ void interp_fill(double shown, double next, double slot, double (*clock)(void), 
     }
 }
 
+/* The render thread's refreshes (native/render_thread.c): a refresh's length (ms), 0 when none come
+ * between steps; and one in-between frame at `now`, `shown` the step's frame (0: none fits) */
+double interp_period(void) { return plat_interp_wanted() ? 1000.0 / g_hz : 0; }
+int interp_refresh(double shown, double slot, double now, void (*swap)(void)) {
+    double t = (now - shown) / slot;
+    if (slot <= 0 || t >= 1 || !rt_interp_frame((float)(t < 0 ? 0 : t))) return 0;
+    swap();
+    rt_interp_frame_end();
+    g_frames++;
+    return 1;
+}
+
 int interp_frames_take(void) {
     int n = g_frames;
     g_frames = 0;

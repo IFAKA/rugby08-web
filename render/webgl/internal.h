@@ -208,3 +208,34 @@ struct CostScope {   // the time until the end of the scope, counted as one call
     explicit CostScope(int kind) : k(kind), t0(cost_clock()) {}
     ~CostScope() { g_cost_ms[k] += cost_clock() - t0, g_cost_n[k]++; }
 };
+// queue.cpp: the render thread (fps.interp). A call made on the game's thread while it runs is posted:
+// RQ_POST(call) copies the arguments, queues the same call and returns D3D_OK; rq_call runs one there
+// and waits (calls that return something). Draws copy the shader constants they read (rq_consts).
+bool rq_game(void);
+void rq_post(std::function<void()> f);
+void rq_call(const std::function<void()> &f);
+void rq_sync(void);
+void rq_consts(void);
+void rq_use_consts(const float (*vs)[4], const float (*ps)[4], bool set_vs);
+extern float g_rq_vsc[100][4], g_rq_psc[8][4];
+#define RQ_POST(...)                                                                                                   \
+    do {                                                                                                               \
+        if (rq_game()) {                                                                                               \
+            rq_post([=]() { (void)(__VA_ARGS__); });                                                                   \
+            return D3D_OK;                                                                                             \
+        }                                                                                                              \
+    } while (0)
+#define RQ_CALL(T, ...)                                                                                                \
+    do {                                                                                                               \
+        if (rq_game()) {                                                                                               \
+            T r_{};                                                                                                    \
+            rq_call([&]() { r_ = (__VA_ARGS__); });                                                                    \
+            return r_;                                                                                                 \
+        }                                                                                                              \
+    } while (0)
+
+// interp_mix.cpp
+bool mat_close(const D3DMATRIX &a, const D3DMATRIX &b);
+D3DMATRIX mat_mix(const D3DMATRIX &a, const D3DMATRIX &b, float t);
+bool consts_mix(const float *a, const float *b, size_t n, float t, float *out);
+bool floats_differ(const float *a, const float *b, size_t n);

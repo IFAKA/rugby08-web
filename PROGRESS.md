@@ -567,3 +567,9 @@ signal mask with two system calls (sigprocmask 230 + sigaltstack 122 main-thread
 longjmp ever leaves a signal handler (on_fault exits). Hashes identical. fps.interp still FAILS: its bar
 (median 70 in-between frames/s at 144 Hz) needs the drawing on its own thread (RT64, Dolphin dual core,
 PCSX2 MTGS, Mesa glthread): serially a step would have to cost < 3 ms; it is ~8 ms now (was ~12).
+
+## 2026-10-21 fps: render thread (native, on by default; RT_RENDER_THREAD=0 for tests)
+- render/webgl/queue.cpp: wined3d CSMT-style queue at our D3D9 device; a step's calls are handed over at Present, readbacks drain it. platform/native/render_thread.c owns the GL context and draws the in-between frames on a display-grid loop.
+- Learned: SDL3 Cocoa's swap dispatch_syncs to the main thread (deadlock) -> SDL_MAC_OPENGL_ASYNC_DISPATCH=1; a refresh mid-step (after a partial batch) changed what the game reads back -> no refresh until the step's swap, blend back-buffer draws only; shader draws now blended (vertex constants, consts_mix); the frame skipper also needs the render thread's time per drawn frame (fps.skip had dropped to 51.66 steps/s).
+- Proof: regress identical to the fps baseline (thread on), fps.interp PASS (144 Hz: 60 steps/s, 80 frames/s, camera on its way 97.1%), fps.skip PASS (slow GPU: 60.00 steps/s, steady 30 fps, 275 hashes the same).
+- Next: the browser render thread (OffscreenCanvas, plan gap 3), then port the general fixes to main.

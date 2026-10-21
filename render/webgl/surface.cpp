@@ -16,6 +16,7 @@ ULONG D3D9Surface::AddRef() { return ++m_refCount; }
 
 ULONG D3D9Surface::Release() {
     ULONG ref = --m_refCount;
-    if (ref == 0) { delete this; }
+    if (ref == 0 && rq_game()) rq_post([this] { delete this; });
+    else if (ref == 0) delete this;
     return ref;
 }

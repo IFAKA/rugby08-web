@@ -1,6 +1,7 @@
 // resources.h -- the renderer's surface, texture and buffer objects.
 #pragma once
 #include "internal.h"
+#include <atomic>
 
 // surface.cpp: a render-target texture level, a depth/stencil renderbuffer, or the back buffer.
 class D3D9Surface : public IDirect3DSurface9 {
@@ -10,7 +11,7 @@ class D3D9Surface : public IDirect3DSurface9 {
     bool m_is_backbuffer;     // the default framebuffer (the canvas)
     UINT m_width;
     UINT m_height;
-    ULONG m_refCount;
+    std::atomic<ULONG> m_refCount;   // (the render thread's device holds and lets go of targets too)
 
     D3D9Surface(UINT width, UINT height, GLuint gl_obj, bool is_rb, bool is_bb = false);
     virtual ~D3D9Surface();
@@ -35,6 +36,7 @@ class D3D9Texture : public IDirect3DTexture9 {
     virtual HRESULT GetSurfaceLevel(UINT Level, IDirect3DSurface9 **ppSurfaceLevel) override;
     virtual HRESULT LockRect(UINT Level, D3DLOCKED_RECT *pLockedRect, const void *pRect, DWORD Flags) override;
     virtual HRESULT UnlockRect(UINT Level) override;
+    void upload(UINT Level, void *data);
     GLuint GetGLTexture() const { return m_texture; }
 };
 
@@ -52,6 +54,8 @@ struct GLBufferStore {
     void destroy();
     HRESULT lock(UINT offset, UINT size, void **ppbData, DWORD flags);
     HRESULT unlock(GLenum target, const void *owner);
+    void upload(GLenum target, const void *owner, uint8_t *locked, UINT locked_offset, UINT locked_size,
+                DWORD locked_flags);
 };
 
 class D3D9IndexBuffer : public IDirect3DIndexBuffer9 {
@@ -68,6 +72,7 @@ class D3D9IndexBuffer : public IDirect3DIndexBuffer9 {
     }
     virtual ULONG AddRef() override { return 1; }   // the D3D8 layer owns the lifetime
     virtual ULONG Release() override {
+        if (rq_game()) return rq_post([this] { delete this; }), 0;
         delete this;
         return 0;
     }
@@ -90,6 +95,7 @@ class D3D9VertexBuffer : public IDirect3DVertexBuffer9 {
     }
     virtual ULONG AddRef() override { return 1; }   // the D3D8 layer owns the lifetime
     virtual ULONG Release() override {
+        if (rq_game()) return rq_post([this] { delete this; }), 0;
         delete this;
         return 0;
     }

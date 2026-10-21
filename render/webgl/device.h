@@ -59,6 +59,7 @@ class D3D9Device : public IDirect3DDevice9 {
     void set_test_state(D3DRENDERSTATETYPE State, DWORD Value);
 
   public:
+    bool draws_shown() const { return !m_current_rt || m_current_rt == m_backbuffer_surface; }   // (interp.cpp)
     DWORD m_render_states[256];
 
     // device.cpp

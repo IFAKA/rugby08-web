@@ -147,3 +147,13 @@ void *plat_guest_arena(uint32_t *size) {
     if (!arena) rt_fatal("arena: cannot allocate %u bytes", *size);
     return arena;
 }
+
+/* The render thread is native only for now (the browser's needs an OffscreenCanvas: docs/plans/2026-10-21-render-thread.md) */
+void plat_render_start(void) {}
+int render_threaded(void) { return 0; }
+void render_swapped(double slot_ms) { (void)slot_ms; }
+int render_defer_size(int w, int h) {
+    (void)w, (void)h;
+    return 0;
+}
+void render_pump(void) {}

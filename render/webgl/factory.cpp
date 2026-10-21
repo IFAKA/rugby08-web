@@ -11,6 +11,8 @@ class D3D9 : public IDirect3D9 {
                                  D3DPRESENT_PARAMETERS *pPresentationParameters,
                                  IDirect3DDevice9 **ppReturnedDeviceInterface) override {
         if (!ppReturnedDeviceInterface) return -1;
+        RQ_CALL(HRESULT, CreateDevice(Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters,
+                                      ppReturnedDeviceInterface));
 
         // Create WebGL context
         EmscriptenWebGLContextAttributes attrs;
@@ -68,6 +70,7 @@ class D3D9 : public IDirect3D9 {
         g_viewport.Width = g_logical_width;
         g_viewport.Height = g_logical_height;
         glViewport(0, 0, g_logical_width, g_logical_height);
+        plat_render_start();
 
         return D3D_OK;
     }
@@ -84,5 +87,6 @@ class D3D9 : public IDirect3D9 {
 extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion) { return new D3D9(); }
 
 extern "C" unsigned d3d9w_texture_gl(IDirect3DTexture9 *t) {
+    RQ_CALL(unsigned, d3d9w_texture_gl(t));
     return t ? static_cast<D3D9Texture *>(t)->GetGLTexture() : 0;
 }

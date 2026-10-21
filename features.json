@@ -666,7 +666,7 @@
       ],
       "desc": "No 60 fps cap upwards: on a 120/144 Hz display every refresh draws a real frame between the last two game steps (each step's draws recorded in the renderer, their transforms blended by the refresh's time; RT64's way for N64 recomps). Check: native with an emulated 144 Hz display: ~144 distinct frames a second, the camera moving smoothly between steps, the same state hashes as at 60.",
       "check": "tools/check/fps_interp_check.sh",
-      "passes": false
+      "passes": true
     },
     {
       "id": "fps.party",

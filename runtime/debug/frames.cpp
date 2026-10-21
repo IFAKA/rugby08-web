@@ -18,8 +18,10 @@ int rt_trace_vsc;   // RT_TRACE_DRAWS_FRAME is on for this frame: d3d8_device pr
 // Coarse 32x24 luma grid of the back buffer, to detect that an injected input changed the screen.
 static std::vector<float> screen_grid(int w, int h) {
     std::vector<uint8_t> px((size_t)w * h * 4);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    d3d9w_on_render([&] {   // (on the render thread, after this frame's draws)
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    });
     std::vector<float> g(32 * 24, 0.f);
     for (int gy = 0; gy < 24; gy++)
         for (int gx = 0; gx < 32; gx++) {
@@ -60,8 +62,10 @@ static void menu_change_probe(uint32_t frame, int w, int h) {
 // The presented frame (still in the back buffer, before the swap) as a PNG: --screenshot, replay shots.
 static void save_frame_png(int w, int h, const char *path) {
     std::vector<uint8_t> px((size_t)w * h * 4), flip(px.size());
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    d3d9w_on_render([&] {   // (on the render thread, after this frame's draws)
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    });
     for (int y = 0; y < h; y++) memcpy(&flip[(size_t)y * w * 4], &px[(size_t)(h - 1 - y) * w * 4], (size_t)w * 4);
     int rc = rt_png_write(path, w, h, flip.data());
     rt_trace("screenshot %s %dx%d (%s)", path, w, h, rc == 0 ? "ok" : "failed");
@@ -74,8 +78,10 @@ void d3d8_debug_pixels(uint32_t frame, int w, int h) {
     if (every < 0) every = getenv("RT_PIX") ? atol(getenv("RT_PIX")) : 0;
     if (every <= 0 || frame % every) return;
     std::vector<uint8_t> px((size_t)w * h * 4);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    d3d9w_on_render([&] {   // (on the render thread, after this frame's draws)
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    });
     uint64_t hash = 1469598103934665603ull;
     for (uint8_t b : px) hash = (hash ^ b) * 1099511628211ull;
     uint32_t cam = 2166136261u;   // the game's camera (view, projection): game state, unlike the picture

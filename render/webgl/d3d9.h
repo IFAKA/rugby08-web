@@ -658,3 +658,13 @@ extern "C" void d3d9w_overlay_draw(const unsigned char *rgba, int w, int h, int 
 extern "C" void d3d9w_overlay_undo(void); // after the swap: the game's frame back under the overlay
 // overlay.cpp: the finished frame before the overlay, RGBA top row first (w x h); 1 if read
 extern "C" int d3d9w_frame_read(unsigned char *rgba, int w, int h);
+// The render thread (render/webgl/queue.cpp; fps.interp on fast displays): the platform starts it and
+// runs batches; runtime/ code that reads the GPU runs there (d3d9w_on_render), after what was drawn.
+extern "C" void d3d9w_rq_start(void); // on the render thread, before its first batch
+extern "C" void d3d9w_rq_hand(void); // at Present: the step's calls to the render thread
+extern "C" double d3d9w_rq_run(double ms); // render thread: the next batch, waiting up to ms (ms it ran, < 0: none)
+extern "C" void d3d9w_rq_post(void (*f)(void *), void *arg);
+extern "C" void d3d9w_rq_call(void (*f)(void *), void *arg);
+template <class F> void d3d9w_on_render(F &&f) {
+    d3d9w_rq_call([](void *p) { (*(F *)p)(); }, &f);
+}

@@ -13,5 +13,9 @@ double cost_clock() {
 }
 
 extern "C" void d3d9w_cost_take(double *ms, int *n) {
+    if (rq_game()) {   // (the render thread's ledger is not read from the game's thread)
+        for (int k = 0; k < COST_N; k++) ms[k] = 0, n[k] = 0;
+        return;
+    }
     for (int k = 0; k < COST_N; k++) ms[k] = g_cost_ms[k], n[k] = g_cost_n[k], g_cost_ms[k] = 0, g_cost_n[k] = 0;
 }

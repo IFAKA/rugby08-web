@@ -52,3 +52,20 @@ D3D8 layer calls ~40 of its entry points; GL has 90 functions at ~400 call sites
    pthreads (-pthread, PTHREAD_POOL_SIZE=16, COOP/COEP).
 4. Queue memory: a step's closures and uploads (a match frame's buffer uploads) without
    allocating per call.
+
+## Filled (native, 2026-10-21; platform/native/render_thread.c, render/webgl/queue.cpp)
+- Gap 1: readbacks (gpu_read, screenshots, frame read) run through `d3d9w_on_render`, which waits
+  for the queue to drain. Regress with the thread on is identical to the thread off.
+- Gap 2: SDL3 Cocoa's swap does dispatch_sync to the main thread, which deadlocked while the main
+  thread waited in a sync call. Filled by `SDL_MAC_OPENGL_ASYNC_DISPATCH=1` (found with `sample`).
+- New gap, refresh timing: refreshes timed from the swap gave 68 frames/s at 144 Hz. Filled by a
+  display-grid loop on the render thread: batches run as they arrive, and at each refresh that has
+  no new step frame it draws an in-between frame (78-80 frames/s).
+- New gap, refresh mid-step: a refresh replayed after a partial batch (handed over for a readback)
+  changed the drawing the game reads, so hashes differed from frame 12780. Filled: no refresh while
+  a step is open (only after the step's swap), and only back-buffer draws are blended. Render
+  targets the game reads (the shadow map) get the step's own drawing.
+- New gap, camera on its way: shader draws were not blended, and the eye came from a static HUD
+  view. Filled: vertex shader constants are blended (`consts_mix`: a register that jumps is a cut,
+  so the step's own constants are drawn), and the eye comes from the first draw that moved.
+- Still open: gap 3 (browser), gap 4 (allocation per call; not measured as a cost yet).

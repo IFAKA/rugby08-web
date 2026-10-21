@@ -4,6 +4,7 @@
 
 HRESULT D3D9Device::CreateTexture(UINT Width, UINT Height, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool,
                                   IDirect3DTexture9 **ppTexture, void *pSharedHandle) {
+    RQ_CALL(HRESULT, CreateTexture(Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle));
     if (!ppTexture) return D3DERR_INVALIDCALL;
 
     D3D9Texture *tex = new D3D9Texture(Width, Height, Levels, Format);
@@ -24,6 +25,7 @@ HRESULT D3D9Device::CreateTexture(UINT Width, UINT Height, UINT Levels, DWORD Us
 }
 
 HRESULT D3D9Device::SetTexture(DWORD Stage, IDirect3DTexture9 *pTexture) {
+    RQ_POST(SetTexture(Stage, pTexture));
     interp_rec(12ull << 32 | Stage, pTexture, [=](D3D9Device *d) { d->SetTexture(Stage, pTexture); });
     if (Stage >= 8) return D3D_OK;
 
@@ -42,6 +44,7 @@ HRESULT D3D9Device::SetTexture(DWORD Stage, IDirect3DTexture9 *pTexture) {
 
 HRESULT D3D9Device::CreateIndexBuffer(UINT Length, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool,
                                       IDirect3DIndexBuffer9 **ppIndexBuffer, void *pSharedHandle) {
+    RQ_CALL(HRESULT, CreateIndexBuffer(Length, Usage, Format, Pool, ppIndexBuffer, pSharedHandle));
     if (!ppIndexBuffer) return -1;
     *ppIndexBuffer = new D3D9IndexBuffer(Length, Format);
     return D3D_OK;
@@ -49,12 +52,14 @@ HRESULT D3D9Device::CreateIndexBuffer(UINT Length, DWORD Usage, D3DFORMAT Format
 
 HRESULT D3D9Device::CreateVertexBuffer(UINT Length, DWORD Usage, DWORD FVF, D3DPOOL Pool,
                                        IDirect3DVertexBuffer9 **ppVertexBuffer, void *pSharedHandle) {
+    RQ_CALL(HRESULT, CreateVertexBuffer(Length, Usage, FVF, Pool, ppVertexBuffer, pSharedHandle));
     if (!ppVertexBuffer) return -1;
     *ppVertexBuffer = new D3D9VertexBuffer(Length);
     return D3D_OK;
 }
 
 HRESULT D3D9Device::SetIndices(IDirect3DIndexBuffer9 *pIndexData) {
+    RQ_POST(SetIndices(pIndexData));
     interp_rec(13ull << 32, pIndexData, [=](D3D9Device *d) { d->SetIndices(pIndexData); });
     if (pIndexData) {
         D3D9IndexBuffer *ib = static_cast<D3D9IndexBuffer *>(pIndexData);
@@ -69,6 +74,7 @@ HRESULT D3D9Device::SetIndices(IDirect3DIndexBuffer9 *pIndexData) {
 
 HRESULT D3D9Device::SetStreamSource(UINT StreamNumber, IDirect3DVertexBuffer9 *pStreamData, UINT OffsetInBytes,
                                     UINT Stride) {
+    RQ_POST(SetStreamSource(StreamNumber, pStreamData, OffsetInBytes, Stride));
     interp_rec(14ull << 32 | StreamNumber, pStreamData,
                [=](D3D9Device *d) { d->SetStreamSource(StreamNumber, pStreamData, OffsetInBytes, Stride); });
     if (StreamNumber < 16) {          // every stream for programmable shaders (progvs_attribs)
@@ -89,6 +95,7 @@ HRESULT D3D9Device::SetStreamSource(UINT StreamNumber, IDirect3DVertexBuffer9 *p
 }
 
 HRESULT D3D9Device::SetFVF(DWORD FVF) {
+    RQ_POST(SetFVF(FVF));
     interp_rec(15ull << 32, nullptr, [=](D3D9Device *d) { d->SetFVF(FVF); });
     g_current_fvf = FVF;
     return D3D_OK;

@@ -152,7 +152,7 @@ void readback_level(Obj *t, uint32_t l) {
     uint8_t *dst = (uint8_t *)G2H(t->lvl_shadow[l]);
     std::vector<uint8_t> rows((size_t)w * h * b);
     if (rt_net_external_source()) {
-        gpu_read(t, l);
+        d3d9w_on_render([&] { gpu_read(t, l); });   // (the render thread's GL)
         for (uint32_t y = 0; y < h; y++) memcpy(&rows[(size_t)y * w * b], dst + y * pitch, (size_t)w * b);
         rt_net_external_put(rows.data(), (uint32_t)rows.size());
         return;

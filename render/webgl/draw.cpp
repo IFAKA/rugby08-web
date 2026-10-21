@@ -5,6 +5,8 @@
 
 // From the vertex buffer on stream 0 (cloth, some effects).
 HRESULT D3D9Device::DrawPrimitive(D3DPRIMITIVETYPE PrimitiveType, UINT StartVertex, UINT PrimitiveCount) {
+    if (rq_game()) rq_consts();
+    RQ_POST(DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount));
     CostScope cost(COST_DRAW);
     if (rec_draw(21, PrimitiveType << 24 | StartVertex, PrimitiveCount,
                  [=](D3D9Device *d) { d->DrawPrimitive(PrimitiveType, StartVertex, PrimitiveCount); }))
@@ -31,6 +33,8 @@ HRESULT D3D9Device::DrawPrimitive(D3DPRIMITIVETYPE PrimitiveType, UINT StartVert
 // From the vertex and index buffers (the 3D world: pitch, stadium, players).
 HRESULT D3D9Device::DrawIndexedPrimitive(D3DPRIMITIVETYPE PrimitiveType, INT BaseVertexIndex, UINT MinVertexIndex,
                                          UINT NumVertices, UINT startIndex, UINT primCount) {
+    if (rq_game()) rq_consts();
+    RQ_POST(DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount));
     CostScope cost(COST_DRAW);
     if (rec_draw(22, PrimitiveType << 24 | startIndex, primCount ^ BaseVertexIndex << 16, [=](D3D9Device *d) {
             d->DrawIndexedPrimitive(PrimitiveType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
@@ -91,6 +95,15 @@ HRESULT D3D9Device::DrawIndexedPrimitive(D3DPRIMITIVETYPE PrimitiveType, INT Bas
 // From a guest pointer (menus, HUD, text, particles).
 HRESULT D3D9Device::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount,
                                     const void *pVertexStreamZeroData, UINT VertexStreamZeroStride) {
+    if (rq_game()) {
+        rq_consts();
+        auto v = std::make_shared<std::vector<uint8_t>>((const uint8_t *)pVertexStreamZeroData,
+                                                        (const uint8_t *)pVertexStreamZeroData +
+                                                            prim_vertices(PrimitiveType, PrimitiveCount) *
+                                                                VertexStreamZeroStride);
+        rq_post([=] { DrawPrimitiveUP(PrimitiveType, PrimitiveCount, v->data(), VertexStreamZeroStride); });
+        return D3D_OK;
+    }
     CostScope cost(COST_DRAW);
     if (rec_draw(23, PrimitiveType, PrimitiveCount,
                  [=, v = std::vector<uint8_t>((const uint8_t *)pVertexStreamZeroData,
@@ -156,6 +169,20 @@ HRESULT D3D9Device::DrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT Primiti
 HRESULT D3D9Device::DrawIndexedPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT MinVertexIndex, UINT NumVertices,
                                            UINT PrimitiveCount, const void *pIndexData, D3DFORMAT IndexDataFormat,
                                            const void *pVertexStreamZeroData, UINT VertexStreamZeroStride) {
+    if (rq_game()) {
+        rq_consts();
+        auto v = std::make_shared<std::vector<uint8_t>>((const uint8_t *)pVertexStreamZeroData,
+                                                        (const uint8_t *)pVertexStreamZeroData +
+                                                            (MinVertexIndex + NumVertices) * VertexStreamZeroStride);
+        auto ix = std::make_shared<std::vector<uint8_t>>(
+            (const uint8_t *)pIndexData, (const uint8_t *)pIndexData + prim_vertices(PrimitiveType, PrimitiveCount) *
+                                                                           (IndexDataFormat == D3DFMT_INDEX32 ? 4 : 2));
+        rq_post([=] {
+            DrawIndexedPrimitiveUP(PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, ix->data(),
+                                   IndexDataFormat, v->data(), VertexStreamZeroStride);
+        });
+        return D3D_OK;
+    }
     CostScope cost(COST_DRAW);
     if (rec_draw(24, PrimitiveType << 24 | NumVertices, PrimitiveCount,
                  [=,

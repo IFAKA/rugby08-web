@@ -171,6 +171,7 @@ int plat_pending(void) { return g_npending > 0 || g_activate_pending; }
 int plat_poll(plat_msg_t *m, int wait_ms) {
     if (!g_inited) return 0;
     SDL_Event e;
+    render_pump();
     if (g_activate_pending) {
         g_activate_pending = 0;
         push(WM_ACTIVATEAPP_, 1, 0);

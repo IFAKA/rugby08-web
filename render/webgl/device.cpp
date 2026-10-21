@@ -108,6 +108,7 @@ ULONG D3D9Device::AddRef() {
 }
 
 ULONG D3D9Device::Release() {
+    RQ_CALL(ULONG, Release());
     delete this;
     return 0;
 }
@@ -118,11 +119,18 @@ HRESULT D3D9Device::EndScene() { return D3D_OK; }
 
 HRESULT D3D9Device::Present(const void *pSourceRect, const void *pDestRect, HWND hDestWindowOverride,
                             const void *pDirtyRegion) {
+    RQ_POST(Present(pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion));
     interp_present();
     return D3D_OK;
 }
 
 HRESULT D3D9Device::Clear(DWORD Count, const void *pRects, DWORD Flags, D3DCOLOR Color, FLOAT Z, DWORD Stencil) {
+    if (rq_game()) {
+        auto r = std::make_shared<std::vector<D3DRECT>>();
+        if (pRects) r->assign((const D3DRECT *)pRects, (const D3DRECT *)pRects + Count);
+        rq_post([=] { Clear(Count, pRects ? r->data() : nullptr, Flags, Color, Z, Stencil); });
+        return D3D_OK;
+    }
     if (rec_draw(
             20, Flags, Color,
             [=, r = std::vector<uint8_t>((const uint8_t *)pRects, (const uint8_t *)pRects + (pRects ? Count * 16 : 0))](
@@ -168,6 +176,7 @@ HRESULT D3D9Device::Clear(DWORD Count, const void *pRects, DWORD Flags, D3DCOLOR
 }
 
 HRESULT D3D9Device::Reset(D3DPRESENT_PARAMETERS *pPresentationParameters) {
+    RQ_CALL(HRESULT, Reset(pPresentationParameters));
     d3d9w_interp_mode(0);
     // The app asks for a new back buffer size (a resolution change): follow it, as CreateDevice does.
     if (!pPresentationParameters) return D3DERR_INVALIDCALL;

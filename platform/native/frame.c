@@ -3,6 +3,9 @@
 #include "../sdl/sdl_int.h"
 #include <OpenGL/gl3.h>   /* glFinish */
 
+void d3d9w_rq_post(void (*f)(void *), void *arg);
+void d3d9w_rq_hand(void);
+
 /* Present at most 60 frames per second (RT_FPS=N, 0 = uncapped), as on the 60 Hz displays the game
    was made for. Vsync alone runs it at the host's refresh rate (120 Hz on ProMotion Macs), and the
    game's per-frame steering loses turns at a quarter of the time step it was tuned for: sprinting
@@ -31,16 +34,20 @@ double plat_display_hz(void) {
                : 60;
 }
 
-static void frame_pace(int drawn) {
-    if (g_period < 0) {
-        const char *e = getenv("RT_FPS");
-        int fps = e ? atoi(e) : 60;
-        g_period = fps > 0 ? (double)SDL_GetPerformanceFrequency() / fps : 0;
-        g_next = 0;
-    }
+static void period_init(void) {
+    if (g_period >= 0) return;
+    const char *e = getenv("RT_FPS");
+    int fps = e ? atoi(e) : 60;
+    g_period = fps > 0 ? (double)SDL_GetPerformanceFrequency() / fps : 0;
+    g_next = 0;
+}
+
+/* `dp`: in deterministic mode the virtual time this Present advanced (det_period_ms), else < 0 */
+static void frame_pace(int drawn, double dp) {
+    period_init();
     if (g_period <= 0) return;
-    /* deterministic mode: the virtual time this Present advanced (det_period_ms) */
-    double now = (double)SDL_GetPerformanceCounter(), dp = det_period_ms(), f = (double)SDL_GetPerformanceFrequency();
+    double now = (double)SDL_GetPerformanceCounter(), f = (double)SDL_GetPerformanceFrequency();
+    if (drawn && render_threaded()) skip_render_done(render_drawn_ms());
     if (g_end > 0 && !rt_ff)
         skip_frame_done(drawn, (now - g_end) * 1000.0 / f, dp < 0 ? g_period * 1000.0 / f : dp);   /* (its slot) */
     if (rt_ff) {   /* catching up (netplay): the joining screen, shown but never paced */
@@ -50,7 +57,7 @@ static void frame_pace(int drawn) {
     }
     if (g_next == 0 || now - g_next > 4 * g_period) g_next = now;   /* first frame, or fell far behind: resync */
     g_next += dp < 0 ? g_period : dp * (double)SDL_GetPerformanceFrequency() / 1000.0;
-    if (drawn)
+    if (drawn && !render_threaded())   /* (with a render thread, it fills them) */
         interp_fill(now * 1000.0 / f, g_next * 1000.0 / f, (dp < 0 ? g_period * 1000.0 / f : dp), clock_ms, wait_ms,
                     swap_raw);   /* (fps.interp: refreshes between the steps) */
     now = (double)SDL_GetPerformanceCounter();
@@ -68,7 +75,7 @@ int plat_frame_late(void) { return g_period > 0 && !rt_ff && skip_next(); }
 
 void plat_frame_skip(void) {
     g_skipped++;
-    frame_pace(0);
+    frame_pace(0, det_period_ms());
 }
 
 /* RT_TEST_DRAW_MS=N (tests only): every drawn frame costs N ms more, a slow GPU's swap (fps_skip_check.sh) */
@@ -146,12 +153,28 @@ static void frame_stats(double swap_ticks) {
     }
 }
 
+static void swap_posted(void *slot_us) {   /* (render thread) the step's frame */
+    if (g_win && g_gl) SDL_GL_SwapWindow(g_win);
+    test_draw_cost();
+    render_swapped((double)(intptr_t)slot_us / 1000.0);
+}
+
 void plat_gl_swap(void) {
+    double dp = det_period_ms();
+    if (render_threaded()) {   /* the step's calls to the render thread, which shows them */
+        period_init();
+        double slot = dp >= 0 ? dp : g_period * 1000.0 / (double)SDL_GetPerformanceFrequency();
+        d3d9w_rq_post(swap_posted, (void *)(intptr_t)(slot * 1000.0));
+        d3d9w_rq_hand();
+        frame_pace(1, dp);
+        frame_stats(0);
+        return;
+    }
     double s0 = (double)SDL_GetPerformanceCounter();
     if (g_win && g_gl) SDL_GL_SwapWindow(g_win);
     test_draw_cost();
     double sw = (double)SDL_GetPerformanceCounter() - s0;
-    frame_pace(1);
+    frame_pace(1, dp);
     frame_stats(sw);
 }
 

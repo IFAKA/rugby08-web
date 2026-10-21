@@ -45,6 +45,17 @@ HRESULT GLBufferStore::lock(UINT offset, UINT size, void **ppbData, DWORD flags)
 // writes a range the GPU is not using (an unsynchronized map; WebGL2 has no glMapBufferRange).
 HRESULT GLBufferStore::unlock(GLenum target, const void *owner) {
     if (!locked) return -1;
+    uint8_t *data = locked;   // the lock's memory goes with its upload (on the render thread, if there is one)
+    UINT off = locked_offset, size = locked_size;
+    DWORD flags = locked_flags;
+    locked = nullptr;
+    if (rq_game()) return rq_post([=] { upload(target, owner, data, off, size, flags); }), D3D_OK;
+    upload(target, owner, data, off, size, flags);
+    return D3D_OK;
+}
+
+void GLBufferStore::upload(GLenum target, const void *owner, uint8_t *locked, UINT locked_offset, UINT locked_size,
+                           DWORD locked_flags) {
     CostScope cost(COST_BUFFER);
     if (locked_size == length || !(locked_flags & D3DLOCK_NOOVERWRITE))   // (NOOVERWRITE keeps what draws read)
         interp_upload(owner, buffer, length, target, mirror.data());
@@ -70,6 +81,4 @@ HRESULT GLBufferStore::unlock(GLenum target, const void *owner) {
     }
     glBindBuffer(target, 0);
     delete[] locked;
-    locked = nullptr;
-    return D3D_OK;
 }

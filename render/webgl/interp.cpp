@@ -19,6 +19,7 @@ struct DrawInfo {
     uint64_t key;      // the same draw in the previous step: call, primitives, buffers, first texture
     D3DMATRIX m[4];    // world, world 1, view, projection when it was drawn
     int match = -1;    // the same draw in the step before (index), or -1
+    std::shared_ptr<const std::vector<float>> vc;   // a shader draw's vertex shader constants
 };
 struct Snap {        // a buffer's contents before the step rewrote it, for the draws it recorded before that
     size_t until;    // recs before this one read `copy` where they bound `from`
@@ -37,7 +38,10 @@ D3DMATRIX g_last[4];                          // the transforms' last real value
 Step g_older, g_prev, g_cur;   // a refresh shows g_prev blended from g_older; g_cur records
 bool g_on, g_replaying;
 D3D9Device *g_dev;
-float g_eye[3];   // the camera of the last frame drawn (fps_interp_check: is it between the steps?)
+const float *g_vc_mix;   // while replaying a shader draw: its constants blended, or none
+float g_mix[400];
+float g_eye[3];   // the first moving draw's camera (a shader draw's: its origin) in the last frame drawn
+                  // (fps_interp_check: is it between the steps?)
 bool g_eye_ok;
 int g_rewrites;   // textures a step rewrote after its earlier draws read them (replayed with the last contents)
 int g_copies;     // buffers copied for that (Snap)
@@ -66,23 +70,6 @@ GLuint snap(GLuint id) {   // what the replayed rec reads for buffer `id`: the f
     return best;
 }
 
-bool mat_close(const D3DMATRIX &a, const D3DMATRIX &b) {   // no cut between them (a camera switch, a respawn)
-    float dt = 0, dr = 0;
-    for (int i = 0; i < 3; i++) dt += (a.m[3][i] - b.m[3][i]) * (a.m[3][i] - b.m[3][i]);
-    for (int r = 0; r < 3; r++)
-        for (int i = 0; i < 3; i++) dr += (a.m[r][i] - b.m[r][i]) * (a.m[r][i] - b.m[r][i]);
-    float s = 0;
-    for (int r = 0; r < 3; r++)
-        for (int i = 0; i < 3; i++) s += b.m[r][i] * b.m[r][i];
-    return dt < 400.0f * 400.0f && dr < 0.25f * s;   // under 4 m and about 30 degrees in a step
-}
-D3DMATRIX mat_mix(const D3DMATRIX &a, const D3DMATRIX &b, float t) {
-    if (!mat_close(a, b)) return b;
-    D3DMATRIX o;
-    for (int r = 0; r < 4; r++)
-        for (int i = 0; i < 4; i++) o.m[r][i] = a.m[r][i] + (b.m[r][i] - a.m[r][i]) * t;
-    return o;
-}
 }   // namespace
 
 // A setter: kept as its slot's last value; in a step's log while recording. Runs as usual (false).
@@ -114,15 +101,16 @@ bool D3D9Device::rec_draw(unsigned op, unsigned a, unsigned b, std::function<voi
     if (g_progvs_active || g_progps_active) {   // shader constants are read at the draw: theirs, as they were
         D3D9WProgVS *vp = g_progvs_active;
         D3D9WProgPS *pp = g_progps_active;
-        std::vector<float> vc(vp && g_progvs_consts ? 400 : 0), pc(pp && g_progps_consts ? 32 : 0);
-        if (!vc.empty()) memcpy(vc.data(), g_progvs_consts, vc.size() * 4);
+        auto vc = std::make_shared<std::vector<float>>(vp && g_progvs_consts ? 400 : 0);
+        std::vector<float> pc(pp && g_progps_consts ? 32 : 0);
+        if (!vc->empty()) memcpy(vc->data(), g_progvs_consts, vc->size() * 4), di.vc = vc;
         if (!pc.empty()) memcpy(pc.data(), g_progps_consts, pc.size() * 4);
         f = [f = std::move(f), vp, pp, vc, pc](D3D9Device *d) {
             const float (*ov)[4] = g_progvs_consts, (*op)[4] = g_progps_consts;
-            if (!vc.empty()) d3d9w_progvs_use(vp, (const float (*)[4])vc.data());
+            if (!vc->empty()) d3d9w_progvs_use(vp, (const float (*)[4])(g_vc_mix ? g_vc_mix : vc->data()));
             if (!pc.empty()) d3d9w_progps_use(pp, (const float (*)[4])pc.data());
             f(d);
-            if (!vc.empty()) d3d9w_progvs_use(vp, ov);
+            if (!vc->empty()) d3d9w_progvs_use(vp, ov);
             if (!pc.empty()) d3d9w_progps_use(pp, op);
         };
     }
@@ -217,6 +205,7 @@ void interp_upload(const void *obj, GLuint buf, UINT len, GLenum target, const u
 }
 
 extern "C" void d3d9w_interp_mode(int on) {
+    if (rq_game()) return rq_post([=] { d3d9w_interp_mode(on); });
     if (g_on == !!on) return;
     g_on = !!on;
     step_drop(g_older), step_drop(g_prev), step_drop(g_cur);
@@ -227,6 +216,7 @@ extern "C" void d3d9w_interp_mode(int on) {
 // run yet are run now, in order, so it holds what D3D would have drawn by now. The refreshes replay
 // them again later, as every draw.
 extern "C" void d3d9w_interp_flush(void) {
+    if (rq_game()) return rq_post([] { d3d9w_interp_flush(); });
     if (!g_on || g_replaying || !g_dev || g_flushed >= g_cur.recs.size()) return;
     g_replaying = true;
     g_rp = &g_cur;
@@ -237,36 +227,56 @@ extern "C" void d3d9w_interp_flush(void) {
 }
 
 extern "C" int d3d9w_interp_rewrites(int *copies) {
+    RQ_CALL(int, d3d9w_interp_rewrites(copies));
     *copies = g_copies;
     return g_rewrites;
 }
 
 extern "C" int d3d9w_interp_eye(float *e) {
+    RQ_CALL(int, d3d9w_interp_eye(e));
     if (g_eye_ok) memcpy(e, g_eye, sizeof g_eye);
     return g_eye_ok;
 }
 
-// One refresh: the last step's frame, its draws' transforms blended from the step before by t (0..1).
+// A replayed draw's transforms and shader constants, blended from its twin in the step before by t.
+// Only what is shown is blended: a render target the game may read back (the stadium's shadow map) gets
+// the step's own drawing, so what the game reads never depends on the refreshes.
+static void blend_draw(const DrawInfo &d, float t) {
+    const DrawInfo *a = d.match >= 0 && g_older.ok ? &g_older.draws[d.match] : nullptr;
+    bool shown = a && g_dev->draws_shown();
+    for (int i = 0; i < 4; i++) {
+        D3DMATRIX m = shown ? mat_mix(a->m[i], d.m[i], t) : d.m[i];
+        g_dev->SetTransform(kTs[i], &m);
+        if (i == 2 && a && !g_eye_ok && floats_differ(&a->m[2].m[0][0], &d.m[2].m[0][0], 16)) {
+            for (int k = 0; k < 3; k++)   // the eye: -translation times the rotation's transpose
+                g_eye[k] = -(m.m[3][0] * m.m[k][0] + m.m[3][1] * m.m[k][1] + m.m[3][2] * m.m[k][2]);
+            g_eye_ok = true;
+        }
+    }
+    if (!shown || !a->vc || !d.vc || a->vc->size() != d.vc->size() ||
+        !consts_mix(a->vc->data(), d.vc->data(), d.vc->size(), t, g_mix))
+        return;
+    g_vc_mix = g_mix;
+    if (!g_eye_ok && floats_differ(a->vc->data(), d.vc->data(), 16)) {
+        for (int k = 0; k < 3; k++) g_eye[k] = g_mix[4 * k + 3];   // a shader draw's clip-space origin (c0..c2 .w)
+        g_eye_ok = true;
+    }
+}
+
+// One refresh: the last step's frame, its draws blended from the step before by t (0..1).
 extern "C" int d3d9w_interp_draw(float t) {
+    if (rq_game()) {   // (the step's own frame, from Present: whether it was drawn is not known yet)
+        rq_post([=] { d3d9w_interp_draw(t); });
+        return 1;
+    }
     if (!g_on || !g_prev.ok || !g_dev) return 0;
     g_replaying = true;
     g_eye_ok = false;
     for (g_at = 0; g_at < g_prev.recs.size(); g_at++) {
         const Rec &r = g_prev.recs[g_at];
-        if (r.draw >= 0) {
-            const DrawInfo &d = g_prev.draws[r.draw];
-            const DrawInfo *a = d.match >= 0 && g_older.ok ? &g_older.draws[d.match] : &d;
-            for (int i = 0; i < 4; i++) {
-                D3DMATRIX m = mat_mix(a->m[i], d.m[i], t);
-                g_dev->SetTransform(kTs[i], &m);
-                if (i == 2 && !g_eye_ok && d.match >= 0 && (m.m[3][0] || m.m[3][1] || m.m[3][2])) {
-                    for (int k = 0; k < 3; k++)   // the eye: -translation times the rotation's transpose
-                        g_eye[k] = -(m.m[3][0] * m.m[k][0] + m.m[3][1] * m.m[k][1] + m.m[3][2] * m.m[k][2]);
-                    g_eye_ok = true;
-                }
-            }
-        }
+        if (r.draw >= 0) blend_draw(g_prev.draws[r.draw], t);
         r.f(g_dev);
+        g_vc_mix = nullptr;
     }
     for (int i = 0; i < 4; i++) g_dev->SetTransform(kTs[i], &g_last[i]);   // the device's real state again
     g_replaying = false;

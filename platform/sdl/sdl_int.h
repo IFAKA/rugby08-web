@@ -35,6 +35,15 @@ int skip_active(void);                   /* some steps go undrawn (fps.interp st
 void interp_fill(double shown, double next, double slot, double (*clock)(void), int (*wait)(double due),
                  void (*swap)(void));
 int interp_frames_take(void);
+double interp_period(void);
+int interp_refresh(double shown, double slot, double now, void (*swap)(void));
+/* native/render_thread.c (the web: off for now): the GL context on its own thread */
+int render_threaded(void);
+double render_drawn_ms(void);            /* the render thread's time for the last step's frame */
+void skip_render_done(double ms);        /* that time, for the frame skipper (sdl_skip.c) */
+void render_swapped(double slot_ms);
+int render_defer_size(int w, int h);
+void render_pump(void);
 enum { COST_PROGRAM, COST_TEXTURE, COST_BUFFER, COST_DRAW, COST_N };   /* render/webgl/cost.cpp */
 void d3d9w_cost_take(double *ms, int *n);
 double plat_display_hz(void);            /* the display's refresh rate (native/frame.c, web/platform.c) */

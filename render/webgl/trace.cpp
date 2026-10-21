@@ -41,6 +41,7 @@ void trace_fb_diff(bool report) {   // what the previous draw changed in the bac
 }
 
 extern "C" void d3d9w_trace_draws(int on) {
+    if (rq_game()) return rq_post([=] { d3d9w_trace_draws(on); });
     if (g_trace_draws && !on) trace_fb_diff(true);       // the traced frame's last draw
     if (!g_trace_draws && on) g_trace_fb.clear();
     g_trace_draws = on;
