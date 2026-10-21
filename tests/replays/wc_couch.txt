@@ -1,0 +1,67 @@
+4503 click 320 240
+4555 tap S
+4743 tap S
+4935 tap S
+5094 tap S
+5251 tap S
+5409 tap S
+5567 tap S
+5725 tap Down
+5883 tap Down
+6041 tap S
+6190 tap S
+6343 tap Right
+6501 tap S
+6659 tap Escape
+6811 tap S
+6960 tap Left
+7000 pad 1 tap left
+7087 tap S
+7262 tap S
+7420 tap S
+7525 tap S
+7545 pad 1 tap cross
+7709 tap S
+7729 pad 1 tap cross
+7762 tap S
+7782 pad 1 tap cross
+7815 tap S
+7835 pad 1 tap cross
+7868 tap S
+7888 pad 1 tap cross
+7916 tap S
+7936 pad 1 tap cross
+7969 tap S
+7989 pad 1 tap cross
+8023 tap S
+8043 pad 1 tap cross
+8076 tap S
+8096 pad 1 tap cross
+8129 tap S
+8149 pad 1 tap cross
+8160 tap S
+8356 tap S
+8508 tap Right
+8548 pad 1 tap right
+8635 tap S
+8810 tap S
+8968 tap S
+9085 tap S
+9105 pad 1 tap cross
+9276 tap S
+9296 pad 1 tap cross
+9332 tap S
+9352 pad 1 tap cross
+9385 tap S
+9405 pad 1 tap cross
+9440 tap S
+9460 pad 1 tap cross
+9492 tap S
+9512 pad 1 tap cross
+9545 tap S
+9565 pad 1 tap cross
+9600 tap S
+9620 pad 1 tap cross
+9654 tap S
+9674 pad 1 tap cross
+9706 tap S

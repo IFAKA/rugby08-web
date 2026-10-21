@@ -1,0 +1,22 @@
+# World Cup party friend: joins the host's side, Cross in the matches
+7000 pad 0 tap left
+7545 pad 0 tap cross
+7729 pad 0 tap cross
+7782 pad 0 tap cross
+7835 pad 0 tap cross
+7888 pad 0 tap cross
+7936 pad 0 tap cross
+7989 pad 0 tap cross
+8043 pad 0 tap cross
+8096 pad 0 tap cross
+8149 pad 0 tap cross
+8548 pad 0 tap right
+9105 pad 0 tap cross
+9296 pad 0 tap cross
+9352 pad 0 tap cross
+9405 pad 0 tap cross
+9460 pad 0 tap cross
+9512 pad 0 tap cross
+9565 pad 0 tap cross
+9620 pad 0 tap cross
+9674 pad 0 tap cross
