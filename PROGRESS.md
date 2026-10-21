@@ -340,3 +340,9 @@ Next: `./init.sh next` shows what to fix.
 - TLS in one struct (g_cpu), parallel cached check-all, free ports, check failure reasons. Proof: regress --full old vs new main identical (14 images/audio, 447 state hashes); main check-all 34/35 (setup.harness: krn state is per folder).
 - Homebrew's python3 is now 3.15 without Playwright: web.crt_math needs /opt/homebrew/bin/python3.14 (passes with it, 836 cases). Fix features.json's path or install playwright for 3.15.
 - online-ha: ls.lag (input delay 14 frames) and ls.decisions (3 menus judged) fail alone: real; pt.* host_room checks stale (user decides retire/rewrite).
+
+## 2026-10-21 — fps branch's speedups on main (speed: ca62338..e20a9cb)
+- Lifted vec3/matrix/skin hot paths as GAME_OVERRIDE/GAME_BLOCK, x87 locals, dispatch hash, setjmp; no online code.
+- Proof: regress --full vs main identical (14 images/audio, state hashes); lift.difftest, lift.crt_math, lift.fidelity, web.smoke pass; lint, structure ok.
+- A new worktree's web checks need build/web/data (tools/web/package_assets.py, or a link to main's).
+- Next (fps branch): render thread for fps.interp on 120/144 Hz screens (docs/plans/2026-10-21-render-thread.md).
