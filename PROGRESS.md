@@ -548,3 +548,8 @@ Next: verify and commit master's gamefs boot fix; then fps.interp.
 - Profile of open play (sample, 30 s): 85% of the game's own time is in functions using the x87 stack; the model shifted 8 thread-local doubles per push/pop. Now each body that uses it keeps it in a local array (recomp_fp.h, lift_passes.fp_locals; synced with g_st where the registers are). Open play: game functions 9363 -> 6859 samples (-27%), all busy -16%; 225 det hashes the same; lift.difftest, crt_math, fidelity PASS. Prior art: box64 x87 cache, FEX x87 stack pass.
 - game/overrides/math/vec3_transform.c (FUN_0079B230): bit-exact; a whole override must RECOMP_ENTER (det scheduler yields every 4096 entries).
 - Next: web build check of recomp_fp.h (split_big parts copy the locals), then the next hot spots (CPU skinning 0x773FD0, matrix multiply 0x7BA0D6, recomp_lookup).
+
+2026-10-21 (fps) Indirect-call lookup through a hash (runtime/core/dispatch.c): the binary search over ~60k
+functions (~16 scattered loads per call) was the third hottest spot in open play (896 samples); a read-only
+open-addressed hash built once on first use answers in about one load: 97 samples (-89%). 225 det hashes
+identical to the base run. Next: D3DXMatrixMultiply (0x7BA0D6) override, then CPU skinning (0x773FD0).
