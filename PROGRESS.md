@@ -573,3 +573,9 @@ PCSX2 MTGS, Mesa glthread): serially a step would have to cost < 3 ms; it is ~8 
 - Learned: SDL3 Cocoa's swap dispatch_syncs to the main thread (deadlock) -> SDL_MAC_OPENGL_ASYNC_DISPATCH=1; a refresh mid-step (after a partial batch) changed what the game reads back -> no refresh until the step's swap, blend back-buffer draws only; shader draws now blended (vertex constants, consts_mix); the frame skipper also needs the render thread's time per drawn frame (fps.skip had dropped to 51.66 steps/s).
 - Proof: regress identical to the fps baseline (thread on), fps.interp PASS (144 Hz: 60 steps/s, 80 frames/s, camera on its way 97.1%), fps.skip PASS (slow GPU: 60.00 steps/s, steady 30 fps, 275 hashes the same).
 - Next: the browser render thread (OffscreenCanvas, plan gap 3), then port the general fixes to main.
+
+## 2026-10-21 fps.party: a 30 fps player and a 144 Hz player in one lockstep match
+- tools/net/fps_party_check.py: two native games in one room (relay, real time, net replays into a match): slow GPU 60.00 steps/s at a steady 30 fps; 144 Hz 60.00 steps/s, 143 frames/s shown; 124 netplay hashes equal.
+- Fixed: the faster player's lockstep wait for inputs counted as its frame cost, so its skipper went to 30 fps too (rt_net_waited_take, subtracted on native and web).
+- Learned: two web pages on one Mac cannot show this (shared CPU), and the web build's in-between frames are serial (~88 frames/s at 144 Hz): the web render thread (plan gap 3) is what a browser 144 Hz friend needs. RT_TEST_HZ now times web refreshes too (relative ms: emscripten_get_now has another origin).
+- Next: web render thread (OffscreenCanvas), then port general fixes to main.

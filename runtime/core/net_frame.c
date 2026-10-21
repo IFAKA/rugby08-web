@@ -144,6 +144,7 @@ static uint64_t wall_ms(void) {   /* (only to decide when to report a stall, nev
 /* A player whose input stops coming would stop everyone: after STALL_MS the server is told, and it
    drops that player (its 'D' reaches every game at the same frame; the AI takes over its player). */
 #define STALL_MS 3000
+static double g_waited;   /* waited since rt_net_waited_take (ms) */
 static void wait_inputs(uint32_t frame) {
     uint32_t waited = 0;
     uint64_t since = 0, t0 = 0;
@@ -170,7 +171,13 @@ static void wait_inputs(uint32_t frame) {
                      N.rx_n >= 6 ? (unsigned)(N.rx[2] | N.rx[3] << 8 | N.rx[4] << 16 | (uint32_t)N.rx[5] << 24) : 0u);
     }
     if (waited >= 20 && !rt_ff && !N.offline) net_tx_status(0, 0), N.stalls++;
-    if (t0 && !rt_ff) N.wait_ms += wall_ms() - t0;
+    if (t0 && !rt_ff) N.wait_ms += wall_ms() - t0, g_waited += (double)(wall_ms() - t0);
+}
+
+double rt_net_waited_take(void) {
+    double w = g_waited;
+    g_waited = 0;
+    return w;
 }
 
 static void apply_inputs(uint32_t frame) {

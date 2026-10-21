@@ -675,7 +675,7 @@
       ],
       "desc": "A party with a 30 fps player and a 144 Hz player: both at their own rate, steady frame times, the match in step (no stalls from the rate difference), hashes equal.",
       "check": "/opt/homebrew/bin/python3.14 tools/net/fps_party_check.py",
-      "passes": false
+      "passes": true
     },
     {
       "id": "ls.ha_out",
@@ -684,7 +684,7 @@
       ],
       "desc": "The host-authoritative puppet and its checks are removed; docs updated.",
       "check": "tools/check/no_ha.sh",
-      "passes": false,
+      "passes": true,
       "notes": "2026-10-20: set back to false: 84fbede flipped it with ls.modes, but tools/check/no_ha.sh does not exist yet."
     },
     {

@@ -52,9 +52,10 @@ void plat_frame_yield(void) { js_frame_wait(0); }
 /* fps.interp: one display refresh (0: the page is hidden, none comes); the display's refresh rate,
    counted from the browser's animation frames while the page is in view. */
 // clang-format off
-EM_ASYNC_JS(int, js_refresh_wait, (double due), {
+EM_ASYNC_JS(int, js_refresh_wait, (double timed_ms), {   /* (timed_ms < 0: the next animation frame) */
     if (document.hidden) return 0;
-    await new Promise(r => requestAnimationFrame(r));
+    if (timed_ms >= 0) await (Module.rtTimer ? Module.rtTimer(timed_ms) : new Promise(r => setTimeout(r, timed_ms)));
+    else await new Promise(r => requestAnimationFrame(r));
     return 1;
 });
 EM_JS(double, js_display_hz, (void), {
@@ -76,7 +77,12 @@ EM_JS(double, js_display_hz, (void), {
 // clang-format on
 double plat_display_hz(void) { return js_display_hz(); }
 static double clock_ms(void) { return emscripten_get_now(); }
-static void swap_none(void) {}   /* (the browser shows the canvas at the next wait) */
+static void swap_none(void) {}
+/* RT_TEST_HZ=N (tests only, ?env=): an emulated display's refreshes come on a timer (fps.party) */
+static int refresh_wait(double due) {   /* (in ms from now: the page's clock counts from another origin) */
+    double ms = due - emscripten_get_now();
+    return js_refresh_wait(getenv("RT_TEST_HZ") ? (ms > 0 ? ms : 0) : -1);
+}   /* (the browser shows the canvas at the next wait) */
 
 /* RT_TEST_DRAW_MS=N (tests only, ?env=): every drawn frame costs N ms more, a slow GPU (fps_skip_check) */
 static void test_draw_cost(void) {
@@ -103,11 +109,12 @@ static void frame_slot(int drawn) {
     }
     if (g_next == 0 || now - g_next > 4 * period) g_next = now;   /* first frame, or fell far behind: resync */
     g_next += dp < 0 ? period : dp;
-    if (drawn) interp_fill(now, g_next, dp < 0 ? period : dp, clock_ms, js_refresh_wait, swap_none); /* fps.interp */
+    if (drawn) interp_fill(now, g_next, dp < 0 ? period : dp, clock_ms, refresh_wait, swap_none); /* fps.interp */
     double back = emscripten_get_now();
     if (drawn || g_next > back + 1) js_frame_wait(g_next - back);
     double t1 = emscripten_get_now(), late = t1 - (g_next > now ? g_next : now);
-    if (g_end > 0) skip_frame_done(drawn, now - g_end + (late > 0 ? late : 0), dp < 0 ? period : dp);
+    if (g_end > 0)   /* (a lockstep wait for others' inputs is pacing, not work) */
+        skip_frame_done(drawn, now - g_end + (late > 0 ? late : 0) - rt_net_waited_take(), dp < 0 ? period : dp);
     g_end = t1;
     /* perf: game work per frame (resume to Present) vs time handed to the browser, every 600 frames */
     static double last, work, worst, wait;
@@ -123,8 +130,9 @@ static void frame_slot(int drawn) {
     last = t1;
     if (n == 600) {
         rt_trace(
-            "web perf: %.0f fps (%d of 600 steps not drawn), work %.1f ms/frame (worst %.1f), browser %.1f ms/frame",
-            600000.0 / (work + wait) * (600 - undrawn) / 600, undrawn, work / n, worst, wait / n);
+            "web perf: %.0f fps (%d of 600 steps not drawn, %d frames between steps), work %.1f ms/frame (worst %.1f), "
+            "browser %.1f ms/frame",
+            600000.0 / (work + wait) * (600 - undrawn) / 600, undrawn, interp_frames_take(), work / n, worst, wait / n);
         work = worst = wait = 0;
         n = undrawn = 0;
     }

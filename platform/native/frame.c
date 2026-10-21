@@ -49,7 +49,8 @@ static void frame_pace(int drawn, double dp) {
     double now = (double)SDL_GetPerformanceCounter(), f = (double)SDL_GetPerformanceFrequency();
     if (drawn && render_threaded()) skip_render_done(render_drawn_ms());
     if (g_end > 0 && !rt_ff)
-        skip_frame_done(drawn, (now - g_end) * 1000.0 / f, dp < 0 ? g_period * 1000.0 / f : dp);   /* (its slot) */
+        skip_frame_done(drawn, (now - g_end) * 1000.0 / f - rt_net_waited_take(),   /* (a lockstep wait: pacing) */
+                        dp < 0 ? g_period * 1000.0 / f : dp);                       /* (its slot) */
     if (rt_ff) {   /* catching up (netplay): the joining screen, shown but never paced */
         g_next = g_end = 0;
         skip_reset();
