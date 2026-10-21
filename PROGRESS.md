@@ -553,3 +553,7 @@ Next: verify and commit master's gamefs boot fix; then fps.interp.
 functions (~16 scattered loads per call) was the third hottest spot in open play (896 samples); a read-only
 open-addressed hash built once on first use answers in about one load: 97 samples (-89%). 225 det hashes
 identical to the base run. Next: D3DXMatrixMultiply (0x7BA0D6) override, then CPU skinning (0x773FD0).
+2026-10-21 (fps) D3DXMatrixMultiply (0x7BA0D6) in C (game/overrides/math/matrix_multiply.c): open play
+1465 -> 76 samples, 225 det hashes identical. Learned: the det hash covers the whole main stack, so an
+override also writes the bytes the original frame leaves below esp (saved registers, the aliasing copy)
+and the x87 stack it leaves (FFREE frees, does not pop). Next: CPU skinning 0x773FD0 (1389 samples).
