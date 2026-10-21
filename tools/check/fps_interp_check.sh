@@ -29,7 +29,7 @@ run hz144 "RT_TEST_HZ=144 RT_TRACE_INTERP=1"
 NDET=$(wc -l <$OUT/plain.det | tr -d ' ')
 cmp -s $OUT/plain.det $OUT/hz144.det && SAME=1 || SAME=0
 # per second: steps/s ($4), frames between steps (the field before "frames between steps")
-MED=$(awk '{ print $(NF - 3) }' $OUT/hz144.perf | sort -n | awk '{ b[NR] = $1 } END { print NR ? b[int((NR + 1) / 2)] : 0 }')
+MED=$(awk '{ for (i = 2; i < NF; i++) if ($i == "frames" && $(i + 1) == "between") print $(i - 1) }' $OUT/hz144.perf | sort -n | awk '{ b[NR] = $1 } END { print NR ? b[int((NR + 1) / 2)] : 0 }')
 P=$(awk -v med="$MED" '{ s += $4 } END { printf "%.2f %d %d\n", NR ? s / NR : 0, med, NR }' $OUT/hz144.perf)
 # smoothness: each frame's t and camera; a step's frames start at t = 0 (the step before it)
 SM=$(grep '^interp eye' $OUT/hz144.out | awk '
