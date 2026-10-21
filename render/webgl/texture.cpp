@@ -111,6 +111,7 @@ D3D9Texture::D3D9Texture(UINT width, UINT height, UINT levels, D3DFORMAT format)
 }
 
 D3D9Texture::~D3D9Texture() {
+    interp_forget(this);
     if (m_texture) {   // GL may recycle the name: forget it in the caches
         if (g_last_bound_texture_id == m_texture) g_last_bound_texture_id = 0xFFFFFFFF;
         if (g_last_bound_lightmap_id == m_texture) g_last_bound_lightmap_id = 0xFFFFFFFF;
@@ -123,6 +124,7 @@ D3D9Texture::~D3D9Texture() {
 ULONG D3D9Texture::AddRef() { return 1; }   // the D3D8 layer owns the lifetime
 
 ULONG D3D9Texture::Release() {
+    if (rq_game()) return rq_post([this] { delete this; }), 0;
     delete this;
     return 0;
 }
@@ -150,17 +152,28 @@ HRESULT D3D9Texture::LockRect(UINT Level, D3DLOCKED_RECT *pLockedRect, const voi
     return D3D_OK;
 }
 
+// The lock's memory goes with its upload, which runs on the render thread when there is one.
 HRESULT D3D9Texture::UnlockRect(UINT Level) {
     if (!m_locked_data) return -1;
+    void *data = m_locked_data;
+    m_locked_data = nullptr;
+    if (rq_game()) return rq_post([=] { upload(Level, data); }), D3D_OK;
+    upload(Level, data);
+    return D3D_OK;
+}
+
+void D3D9Texture::upload(UINT Level, void *data) {
+    CostScope cost(COST_TEXTURE);
+    interp_upload(this);
     glBindTexture(GL_TEXTURE_2D, m_texture);
     invalidate_binding_caches();
     UINT w = std::max(1u, m_width >> Level), h = std::max(1u, m_height >> Level);
     if (compressed(m_format)) {
         CHECK_GL_ERROR(glCompressedTexImage2D(GL_TEXTURE_2D, Level, gl_compressed_format(m_format), w, h, 0,
-                                              dxt_size(m_format, w, h, nullptr), m_locked_data));
+                                              dxt_size(m_format, w, h, nullptr), data));
     } else {
         std::vector<uint32_t> px((size_t)w * h);
-        to_rgba8(m_format, m_locked_data, px.size(), px.data());
+        to_rgba8(m_format, data, px.size(), px.data());
         glTexImage2D(GL_TEXTURE_2D, Level, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
     }
 
@@ -176,7 +189,5 @@ HRESULT D3D9Texture::UnlockRect(UINT Level) {
         glGenerateMipmap(GL_TEXTURE_2D);
         g_mipmapped_textures.insert(m_texture);
     }
-    delete[] static_cast<uint8_t *>(m_locked_data);
-    m_locked_data = nullptr;
-    return D3D_OK;
+    delete[] static_cast<uint8_t *>(data);
 }

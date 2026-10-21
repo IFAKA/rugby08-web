@@ -3,7 +3,8 @@
 // runtime reads them with plain POSIX calls, which are synchronous and run on the main thread, where
 // fetch/XHR cannot block. So a dedicated worker does the fetching into a SharedArrayBuffer chunk cache
 // and a reader waits (spins, on the main thread) until its chunk is resident. Local only: the chunks
-// are served by tools/web/serve.py from build/web/data, nothing leaves the machine.
+// are served by tools/web/serve.py from build/web/data; on the party site, where the manifest says "own",
+// they come from the player's own copy kept in the browser (own_copy.js).
 (function () {
   const NSLOT = 32; // resident chunks (NSLOT * chunk_size of shared memory)
   const RING = 64; // pending fetch requests
@@ -95,6 +96,7 @@
       const ctl = new Int32Array(m.ctl);
       const data = new Uint8Array(m.data);
       let done = 0;
+      let own = null;
       (async function () {
         for (;;) {
           while (Atomics.load(ctl, 1) === done) Atomics.wait(ctl, 1, done);
@@ -103,9 +105,17 @@
           done++;
           let ok = 0;
           try {
-            const r = await fetch(m.base + m.names[chunk]);
-            if (r.ok) {
-              data.set(new Uint8Array(await r.arrayBuffer()), slot * m.chunkBytes);
+            let buf = null;
+            if (m.own) {
+              // the player's own copy (own_copy.js), kept in the browser's private storage
+              own = own || (await (await navigator.storage.getDirectory()).getDirectoryHandle(m.own));
+              buf = await (await (await own.getFileHandle(m.names[chunk])).getFile()).arrayBuffer();
+            } else {
+              const r = await fetch(m.base + m.names[chunk]);
+              if (r.ok) buf = await r.arrayBuffer();
+            }
+            if (buf) {
+              data.set(new Uint8Array(buf), slot * m.chunkBytes);
               ok = 1;
             }
           } catch {
@@ -120,7 +130,7 @@
   // The game starts only once the worker runs: a read spins the main thread until its chunk is there,
   // and a worker still starting needs that thread to load its script. A read first deadlocked the page
   // (headless Chrome 155, several pages at once: 2 boots in 3 hung at the first lazy read, 2026-10-20).
-  function startWorker() {
+  function startWorker(own) {
     ctl = new Int32Array(new SharedArrayBuffer((S0 + NSLOT * 3 + 16) * 4));
     const dataSab = new SharedArrayBuffer(NSLOT * chunkBytes);
     data = new Uint8Array(dataSab);
@@ -135,6 +145,7 @@
       S0: S0,
       RING: RING,
       base: new URL('data/', location.href).href,
+      own: own ? Module.ownCopy.DIR : '',
     });
     return new Promise((ready) => (w.onmessage = ready));
   }
@@ -206,8 +217,10 @@
           });
           return c0;
         });
-        man.files.forEach((f, fi) => mountFile(f, first[fi]));
-        return startWorker().then(() => removeRunDependency('gamefs'));
+        return (man.own ? Module.ownCopy.prepare(man) : Promise.resolve()).then(function () {
+          man.files.forEach((f, fi) => mountFile(f, first[fi]));
+          return startWorker(man.own).then(() => removeRunDependency('gamefs'));
+        });
       });
   });
 })();

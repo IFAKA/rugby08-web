@@ -2,153 +2,243 @@
 <html lang="en-us">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Rugby 08 in the browser: a static recompilation to WebAssembly</title>
-    <!-- platform/web/shell.html: the page around the game canvas (emcc --shell-file); an installable app
-         (platform/web/pwa/). -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="EA Sports Rugby 08 (PC, 2007) running in a web browser: the game's own code statically recompiled to WebAssembly, Direct3D 8 drawn with WebGL 2. Bring your own copy of the game.">
+    <title>Rugby 08</title>
+    <!-- an installable app (platform/web/pwa/) -->
     <meta name="theme-color" content="#125c30">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" type="image/png" sizes="192x192" href="pwa/icon-192.png">
     <link rel="apple-touch-icon" href="pwa/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <style>
-      body { margin: 0; padding: 8px; background: #111; color: #ccc; font: 13px system-ui, sans-serif; }
-      .emscripten { display: block; margin: 0 auto; text-align: center; }
-      .emscripten_border { margin: 8px auto; }
-      canvas.emscripten { border: 0; background: #000; }
-      #controls { display: block; text-align: center; margin: 4px 0; }
-      #output { display: block; width: 100%; max-width: 960px; margin: 8px auto; background: #000; color: #8f8;
-                border: 0; font: 11px monospace; }
-      .spinner { height: 24px; width: 24px; margin: 8px auto; border: 3px solid #333; border-top-color: #8f8;
-                 border-radius: 50%; animation: spin 1s linear infinite; }
-      @keyframes spin { to { transform: rotate(360deg); } }
+      html, body { margin:0; height:100%; background:#000; color:#eef5f0; font:15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow:hidden; }
+      #stage { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+      canvas.emscripten { display:block; outline:none; background:#000; }
+      [hidden] { display:none !important; }
+      #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; font-size:18px; color:#9db3a5; z-index:20; }
+      #output { display:none; }
+      #fps { position:fixed; top:8px; left:10px; z-index:15; font:bold 14px ui-monospace, monospace; color:#3fbf6f; text-shadow:0 0 3px #000, 0 0 3px #000; pointer-events:none; }
     </style>
   </head>
   <body>
+    <!-- The page only hosts the game and its fps counter: everything else (the party, joining, messages)
+         is drawn inside the game (runtime/core/fe_party.c, ls_party.c, ui_badge.c). The loading line
+         shows only before the game draws its first frame. -->
+    <div id="stage"><canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas></div>
+    <div id="fps"></div>
+    <div id="loading">Loading Rugby 08…</div>
+    <textarea id="output"></textarea>
 
-    <div class="spinner" id='spinner'></div>
-    <div class="emscripten" id="status">Downloading...</div>
+    <script type="text/javascript">
+      // The game fills the window (its aspect kept): the canvas keeps the game's resolution, its CSS size scales.
+      function fit() {
+        var c = document.getElementById('canvas'), w = c.width, h = c.height;
+        if (!w || !h) return;
+        var s = Math.min(innerWidth / w, innerHeight / h), cw = Math.floor(w * s) + 'px', ch = Math.floor(h * s) + 'px';
+        if (c.style.width !== cw || c.style.height !== ch) { c.style.width = cw; c.style.height = ch; }
+      }
+      addEventListener('resize', fit);
+      setInterval(fit, 500);   // (the game sets its resolution when it starts, and may change it)
+      // fps: shown game frames per second (Module.rtFrames is bumped by IDirect3DDevice8::Present)
+      (() => {
+        var el = document.getElementById('fps'), last = { t: performance.now(), n: 0 };
+        setInterval(() => {
+          var t = performance.now(), n = (window.Module && Module.rtFrames) | 0;
+          if (n) el.textContent = Math.round((n - last.n) * 1000 / (t - last.t)) + ' fps';
+          last = { t: t, n: n };
+        }, 500);
+      })();
+      // Esc: while the mouse is captured (pointer lock) the browser keeps Esc to release it and the page
+      // never sees the key. Esc is a game key (skips the intro movie, pauses a match), so a release
+      // the user made with Esc (page focused, not released by the game itself) is handed to the game
+      // as an Esc tap; the next click captures the mouse again.
+      (() => {
+        var pageExit = false, lastEsc = -1e9, exit = document.exitPointerLock.bind(document);
+        document.exitPointerLock = () => { pageExit = true; return exit(); };
+        addEventListener('keydown', (e) => { if (e.code === 'Escape' && e.isTrusted) lastEsc = performance.now(); }, true);
+        var key = (type) => dispatchEvent(new KeyboardEvent(type, { key: 'Escape', code: 'Escape', bubbles: true }));
+        document.addEventListener('pointerlockchange', () => {
+          if (document.pointerLockElement) { pageExit = false; return; }
+          var byPage = pageExit; pageExit = false;
+          if (byPage || !document.hasFocus() || document.visibilityState !== 'visible') return;
+          setTimeout(() => {   // the browser delivered the key itself (some do): nothing to add
+            if (performance.now() - lastEsc < 300) return;
+            key('keydown'); setTimeout(() => key('keyup'), 100);   // held a few frames: the game polls once a frame
+          }, 50);
+        });
+      })();
+      // The game's log goes to the server's machine (server/playlog.go: logs/play/), so a play test can be
+      // read back afterwards; also in the console with ?log.
+      var playLog = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), lines: [] };
+      function logLine(s) { playLog.lines.push(new Date().toISOString().slice(11, 23) + ' ' + s); }
+      function flushLog(beacon) {
+        if (!playLog.lines.length) return;
+        var body = playLog.lines.join('\n') + '\n', url = '/log?id=' + playLog.id;
+        playLog.lines = [];
+        if (beacon && navigator.sendBeacon) navigator.sendBeacon(url, body);
+        else fetch(url, { method: 'POST', body, keepalive: body.length < 60000 }).catch(() => {});
+      }
+      setInterval(() => flushLog(false), 3000);
+      addEventListener('pagehide', () => flushLog(true));
+      // this page's game build (stamped at link time: tools/web/stamp_build.cmake): a party plays one build
+      var BUILD = '@RUGBY_BUILD@';
+      logLine('page: ' + navigator.userAgent + ' ' + location.href + ' build ' + BUILD);
+      addEventListener('error', (e) => logLine('page error: ' + e.message + ' ' + (e.error && e.error.stack || '')));
+      addEventListener('unhandledrejection', (e) => logLine('page error: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));
+      var $ = (id) => document.getElementById(id);
+      var q = new URLSearchParams(location.search);
+      var LOG = q.has('log');
+      var net = null, me = { slot: -1, creator: false }, members = [], room = '', rtt = 0, started = false;
+      var joinCode = q.get('room') || sessionStorage.getItem('rugbyJoin') || '';   // the friend's game to join (kept across a reload)
+      var pendingJoin = null;   // a JOIN PARTY code being checked with the server
+      var backdrop = joinCode && sessionStorage.getItem('rugbyBackdrop');   // the party's screen, kept for joining
+      var partyEver = false;   // this game has had friends in its room (a lost connection then ends its party)
 
-    <span id='controls'>
-      <span><input type="checkbox" id="resize">Resize canvas</span>
-      <span><input type="checkbox" id="pointerLock" checked>Lock/hide mouse pointer &nbsp;&nbsp;&nbsp;</span>
-      <span><input type="button" value="Fullscreen" onclick="Module.requestFullscreen(document.getElementById('pointerLock').checked,
-                                                                                document.getElementById('resize').checked)">
-      </span>
-    </span>
+      // A message for the game to show (runtime/core/ui_badge.c), kept across a reload.
+      function say(text) { logLine('page: message ' + text); Module.rugbyMessage = text; sessionStorage.setItem('rugbyMessage', text); }
+      // This page again, as its own game (no room to join) or into a room.
+      function reload(join) {
+        sessionStorage.removeItem('rugbyRetry');
+        if (join) sessionStorage.setItem('rugbyJoin', join); else sessionStorage.removeItem('rugbyJoin');
+        if (!join) sessionStorage.removeItem('rugbyBackdrop');
+        location.replace(location.pathname + location.search.replace(/([?&])room=[^&]*&?/, '$1').replace(/[?&]$/, ''));
+      }
 
-    <div class="emscripten">
-      <progress value="0" max="100" id="progress" hidden=1></progress>
-    </div>
-
-    <div class="emscripten_border">
-      <div id="view" style="position:relative;width:fit-content;margin:0 auto">
-        <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-        <div id="fps" style="position:absolute;top:0;left:0;padding:2px 6px;font:bold 14px monospace;color:#0f0;background:rgba(0,0,0,.5);pointer-events:none;z-index:1"></div>
-      </div>
-    </div>
-    <textarea id="output" rows="8"></textarea>
-
-    <script type='text/javascript'>
-      var statusElement = document.getElementById('status');
-      var progressElement = document.getElementById('progress');
-      var spinnerElement = document.getElementById('spinner');
-      var canvasElement = document.getElementById('canvas');
-      var outputElement = document.getElementById('output');
-      if (outputElement) outputElement.value = ''; // the browser may restore old text
-
-      // A lost WebGL context cannot be restored: the game's textures and buffers are gone with it.
-      canvasElement.addEventListener('webglcontextlost', (e) => {
-        alert('WebGL context lost. You will need to reload the page.');
-        e.preventDefault();
-      }, false);
-
-      var setStatus = (text) => {
-        if (!setStatus.last) setStatus.last = { time: Date.now(), text: '' };
-        if (text === setStatus.last.text) return;
-        var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-        var now = Date.now();
-        // if this is a progress update, skip it if too soon
-        if (m && now - setStatus.last.time < 30) return;
-        setStatus.last.time = now;
-        setStatus.last.text = text;
-        if (m) {
-          text = m[1];
-          progressElement.value = parseInt(m[2])*100;
-          progressElement.max = parseInt(m[4])*100;
-          progressElement.hidden = false;
-          spinnerElement.hidden = false;
-        } else {
-          progressElement.value = null;
-          progressElement.max = null;
-          progressElement.hidden = true;
-          if (!text) spinnerElement.style.display = 'none';
-        }
-        statusElement.innerHTML = text;
-      };
-
-#if MODULARIZE && !EXPORT_ES6
-      var moduleArgs = {
-#else
-      var tail = [];
       var Module = {
-#endif
-        // the game traces thousands of lines: keep them out of the browser console (it logs every one,
-        // stderr as an error) unless the page is opened with ?log; the text box shows the latest 40
-        print(...args) {
-          var line = args.join(' ');
-          if (/[?&]log\b/.test(location.search)) console.log(line);
-          if (outputElement) {
-            tail.push(line); if (tail.length > 40) tail.shift();
-            outputElement.value = tail.join("\n");
-            outputElement.scrollTop = outputElement.scrollHeight; // focus on bottom
-          }
-        },
+        noInitialRun: true,
+        print(...args) { var s = args.join(' '); logLine(s); if (LOG) console.log(s); },
         printErr(...args) { Module.print(...args); },
-        canvas: canvasElement,
-        setStatus: setStatus,
-        totalDependencies: 0,
-        monitorRunDependencies(left) {
-          this.totalDependencies = Math.max(this.totalDependencies, left);
-          setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
-        }
+        canvas: $('canvas'),
+        rugbyMessage: sessionStorage.getItem('rugbyMessage') || '',
+        setStatus(text) { if (!started && text && !backdrop) $('loading').textContent = text.replace(/\(.*\)/, '').trim() || 'Loading Rugby 08…'; },
+        onRuntimeInitialized() {
+          if (q.has('solo')) { play([]); return; }   // offline, no server (checks, direct links)
+          // every game is a lockstep session with its room open from frame 0 (docs/plans/2026-10-13-lockstep-party.md):
+          // friends join it from their game's ONLINE screens; offline (no server) it is the plain game
+          connect();
+        },
+        onExit(code) {
+          if (code === 3 && room) {   // this copy fell out of step: rebuild it by joining again
+            var tries = +(sessionStorage.getItem('rugbyRetry') || 0);
+            if (tries < 2) { say('RESYNCING WITH THE PARTY'); sessionStorage.setItem('rugbyRetry', tries + 1); sessionStorage.setItem('rugbyJoin', room); location.reload(); return; }
+            say('YOUR GAME COULD NOT STAY IN STEP WITH THE PARTY');
+            reload('');
+            return;
+          }
+          location.reload();   // the game closed: start it again
+        },
+        // the game's netplay status (runtime/core/netplay.c): 0 running, 1 waiting, 2 catching up %, 3 offline.
+        // The game shows them itself (ui_badge.c); the server hears how far a joiner got.
+        rugbyNetStatus(kind, value) {
+          if (kind === 2) send({ t: 'progress', pct: value });
+          else if (kind === 0) { send({ t: 'progress', pct: 100 }); sessionStorage.removeItem('rugbyRetry'); sessionStorage.removeItem('rugbyBackdrop'); }
+          // offline: this game plays on alone (runtime/core/netplay.c), as online sports games do
+          else if (kind === 3 && partyEver) say('CONNECTION TO THE PARTY LOST: YOU PLAY ON YOUR OWN');
+          else if (kind === 3) say('CONNECTION LOST: YOU PLAY ON YOUR OWN');
+        },
+        // my input delay in frames: the trip to the slowest friend peer to peer, its jitter included
+        // (js/peers.js), else by the server (my trip to it plus the slowest friend's), plus a frame of slack
+        rugbyNetDelay() {
+          var others = members.filter(m => m.slot !== me.slot).map(m => m.rtt || 80);
+          if (!others.length) return 1;
+          var p2p = Module.peers && Module.peers.oneWay();
+          var ms = p2p != null ? p2p : (rtt || 80) / 2 + Math.max(...others) / 2;
+          return Math.max(2, Math.min(20, Math.ceil(ms / 16.7) + 1));
+        },
+        // the game's JOIN PARTY (runtime/core/ls_party.c): play in that room (LEAVE PARTY: the game plays on
+        // alone in a room of its own, runtime/core/net_leave.c, and the page hears "forked")
+        rugbyJoin(code) {
+          if (!code) return;
+          if (code === room) { say("THAT IS YOUR OWN PARTY: GIVE THE CODE TO YOUR FRIENDS"); return; }
+          pendingJoin = code;
+          if (!net || net.closed) { say('CANNOT REACH THE GAME SERVER'); return; }
+          send({ t: 'peek', room: code, build: BUILD });   // the server answers whether it can be joined
+        },
       };
-      setStatus('Downloading...');
-      // fps: Module.rtFrames is bumped by IDirect3DDevice8::Present, but several Presents can land between
-      // two browser paints (the pacer yields by message when behind) and only the last one shows. So each
-      // paint (rAF) checks whether a new Present arrived and counts those (the fps you see); 'worst' is the
-      // longest gap between new images in the window.
-      var fpsElement = document.getElementById('fps'), fpsLast = { t: performance.now(), n: 0 };
-      var paintSeen = 0, shown = 0, lastNew = 0, worstGap = 0;
-      (function paint(t) {
-        var n = Module.rtFrames | 0;
-        if (n !== paintSeen) {
-          paintSeen = n;
-          shown++;
-          if (lastNew) worstGap = Math.max(worstGap, t - lastNew);
-          lastNew = t;
-        }
-        requestAnimationFrame(paint);
-      })(performance.now());
-      setInterval(() => {
-        var t = performance.now(), n = Module.rtFrames | 0, s = 1000 / (t - fpsLast.t);
-        if (n) fpsElement.textContent = Math.round(shown * s) + ' fps, worst ' + Math.round(worstGap) + ' ms';
-        fpsLast = { t: t, n: n };
-        shown = worstGap = 0;
-      }, 500);
-      // fullscreen puts the canvas in its own container: move the counter along with it
-      document.addEventListener('fullscreenchange', () => {
-        (document.fullscreenElement || document.getElementById('view')).appendChild(fpsElement);
-      });
-      window.onerror = window.onunhandledrejection = () => {
-        setStatus('Exception thrown, see JavaScript console');
-        spinnerElement.style.display = 'none';
-        setStatus = (text) => {
-          if (text) console.error('[post-exception status] ' + text);
+      // Joining a party shows its party screen from the start (platform/web/join_view.c): JOIN PARTY accepted,
+      // the game draws that party's screen, the page keeps a picture of it (or reloads anyway after 20 s), and
+      // after the reload gives it back to the game while it catches up (and shows it while the page loads).
+      function preview(code, m) {
+        Module.rugbyPreview = { room: code, slot: m.slot | 0, players: m.players | 0 };
+        var go = setTimeout(() => { logLine('page: no picture of the party in time'); reload(code); }, 20000);
+        Module.rugbySnapshot = (x) => {
+          Module.rugbySnapshot = null;
+          clearTimeout(go);
+          try { sessionStorage.setItem('rugbyBackdrop', $('canvas').toDataURL('image/jpeg', 0.85)); sessionStorage.setItem('rugbyBackdropX', x); }
+          catch (e) { logLine('page: no picture of the party ' + e); }
+          reload(code);
         };
-      };
+      }
+      if (backdrop) {
+        Module.rugbyBackdrop = new Image();
+        Module.rugbyBackdrop.src = backdrop;
+        Module.rugbyBackdropX = +(sessionStorage.getItem('rugbyBackdropX') || -1);
+        $('loading').textContent = '';
+        $('loading').style.background = '#000 url(' + backdrop + ') center / contain no-repeat';
+      }
+      $('canvas').addEventListener('webglcontextlost', (e) => { e.preventDefault(); location.reload(); }, false);
+
+      function play(args) {
+        started = true;
+        $('loading').hidden = !backdrop;   // joining: the party's picture stays until the game shows a frame
+        var shown = backdrop && setInterval(() => { if (Module.rtFrames > 0) { $('loading').hidden = true; clearInterval(shown); } }, 50);
+        $('canvas').focus();
+        sessionStorage.removeItem('rugbyMessage');
+        Module.callMain(args);
+      }
+      function send(m) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); }
+
+      // ---- the room (server/main.go): this game is open to friends from the start ----
+      function connect() {
+        var join = joinCode, auto = q.get('net') === 'auto';   // net=auto (checks): join ROOM, creating it if missing
+        var ws;
+        try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); }
+        catch (e) { play([]); return; }
+        ws.binaryType = 'arraybuffer';
+        net = { ws, queue: [], closed: false };
+        var opened = false;
+        var fallback = setTimeout(() => { if (!opened) { ws.close(); offline(); } }, 4000);
+        function offline() { if (started) return; net = null; if (join) say('CANNOT REACH THE GAME SERVER'); play([]); }
+        ws.onopen = () => {
+          opened = true; clearTimeout(fallback);
+          ws.send(JSON.stringify(join ? { t: 'join', room: join, auto, build: BUILD, progress: true } : { t: 'host', build: BUILD }));
+        };
+        ws.onerror = () => { if (!opened) { clearTimeout(fallback); offline(); } };
+        ws.onclose = () => { net && (net.closed = true); };
+        ws.onmessage = (ev) => {
+          if (typeof ev.data !== 'string') {   // game messages: netplay.c (a test's slow network: js/peers.js)
+            const u8 = new Uint8Array(ev.data);
+            if (Module.peers) Module.peers.relayed(() => net.queue.push(u8)); else net.queue.push(u8);
+            return;
+          }
+          var m = JSON.parse(ev.data);
+          if (Module.peers && Module.peers.text(m)) return;   // WebRTC signaling (js/peers.js)
+          if (m.t === 'error' && !started) { say(m.msg.toUpperCase()); reload(''); return; }   // could not join: own game
+          if (m.t === 'error') { say(m.msg.toUpperCase()); return; }   // e.g. dropped for a stalled connection
+          if (m.t === 'peek') {   // the answer for JOIN PARTY
+            if (m.ok && pendingJoin) preview(pendingJoin, m); else say((m.msg || 'No party with that code').toUpperCase());
+            pendingJoin = null;
+          }
+          if (m.t === 'joined') {
+            me = { slot: m.slot, creator: m.creator }; room = m.room;
+            logLine('page: in room ' + room + ' as player ' + (m.slot + 1) + (m.creator ? ' (created it)' : ' (joining)'));
+            Module.rugbyRoom = room;   // the game's ONLINE screens show it (runtime/core/ls_party.c)
+            Module.rugbyNet = net;
+            play(['--net-session', m.slot + ',' + (m.creator ? 1 : 0) + ',' + (m.since === undefined ? -1 : m.since), '--own-camera']);
+            setInterval(() => send({ t: 'ping', ts: performance.now() }), 2000);
+            send({ t: 'ping', ts: performance.now() });
+          }
+          if (m.t === 'members') { members = Module.rugbyMembers = m.players; partyEver = partyEver || members.length > 1; }
+          if (m.t === 'forked') {   // left the party: this game's own room now (the others' inputs stop)
+            room = Module.rugbyRoom = m.room; partyEver = false; Module.rugbyForked = 1;
+            if (Module.peers) Module.peers.inq.length = 0;
+            logLine('page: left the party, playing on in room ' + room);
+          }
+          if (m.t === 'granted') Module.rugbyGrant = m.from;   // catching up: the server's hints (netplay.c)
+          if (m.t === 'front') Module.rugbyFront = m.frame;
+          if (m.t === 'pong') { var r = performance.now() - m.ts; rtt = rtt ? Math.round(rtt * 0.7 + r * 0.3) : Math.round(r); send({ t: 'rtt', rtt }); }
+        };
+      }
     </script>
     {{{ SCRIPT }}}
     <script>
@@ -160,10 +250,5 @@
           .then((r) => r.update())
           .catch(() => {});
     </script>
-#if MODULARIZE && !EXPORT_ES6
-    <script type='text/javascript'>
-      {{{ EXPORT_NAME }}}(moduleArgs);
-    </script>
-#endif
   </body>
 </html>

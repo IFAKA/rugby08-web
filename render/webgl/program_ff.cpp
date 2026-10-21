@@ -16,7 +16,7 @@ void str_replace_all(std::string &s, const std::string &a, const std::string &b)
 // register regs[i] of the device's nregs registers.
 static void upload_consts(GLint loc, const std::vector<unsigned char> &regs, const float (*consts)[4], size_t nregs) {
     if (loc == -1 || !consts || regs.empty()) return;
-    float buf[96 * 4];
+    float buf[100 * 4];   // up to 100 registers: D3D8's 96 and the local camera's 96..99 (runtime/d3d8/d3d8_pov.cpp)
     size_t n = std::min(regs.size(), nregs);
     for (size_t i = 0; i < n; ++i) memcpy(buf + 4 * i, consts[regs[i] < nregs ? regs[i] : 0], 16);
     glUniform4fv(loc, (GLsizei)n, buf);
@@ -31,7 +31,7 @@ void use_draw_program() {
         if (L) {
             glUseProgram(L->prog);
             loc_apply(L->locs);
-            if (p) upload_consts(L->vconsts, p->regs, g_progvs_consts, 96);
+            if (p) upload_consts(L->vconsts, p->regs, g_progvs_consts, 100);
             upload_consts(L->pconsts, g_progps_active->regs, g_progps_consts, 8);
             for (int st = 0; st < 4; ++st) {   // ps.1.x: sampler n reads texture stage n
                 if (L->samp[st] == -1) continue;
@@ -58,7 +58,7 @@ void use_draw_program() {
         glUniform1iv(g_ts_uniform, 18, v);
     }
     if (g_specular_add_uniform != -1) glUniform1i(g_specular_add_uniform, g_render_state_specular ? 1 : 0);
-    if (p) upload_consts(p->consts, p->regs, g_progvs_consts, 96);
+    if (p) upload_consts(p->consts, p->regs, g_progvs_consts, 100);
 }
 
 GLuint compile_shader(GLenum type, const char *source) {

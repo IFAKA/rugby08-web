@@ -68,6 +68,7 @@ dv_GetCapabilities(const uint32_t *a) { /* DIDEVCAPS: dwSize dwFlags dwDevType d
     wr32(p, size);
     wr32(p + 4, 1); /* DIDC_ATTACHED */
     if (d->kind == DEV_PAD) {
+        wr32(p + 4, (uint32_t)rt_pad_attached(d->pad)); /* a pad slot without a player is not plugged in */
         wr32(p + 8, DEVTYPE_PAD);
         wr32(p + 12, 4);
         wr32(p + 16, 12);

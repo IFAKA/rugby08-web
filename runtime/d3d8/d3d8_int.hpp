@@ -36,6 +36,7 @@ struct Obj {
     struct DevState *dev = nullptr;      // d3d8_device.cpp
     // vertex/index buffer: guest shadow + the range written since the last Unlock
     uint32_t size = 0, fvf = 0, shadow = 0, lock_lo = 0, lock_hi = 0, locks = 0, lock_flags = 0;
+    int part = 0;                        // a HUD part a party may leave out of this picture (own_hud.c)
     // texture: one guest shadow per level (d3d9-webgl's pitch), uploaded on UnlockRect
     std::vector<uint32_t> lvl_shadow, lvl_pitch, lvl_size, lvl_surf;
     uint32_t host_fmt = 0;               // format d3d9-webgl holds (A8R8G8B8 when the bridge converts)

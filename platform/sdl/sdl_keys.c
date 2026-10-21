@@ -24,7 +24,10 @@ int plat_pointer(float *x, float *y) {
 #ifdef __EMSCRIPTEN__
     int w = 640, h = 480;
     if (!g_pmoved || !g_win) return 0;
-    SDL_GetWindowSize(g_win, &w, &h);
+    if (det_on()) {   /* (lockstep: the pointer is the host's applied events, in the window the game knows) */
+        int ox, oy;
+        plat_window_rect(&ox, &oy, &w, &h);
+    } else SDL_GetWindowSize(g_win, &w, &h);
     *x = (float)g_px * 640.0f / (float)(w > 0 ? w : 640);
     *y = (float)g_py * 480.0f / (float)(h > 0 ? h : 480);
     g_pmoved = 0;
@@ -34,8 +37,23 @@ int plat_pointer(float *x, float *y) {
     return 0;
 #endif
 }
+
+/* This player's own pointer (its real mouse or touch, never another player's) in 640x480 game units;
+   1 once it has moved over the game. A party draws it on this screen only (runtime/core/ls_cursor.c). */
+int g_lpx, g_lpy, g_lpmoved;
+int plat_local_pointer(float *x, float *y) {
+    int w = 640, h = 480;
+    if (!g_lpmoved || !g_win) return 0;
+    SDL_GetWindowSize(g_win, &w, &h);
+    *x = (float)g_lpx * 640.0f / (float)(w > 0 ? w : 640);
+    *y = (float)g_lpy * 480.0f / (float)(h > 0 ? h : 480);
+    return 1;
+}
+
+/* The real mouse buttons, or none when only the replay/netplay may drive input. */
+uint32_t live_mouse(void) { return g_inited && !virtual_cursor() ? SDL_GetMouseState(NULL, NULL) : 0; }
 uint8_t plat_mouse_buttons(void) {
-    uint32_t b = g_inited ? SDL_GetMouseState(NULL, NULL) : 0;
+    uint32_t b = live_mouse();
     return (uint8_t)((b & SDL_BUTTON_LMASK ? 1 : 0) | (b & SDL_BUTTON_RMASK ? 2 : 0) | (b & SDL_BUTTON_MMASK ? 4 : 0) |
                      g_replay_buttons);
 }
@@ -96,7 +114,7 @@ uint32_t plat_vk_to_scancode(uint32_t vk) {
 }
 
 uint8_t plat_vk_toggled(uint32_t vk) {
-    SDL_Keymod m = SDL_GetModState();
+    SDL_Keymod m = virtual_cursor() ? KMOD_NONE : SDL_GetModState();
     return vk == 0x14 ? (m & KMOD_CAPS) != 0 : vk == 0x90 ? (m & KMOD_NUM) != 0 : 0;
 }
 

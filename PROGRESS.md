@@ -346,3 +346,264 @@ Next: `./init.sh next` shows what to fix.
 - Proof: regress --full vs main identical (14 images/audio, state hashes); lift.difftest, lift.crt_math, lift.fidelity, web.smoke pass; lint, structure ok.
 - A new worktree's web checks need build/web/data (tools/web/package_assets.py, or a link to main's).
 - Next (fps branch): render thread for fps.interp on 120/144 Hz screens (docs/plans/2026-10-21-render-thread.md).
+## 2026-10-12 — online mode (branch `online`, worktree ../rugby08-online)
+- Deterministic mode (runtime/core/det.c, RT_DET=1): one virtual clock for every guest-visible time source; one guest thread runs at a time, hand-overs decided by guest state + virtual time only; host input crosses only at Present; guest never sees the host window/desktop/cursor. Polling (32 clock reads <64 calls apart) and long stalls (>256 slices without Present) advance time; ordinary match frames are exactly 1/60 s.
+- Netplay (runtime/core/netplay.c): lockstep from boot, inputs for frame f+delay, incremental state hash (one 1/120 slice per frame) exchanged every 120 frames, DESYNC stops both. Virtual DirectInput pads (Logitech DualAction per controltypes.csv; game reads sticks only, d-pad mapped to the stick). server/main.go: stdlib relay (rooms, lobby, COOP/COEP static, password). Web lobby in platform/web/shell.html.
+- Checks: net.det_synctest, net.det_chaos, net.lockstep (1v1 into a match), net.desync_detect, net.web_lockstep all PASS. Browser vs native cross-play desyncs (different builds): online is browser-to-browser.
+- Next: per-player camera (render-side view correction), live-input check in a real browser, deployment notes.
+- 2026-10-12 (later): per-player camera (runtime/d3d8/d3d8_pov.cpp, key C): local view swap for fixed-function draws, clip correction for shader draws (registers 96..99, tools/patch_d3d9w.py). The visible match is fixed-function. Independence proven: net.pov_independent (player 2 on its own camera, 15000 frames of equal hashes). Live browser input: net.live_input (Playwright). docs/ONLINE.md: how to host. Server TLS flags. Regression: native.smoke/menu/audio, lift.crt_math, web.smoke PASS.
+- Not done: browser-vs-native cross-play (desyncs: different builds), rejoin into a running match, spectators.
+
+## 2026-10-12 — online: drop-in party inside the game (branch `online`)
+- User test showed "Out of sync" on the legal screen. Two root causes: the guest saw this machine's mouse buttons/lock keys in det mode (a click skipped the legal screen on one side), and dlmalloc seeded its heap "magic" from time(0) (copies started in different seconds differed from frame 1). Both fixed; tests now click the canvas and start copies seconds apart.
+- Redesign per user: no lobby page. The game boots straight in with its room open; friends join any time from the in-game Friends panel's invite link (server replays the room log; the newcomer catches up without drawing/sound), roster changes ride in the message stream, per-player input delay, room outlives its creator, desynced copies auto-rejoin, lost connection = play on offline. Web det mode now paced at 60 fps.
+- New checks pass: net.dropin, net.handoff, net.web_dropin. Limit: joining cost grows with time played (native catch-up ~1.3x real time with drawing).
+
+## 2026-10-12 — intro movie 7 fps in the browser: deterministic clock stood still in Sleep(0) wait loops
+- Root cause: the movie player waits per frame in `while (!frame_due()) { tasks; SleepEx(0, TRUE); }` (sub_006BD92A -> sub_007ED528, EA's sound clock). In det mode Sleep(0) passed no time and the loop body is too long for the clock-read spin rule, so time crept by the stall rule only: 7 fps browser, ~14 native det, 25 native normal (the movie's own rate). The mixer only looked hot because it is the spin body.
+- Fix: det_sleep_ms(0) — from the DET_SPIN-th Sleep(0) since the last Present, each passes DET_SPIN_NS. Pacers (frame_pace, web_pace) in det mode wait the virtual time each Present advanced (det_period_ms), else the fixed intro ran up to 2.4x fast. Native det: 91 movie frames at exactly 40.0 ms; browser ~23-25 fps, page 78% idle.
+- Lifter speedups (any mode): `call` to a `jcc rel8; ret` leaf (MSVC /RTC _RTC_CheckEsp, 741 sites) lifted inline; MSVC 7.1 _ftol2 matched by bytes (5 copies, 204 sites) -> recomp_ftol2; RECOMP_ENTER fast path inline. Selftest compares recomp_ftol2 with the lifted body in all 4 rounding modes (836 cases, 0 wrong). tools/web_profile.py: headless Chrome CPU profile per lifted function.
+- This worktree now lifts into its own gen/recomp (was a symlink into ../rugby08; renamed to gen/recomp.main-link).
+- Checks after the change: native.video, native.menu, net.det_synctest, net.det_chaos, lift.crt_math PASS; net.*/web.* batch was still running at commit time. Next: menu transition dips (35 fps) and the "save roster?" dialog (18 fps) in det mode.
+
+## 2026-10-12 online: crashes, controls, decision for host-authoritative
+- Fixed browser crashes: split jump tables (MY RUGBY), unlifted CRT exp arms (scrum); checks web.split_check, web.crt_math, lift.crt_math (special args, misses).
+- Online lockstep improvements: host keyboard+mouse in the input stream, code-based Join, rAF pacing, cheaper desync hash.
+- Decision (user): online must be inside the game, everyone in their own game, shared matches, any device/network -> host-authoritative netcode. Plan: docs/plans/2026-10-12-online-host-authoritative.md, items on.* in features.json.
+- Next: on.match_map.
+
+## 2026-10-12 — online: host keyboard did nothing in menus / intro (fixed, user-verified in Brave)
+- Root cause: in a session DirectInput lists the 4 virtual pads before the keyboard (rt_pads_first), so the keyboard is controller 5; the game only reads controllers 1-4 (FUN_0081A5A0(i, 4): movie skip loop sub_006BD870, menus, Team Select). The mouse is read separately, so it kept working.
+- Fix: the host's keyboard also drives player 1's virtual pad (plat_local_pad, same mapping as friends: Enter/S accept, Esc Start, arrows), and still feeds the game's keyboard device. Replays are unaffected (automated runs skip plat_local_pad).
+- shell.html: an Esc that releases pointer lock (the browser keeps the key) is handed to the game as an Esc tap.
+- Verified: headless Chrome, Enter during inenpc.vp6 -> title screen. Found by native det RT_COVERAGE/RT_PROBE diff vs web (?env=RT_COVERAGE=a-b:/dev/stdout prints coverage to the console).
+
+## 2026-10-12 — branch `online-ha` (worktree ../rugby08-ha): online merged onto the tidy layout
+- Per user: master fast-forwarded to tidy (ec043f5), new branch online-ha from master, `online` merged in (one merge, conflicts resolved against the new layout). Ported by hand where tidy split files: sdl_plat.c -> sdl_window/keys/events + new sdl_desk.c (netplay keyboard+mouse) and sdl_pad.c (live pad); dinput/dsound/log hunks into their split files (dinput_state.c, dsound_mix.c, runtime/debug/selftest_crt.c, miss.c); frame pacing into platform/native/frame.c and platform/web/platform.c (det_period_ms now in det.c); tools/patch_d3d9w.py replaced by a direct edit of render/webgl/program_ff.cpp (VS constants 96..99); online's tools moved to tools/net/, tools/check/, tools/web/.
+- Gates kept green: det.c hashing -> det_hash.c; netplay.c -> netplay.c + net_frame.c (step split into named helpers) + net_join.c; POV draw hooks -> d3d8_pov.cpp; target #ifdefs out of runtime/ (plat_frame_yield is a native no-op). `./init.sh lint` and `./init.sh structure` ok.
+- Verified: merged lifter output byte-identical to online's gen/recomp (143 files). On the merge build: net.det_synctest, net.lockstep, net.pov_view, net.pov_independent, net.desync_detect, net.handoff, native.smoke, native.menu, lift.crt_math PASS.
+- Learned: the auto-merge silently duplicated a function both sides added (handles.c can_acquire: the det commit is on both branches); the compiler caught it.
+- Next: web build + web checks, regress compare against ../rugby08-base, then on.match_map on this branch.
+- Web on the merge: clang-format had split `=>` in EM_JS JavaScript (build failed); fenced with clang-format off/on. web.compile/assets/serve/smoke/crt_math, net.web_lockstep, net.live_input, net.web_dropin PASS.
+- regress compare vs ../rugby08-base (master): all 14 scenarios differ, as expected from online's intended det-mode changes (Sleep(0) passes virtual time, movie pacing); not yet shown equal to online's own binary.
+
+## 2026-10-12 — on.match_map PASS (branch online-ha)
+- runtime/core/match_state.c + include/match_state.h: ms_active/phase/clock/player/ball/score/controlled, RT_MS_LOG=N trace line; probes moved to runtime/debug/match_probe.c (RT_MS_SCAN/DUMP/SNAP).
+- Verified on screenshots of the same run: HUD clock = decoded clock (01:47 at f14400, 29:28 at f29400), score 0-3 -> 0-10 matches, phases Free = open play, Formation = rucks/mauls/scrums, LineOut, GoalKick, Kickoff, Empty = cutscenes. Open-play clock 8.8 s per 60 frames (81/81). Points table settled: try 5, type 1 conversion 2, types 2/3 three.
+- Check tools/net/match_state_check.sh (eval match_state_eval.py) PASS. Next: on.match_setup (setup bytes; two natives by different menu routes reach kickoff with identical setup).
+
+## 2026-10-12 — on.match_setup PASS (branch online-ha)
+- The whole match definition is the setup block (0x9B6830): rosters (+0..+0x18C0, written at Team Select confirm), extras, conditions/wind, half length +0x18EC, stadium +0x1902, difficulty +0x190C (Stadium Select commit FUN_004FCDD0). Found by single-setting diff runs (half length, difficulty) in det mode.
+- Launch step FUN_004F3D10 (called by every mode's commit) hooked via tools/hooks.json "ms:launch" -> runtime/core/match_setup.c: records the setup (RT_MS_SETUP_OUT), replaces a friend's (RT_MS_SETUP_IN, later the network), RT_MS_AFTER_LAUNCH=K:PNG.
+- Check tools/net/match_setup_check.sh: friend route tests/replays/friend_my_rugby.txt (MY RUGBY first, Portugal v Australia, Tbilisi) plays the host's match: setup/teams/stadium equal, picture diff 1.5 vs 27.0 for its own match.
+- Learned: menus use W (Triangle) for Back; Esc/Backspace do nothing there. Next: on.match_puppet (friend applies host state every frame, local simulation suppressed).
+
+## 2026-10-12 — on.match_puppet PASS (branch online-ha)
+- Friend game plays the host's match: CRugby::Update logic skipped (game/overrides/match/rugby_update.c), host frame applied: actor heading/position + ball (FUN_0044B9E0/FUN_00620800) after presentation; poses via the game's replay branch (pose_player.c + replay_playing.c: FUN_004039B0 with the host frame as replay frame A); camera = host's 16 floats re-applied after FUN_006E8260 (camera_update.c, runtime/core/match_camera.c); score events via team stats + FUN_005CE320; kits = setup+0x191C (setup block is 0x1924 bytes).
+- Tooling: tools/query/callgraph.py (static call graph from gen/recomp), RT_MS_POS lines + tools/net/match_compare.py (host vs friend by match time, incl. the friend's own recorder vs host frame), RT_MS_SHOT_T screenshots at match times, args: hooks print ret.
+- Bugs found by measurement: recorder wrote an uninitialised frame B (headings 1e33 -> FUN_004AC5B0 angle loop hang); presentation tail passed dt to the getters; phase replay by id crashes (set-piece objects missing) -> not replicated.
+- Check tools/net/match_puppet_check.sh: 16599 frames within 1 cm (players, ball), score 0-10 as host, picture diff 5.9 vs 32.4 (control). on.match_map / on.match_setup re-run: ok. Next: on.match_net (friends' pads to the host, host frames to friends over the server).
+
+## 2026-10-12 — on.match_net PASS (branch online-ha)
+- runtime/core/net_ha.c (--net-mode ha): host sends 'S' setup at launch and per recorded frame 'F' (96-byte head + raw key or the game's own replay record); friend sends 'P' pad every Present and 'K' for a key; friends' pads are host controllers 2..4. server/: relays S/F/K/P without logging, keeps last setup + key for newcomers (Go tests).
+- The game's replay records decode in another game (RT_MS_STREAM_CHECK: pose blocks and ball identical over 3310 frames from one key; positions quantised to 1/52.5 m, headings to degrees): ~377 B/frame instead of 4.6 KB raw.
+- Learned: once a friend plays, the host's match takes another course (a human side's scrum waits for its input), so test inputs on the friend are triggered by the host's phase (runtime/debug/net_ha_press.c), not by frame.
+- Check tools/net/match_net_check.sh: 3799 friend frames = host frame shown within 3 cm, latency p95 0.9 frames, friend's pad moved its away player 18.8 m on the host (0.0 m before). Next: on.match_flow.
+
+## 2026-10-12 — on.match_flow PASS (branch online-ha)
+- runtime/core/net_ha_flow.c: friends follow the host into its match from any menu ('S' -> FUN_004F3D10), out of their intro (FUN_0047D860 when host frames arrive), back to their menus ('E' -> FUN_00576140); pause: friend's pause menu -> 'Z' -> host Esc -> 'U' to all; the pauser's pad drives the host menu.
+- Learned: pause state is the FE screen id (0x71) not BackendState+0x2220 (a counter); only keyboard Esc pauses; a controller needs a side to drive menus; once a friend has a side the host's match waits for its set-piece answers (test input mashes Cross). Stale relays from another worktree held fixed ports: checks now pick a free port and fail if the relay does not start.
+- Test tools: RT_MS_QUIT_AT / RT_MS_RELAUNCH (match_quit.c), RT_NET_HA_PAUSE / RT_NET_HA_MASH (net_ha_press.c).
+- Check tools/net/match_flow_check.sh: 2 matches, friend joined both from its menus with the host's setup, frames within 3 cm, left both within 120 frames, its pause held the host's clock 93 frames, its Cross resumed. Next: on.ingame_ui.
+
+## 2026-10-13 — on.ingame_ui: native PASS, web blocked by a browser freeze (branch online-ha)
+- In-game Online screens in every game (no flag): F2 -> HOST A GAME (room code) / JOIN A GAME (type it), badge, LEAVE; runtime/core/ui_*.c draw an RGBA image (5x7 font) that render/webgl/overlay.cpp blends over the frame at Present; keys pressed while open never reach the game; the web page starts the game directly (HTML panel only behind ?panel / ?net=auto).
+- The game enumerates controllers once at boot (a direct CPCControlMgr rebuild crashed), so all 4 virtual pads exist from boot by default (solo Team Select shows 3 idle pad icons); the reference replay checks pin RT_PADS=0 (the original controllers they were recorded with). Web audio pacer: a running AudioContext that drains nothing no longer freezes DirectSound's cursor.
+- ingame_ui_check passed with native host + native friend + browser friend once; the recorded run failed: the browser game's main loop froze (frame 3240, intro movies) — the same freeze makes net.web_dropin fail, and it predates this work (bisect: fails at 15e8b14 too). Next: that freeze, then on.cross_platform (check written).
+
+## 2026-10-13 — new plan: online party (docs/plans/2026-10-13-online-party.md)
+- Agreed with the user: browser only, solo or party (code), like sports games' online friendlies; ONLINE in the game's own menus (pad, mouse, keyboard, touch), Team Select on everyone's screen with side captains, own camera/settings, pause for all, leave by closing the page, every multi-player mode, WebRTC + host input delay + friend prediction, no phantom controllers, page fills the window.
+- features.json: on.ingame_ui / on.cross_platform / on.deploy_ready replaced by pt.freeze … pt.deploy (15 steps, browser checks); net.web_dropin waits on pt.freeze.
+- Unverified freeze-fix ideas are in `git stash` ("freeze investigation (unverified)"). Next: pt.freeze.
+
+## 2026-10-13 — pt.freeze PASS (branch online-ha)
+- The test "freeze" was a fatal: before the first click the AudioContext is suspended and the pacer wrote the ring on the wall clock; the click started the worklet on seconds of backlog, the pacer waited for it to drain, DirectSound's cursor stood still and the game restored its device until "COM object table full". Fix: the worklet (sole writer of the read index) drops more than 2x the target latency (platform/web/js/audio.js); the pacer paces by the wall clock while the sink is stalled.
+- Background tab: hidden pages paced by a worker's timer (platform/web/platform.c), not rAF/setTimeout (stopped / 1 Hz in hidden tabs). Headless Chrome never hides a page, so tools/net/web_soak.py gives the host's page what Chrome gives a hidden tab (document.hidden, visibilitychange, blur, no rAF, timers >= 1 s); negative control with the old pacing: hidden host 0.1 fps, friend stopped.
+- Friend crash found by the soak: a friend at the title screen launched the host's match 15 times; the loading state's package unload then read garbage names (wasm OOB in stricmp). net_ha_flow.c launches only past the title and never while the Game has a queued state.
+- Headless Chrome renders with the real GPU (Metal) by default: ~60 fps in a match vs 6 with SwiftShader; browser tools use web_route.browser(). tools/net/web_route.py drives menus by the traced screen id. Check web_soak.py: 10 min, two pages in a party match, host hidden 3 min at 59 fps. Next: pt.research (written in parallel: docs/PARTY_RESEARCH.md).
+
+## 2026-10-13 — pt.research PASS (branch online-ha)
+- docs/PARTY_RESEARCH.md (four parallel read-only Explore agents, static): Modes (front end = numbered screens + named callbacks in 4 tables; side arrays 0x9C8820/0x9C881C and locks; human-team flags per competition; launch/return via FE+0x3144C), Main menu item (screens are .rfe XML/binary loaded by 0x4EBAE0 → 0x5A06D0; main menu = screen 50 TextButtons; callbacks cdecl int cb(obj); keyboard screen 999 for the letter grid), Controller hot-plug (no re-enumeration; CControl+0x2580 "attached" drives Team Select icons and team building), Player movement (HumanMove 0x6BE760, speeds/accel tables, a kinematic prediction model).
+- Corrected: vf7 does not call EnumDevices (INPUT_init 0x890B70 does, once). Next: pt.controllers (attached flag per pad slot, lowest free slot, keyboard moved past entry 4 when 4 pads).
+
+## 2026-10-13 — pt.controllers PASS (branch online-ha)
+- runtime/core/pad_attach.c: every Present the game's controller list follows the pad slots: CControl+0x2580 "attached" (what Team Select's icons/sides and team building read) per slot, off its side and inactive before unplugging; plugged devices kept in entries 1..4 (keyboard first, after 4 plugged pads). Slots: 0 this machine's game controller (plat_gamepad, also solo), 1..3 the host's party members (ui_lobby member slots). DIDC_ATTACHED at boot from the same rule; RT_PADS=N runs keep all N plugged and the boot order.
+- Host: no more keyboard-as-pad duplicate (its pad 0 is its game controller); friends' keyboard+controller go to the host as before.
+- Check tools/net/party_controllers_check.py: solo Team Select = M K P0- P1- P2- P3- (keyboard only); 3 friends join → 3 controllers; sides K:H P1:A P2:H P3:A; the leaver's controller goes, off its side. Native match_net/match_flow still pass.
+- Seen: a friend's keys typed on the F2 overlay reach the host as pad input (changed the host's team): pt.menu must keep keys the party screens use out of the pad sent. Next: pt.webrtc.
+
+## 2026-10-13 — pt.webrtc PASS (branch online-ha)
+- platform/web/js/rtc.js: each friend's browser calls the host's (RTCPeerConnection, star); channels "rel" (ordered: S/E/Z/U/K), "frames" (reliable, unordered: F), "fast" (unreliable: P). A message goes peer to peer only when every peer it is for has its channels open, else over the relay, never both. server/signal.go relays offers/answers/candidates ({"t":"signal"}); server/stun.go answers STUN itself (-stun PORT; "joined" tells the page) — no third party.
+- Frames carry a sequence number; runtime/core/net_ha_rx.c (split out of net_ha.c) puts them back in order in a window and ends a chain only when a frame stays missing (30 later ones), then asks for a key; 'E' carries the match's last sequence number so late frames of an ended match are ignored.
+- Measured and changed from the plan: frames over an unreliable channel cost ~12 frames of stall per loss (records are deltas; a loss waits for a key round trip): 1208/2299 frames shown at 3 % loss. Frames now go reliable+unordered (a loss = one retransmission); pads stay unreliable.
+- Check tools/net/party_webrtc_check.py: 2296/2296 game messages peer to peer, latency p50 29.1 / p95 38.6 ms vs relay 32.7 / 50.9 ms (localhost; both include the receiver's frame pacing), a sender-side 0.3 % drop recovered by key requests, 2101/2302 frames shown. Native match_net/match_flow pass. Next: pt.menu.
+
+## 2026-10-13 — pt.menu PASS (branch online-ha)
+- ONLINE is a real item of the game's main menu (second, items 22 apart to fit the panel): the main menu's binary .rfe (the user's data, decoded by runtime/core/fe_xml.c: a DOM of 9-u16 element records, 1-based table/pool indices) is edited as it loads and handed to the game's loader as XML text (override 0x5A06D0). The party's screens (ONLINE 7100, PARTY 7101 = host's party / friend's lobby, JOIN 7102 with a letter grid) are built from the main menu's own parts (panel, highlight bar, frame, button style, animations) and loaded for their ids (override 0x4EBAE0); buttons' X press = the unused developer callback 0x574380 (override → fe_party.c by the button's text); Triangle = fez:GoToScreen.
+- Found by measurement: FeSetCurrentScreen's texture step (0x4EBD6A) hangs for an id the registry does not know (null texture list, a loop that never advances): our ids go through as the main menu's (override 0x4EBD60). The menus' cursor is [FE+0x31488] (+8/+0xC floats): in the browser it is placed at the pointer (mouse, touch), no pointer lock, no DirectInput mouse deltas.
+- Host 'M' messages (its front-end screen; the relay keeps the latest) → the friend's lobby says what the host is doing. Server errors "No party with that code" / "Party full". F2 overlay and its checks removed (ui_badge.c keeps the party badge). Scripted --replay runs keep the original menu (RT_ONLINE=1 to test the item).
+- Check tools/net/party_menu_check.py: host keyboard (code, CONTINUE, badge), friend by keyboard typing, friend by mouse clicks on the grid, wrong code error, lobby "THE HOST IS PICKING TEAMS (PLAY NOW)", LEAVE PARTY; native scripted pad picks a letter. Re-run: party_controllers, party_webrtc (now judged on transport latency: localhost p95 20 ms vs relay 29 ms; frame pacing dominates in-game latency). Next: pt.sides.
+
+## 2026-10-13 — pt.sides PASS (branch online-ha)
+- runtime/core/party_sides.c: the host's Team Select (screen 6) decides; its callbacks (game/overrides/menus/team_select.c: team up/down, kit left/right, category L1/R1, CONTINUE, BACK) ask party_ts_allow: the sender (FUN_0081A5E0: the controller with input) must be its side's captain (host if on it, else the lowest player number) for team/category/kit, the host for CONTINUE/BACK.
+- The host sends 'T' (each player's side; both sides' category, team, kit as the toggles show them; relay keeps the latest); friends' games follow the host into Team Select and back to their lobby, their controllers mirror the party (pad_attach.c: keyboard entry = host, pad slots 1..3 = friends, sides from 'T'), their toggles are stepped by the game's own callbacks until the option texts match (texts, not indices: lists can differ by profile); a friend's own keys there only go to the host.
+- Learned: a toggle = option list (+0x154 head, +0x158 current; option {char *text, next}); FE+0x31478 = the side of the controller whose message is handled.
+- Check tools/net/party_sides_check.py (3 pages): sides HAA-, the second away player refused, the away captain and the host change teams, both friends show the same Team Select and controllers, only the host continues, friends back to their lobby. Regressions: party_controllers, match_flow pass. Next: pt.camera.
+
+## 2026-10-13 — pt.camera PASS (branch online-ha)
+- A friend no longer copies the host's 16 camera floats: each game frames the puppeted match with its own CameraManager and own options (style +0x230 etc.). Its own camera was static: the CameraManager picks its named cameras on match events (listener FUN_00407810; Kickoff, Scrum, Lineout X, Zoom X, the style camera on 0x12/0x1B) and a friend's skipped logic posts none. The host forwards the camera events ('C', id+int) and a friend's listener (found in its CameraManager by vtable 0x8CCC88) hears them — not the personal ones (0x118/0x119) nor those that read match objects (0x3A, 0x41/0x4A lineout: a measured fault on the friend; 0x1A, 0x79).
+- docs/PARTY_RESEARCH.md "Personal settings": every personal option lives in the options object 0xA33320 (outside the setup block): camera style/sliders/presets, HUD, names, volumes, video, vibration; difficulty is copied into the setup (the host's).
+- Check tools/net/party_camera_check.py: host Side/Zoom Side/Kickoff, friend (RT_TEST_CAMERA=2) Broadcast/Zoom Broadcast/Kickoff; the friend's target follows the ball (corr ~0.8, host ~0.75). match_puppet_check now judges positions only (pictures reported: own cameras). Test tools: RT_MS_CAM (camera + ball trace with the camera's name), RT_TEST_CAMERA.
+
+## 2026-10-13 — pt.pause_leave PASS (branch online-ha), and a Team Select fix the user reported
+- Pause: Esc (and pad Start, mapped to Esc on that machine) pauses everyone; each player's pause menu is its own (the host ignores friends' pads while paused, so personal settings stay personal); a friend's RESUME sends 'Y' and everyone resumes; the host keeps a friend's pause request until its match pauses (Esc is ignored inside set-piece menus); REPLAY does nothing in a friend's game (pause_replay.c); a friend quitting the match leaves the party.
+- Leaving: party_leave.c: the host unplugs the leaver's controller and, in a match, rebuilds the teams as the game does at half time (0x6AC5E0, 0x62CFC0 home/away, 0x6AC780): the AI takes the player; everyone gets a toast ("PLAYER 3 LEFT"). The host leaving closes the room ("ended"): friends leave their match for their main menu. A mid-match joiner follows into the match and watches (no side). 'S'/'M'/'T'/'E' always go through the relay (it keeps them for newcomers; over WebRTC it never saw them).
+- User-reported bug (party joiner could not take a side: the icon came back to the centre): a tap's press and release could both arrive between two host frames (only the release seen), and a move on the joiner's own screen never reached the host. Fix: the host keeps a friend's presses until its game reads the pad; a joiner's local icon move becomes stick pulses to the host until its Team Select has it there. Measured: 30 ms taps now move the joiner's icon on the host every time.
+- Check tools/net/party_pause_leave_check.py (4 pages); match_flow_check now waits for the host's room before the friend joins (a race: the friend sometimes created it) and its friend resumes from its own menu. Next: pt.modes.
+
+## 2026-10-13 — user playtest of the host-authoritative party; switch to whole-session lockstep (ls.*)
+- Fixed from the playtest: an unfocused browser window no longer deactivates the game (the host froze and went black, which also bounced a joiner's Team Select moves); a joiner's HUD bars follow the host's controls; a leaver's pad leaves its side (no reassign screen on friends); the host leaving mid-match sends joiners to their main menu. Commit d5910c1.
+- The user then asked for each player to play "as if alone", the same match, like rugby games do online. Joiners lacked everything the host's match logic drives (penalty options, kick aim, banners, cutscenes, referee). Measured: two copies of the same match differ from frame 1 after different menu histories (match-only lockstep is not free). The user chose whole-session lockstep (docs/plans/2026-10-13-lockstep-party.md, ls.* in features.json).
+- ls.boot measured: lockstep from boot runs 60 fps in menus and match in the test browser; native drop-in and web drop-in still pass. Lockstep fixes: pads come only from the input stream (a host's gamepad no longer written to pad 0 on every machine; plugged-in = roster + the input's own flag), the host's keyboard is no longer also its pad, the party screens' logic runs while catching up, the browser pointer is recorded in the game's window units.
+- Next: ls.boot catch-up time, then ls.party (ONLINE screens drive the session: code, JOIN reloads into the room, LEAVE).
+
+## 2026-10-13 — ls.party and ls.controls PASS (lockstep party)
+- ONLINE screens drive the session (CREATE shows the code, JOIN asks the server then reloads into the room, LEAVE); the page only wraps the game + fps; all messages and the joining screen are drawn in the game (user's rule).
+- Nobody waits: joiners get their start frame and the others' front from the server and send idle inputs while catching up (beyond the 1024-frame input ring: kept as a range); stalled players (3 s) are dropped; render-target readbacks shared ('X'). Play logs of every page go to logs/play/ (server/playlog.go).
+- Checks: ls_party_check (3 pages, wrong code, 204 equal hashes, leave), ls_controls_check (solo has no phantom pads, friend's pad plugged, sides K:H P1:A in both games, leaver unplugged).
+- Next: the user's play test (match, mid-match join, leave, lag); then ls.match/leave/lag/modes checks from their feedback; ls.ha_out.
+
+## 2026-10-13 — ls.match, ls.camera PASS; party roles and pause as online sports games (user play test feedback)
+- ls.match: a party match is the same on both screens (hashes, RT_PIX pictures); Start on any controller pauses (pad_pause.c: the PC game pauses on Esc only). A joined game no longer fast-forwards/idles ahead (the catch-up runaway that dropped a friend's presses); a slot's previous player's 'D' no longer removes its newcomer; one build per party (stamped index.html, server refuses another).
+- User feedback (play test): each player must play as if alone. Done: the host drives the shared menus (others: "THE HOST IS CHOOSING", Esc to leave), the pauser drives the pause menu (3 pauses a match, 60 s; others: "PAUSED BY PLAYER N"), another team's set-piece options covered, "YOU: PLAYER N" tag, hidden tabs keep pace, a dropped player returns to its own game, mid-match joiners come in after the match.
+- ls.camera: own camera per player. Learned: HumanMove reads sticks against the camera (BackendState+0x64 -> +0x190 and a virtual on the camera), so the match must see one camera: player 1's look at the ball, set every frame after drawing (the camera step does not always run); each game's own camera is restored for its step and drawing; friends' sticks are turned into player 1's direction; the party hash is the match's state (ls_simhash.c), drawing state differs per player. Native: Side vs Broadcast/Truck positions equal; browser: Side vs Truck 162 hashes equal.
+- Next: the user's play test of this build; ls.leave/ls.lag checks (written), ls.modes (GAME MODES needs PLAY NOW's tutorial prompt skipped once), line-out calls and kick aim shown only to the deciding player.
+- OPEN (user play test 2026-10-13 23:32): the host's game crashed right after QUIT MATCH (~25 min match, pauses, a mid-match joiner waiting): the EA audio 10 ms timer thread (0x7D62D0 -> 0x7D0470) called a callback node whose function is a heap address (ICALL unresolved 0x026B8046): a node of a freed object still in the callback list. Not reproduced by a 60 s solo match + quit. Next: when the list is changed and freed vs when the audio thread walks it under det scheduling.
+
+## 2026-10-14 — browser mouse: the game's cursor under the pointer (4521d3a)
+- Cause: the canvas was resized to the 640x480 back buffer behind SDL's back, and the game's 1920x1080 desktop window (y CW_USEDEFAULT) kept the SDL window that size: the pointer came in 1920x1080 coordinates, the game's mouse clamps to 640x480 (cursor stuck in the top-left third); SetCursorPos got y = INT_MIN.
+- Fix (web only, native unchanged): the device sizes the window (plat_gl_set_size), plat_window_move leaves the canvas alone, plat_window_rect is (0,0, canvas) also in lockstep.
+- Proof: headless probe (pointer at 5 game points, 470x595 portrait page): cursor tip within 4 px of the pointer at all 5; clicks at 320,239 for the canvas centre (was 959,540).
+
+## 2026-10-14 — ls.joinview PASS: joining shows the party screen, "(YOU)" on each player's row (branch online-ha)
+- A joiner never sees a black screen: on JOIN PARTY accepted (server peek now gives the slot and players) its own game shows that party's screen with its row and a 0% bar; the page keeps a JPEG of it across the reload (platform/web/join_view.c, shell.html); while catching up the picture is drawn with the live bar, and once the replay is on the party screen its own frames are drawn (d3d8 ff_drawn: one frame in 16).
+- "(YOU)" on this player's roster row in every game. Learned: the FE text setter 0x83BAB0 frees/allocates in a block heap (0xAA2620) by length, so per-player text is lockstep-safe only if every game's row is as long and set at the same frames: rows padded to 24, setter driven by the shared text.
+- The front end is 640x480 drawn 4:3 centred in a 16:9 back buffer (overlay mapping in ui_badge.c catchup_row).
+- Next: rugby08-72's friend lobby view (ui_party_view.c) reuses catchup_row/backdrop; ls_party_check rerun on this build.
+
+## 2026-10-14 — party: each player's own cursor; a friend stays on the party screen while the host chooses
+- Rule from the user (CLAUDE.md): share only what professional online sports games share; a friend never sees the host's menus or cursor.
+- ls_cursor.c: a friend's screen draws the menus' cursor at its own pointer (BeginScene..Present only; the shared, host-driven position is back before any logic). ui_party_view.c: while the host is in its own menus, a friend's screen shows the party screen (read back when last drawn, d3d9w_frame_read) with the message over its buttons; rows redrawn if the roster changed. Lockstep untouched (drawing only).
+- Proof: the user's two-window test (cursors independent, party view on the friend, Team Select shared); structure/lint ok. tools/net/ls_cursor_check.py written (equal pictures with both pointers in one place); its first full run is pending.
+
+## 2026-10-14 — joining: the party picture through the page load; the others see a joiner's row fill up (user-tested)
+- shell.html keeps the party's picture up (no "Downloading" text over it) until the game shows its first frame (Module.rtFrames), so the joiner's page never goes black between JOIN and catching up. User play test: no black screen.
+- The host (and anyone already in) sees a joiner's progress: on the party screen its row's bar and percent, elsewhere in the menus the badge "PARTY C n/4 - PLAYER k JOINING p%" (server members joining/pct -> Module.rugbyMembers -> plat_join_progress).
+- ls_joinview_check now screenshots the joiner's page every 0.4 s from JOIN to caught up (fails on >= 0.8 s black), requires the host's row trace and the overlay at one menu x throughout.
+- Fixed from the headless run: the picture came too late at low frame rates (fallback reload after 4 s, picture at 60 frames) and, taken earlier, mid screen transition; after the reload the replay had no main menu yet, so the bar sat at menu x 0. Now: picture at 60 frames, fallback 20 s, the menu's x kept with the picture (plat_join_menu_x). Check ok: never black, menu x 106 in all 218 overlay traces, 129 hashes equal.
+
+## 2026-10-14 — the user's play test: friend removed at kick-off, rejoin reset, LEAVE PARTY restart, freeze after QUIT
+- Research and measurements: docs/plans/2026-10-14-online-fixes.md. Causes: "(YOU)" written into the game's memory differently per player (the lockstep clock split in the match loading: mirrored kick-off, desync, kick); a rejoiner replaying its slot's earlier 'A'/'D' as its own (exit 4); LEAVE PARTY was a page reload; EA sound banks reloaded at a new address after a match never resolved (aems.c), the audio thread crashed.
+- Fixed: rows the same in every game, "YOU" drawn over (ui_badge.c); "since" from the server (rejoin); leave in place (server/fork.go: a room of its own with the party's log + the others' 'D' at G; net_leave.c: host = longest in the party, the desk follows it in the menus, the leaver to its main menu through a desk event); lost connection plays on alone (no reload); aems.c moves banks; canvas keeps its drawing (a mid-frame wait for the host's readback blanked a friend's frame).
+- Proof so far: match run with both games entering at the same frame and every match hash equal (2 runs); quit_sound_check ok (new item aems.rebase); server fork_test ok. Open: one run's clock split 25 frames into the match load (match still equal), traced with RT_DET_SCHED.
+
+## 2026-10-15 — online-ha: the user's play test fixed at the root (desync, camera, kick arrow)
+- Desync (friend dropped at frame 27719): own_end.c asked the game for its camera's name (a guest call) in the friend's game only; the extra guest entries moved the lockstep's thread switches (the loader's lines swapped at a scrum, heap free counts parted 8000 frames before the hash). ms_camera_name is now a det_local section.
+- Camera: filtering possession events (0xAD, 0xAE, 0x1A) does not stop the end camera following the ball. Each game now draws the shared camera straight down the pitch along its own team's way (d3d8_pov.cpp rt_pov_way), the way read off the camera while that team holds the ball. ls.own_view PASS (scheduling equal over 23642 frames).
+- Kick aim arrow: own_hud.c leaves the other team's aim out of the picture (meshes known by vertex data; acting team = ball holder, else the last event's player). ls.match PASS (pictures equal outside the per-player prompt, 225/225 hashes). Penalty options fall back to the acting team.
+- Master got the general fixes without the online mode (b858e74, the user's request). Next: the 2D prompts (play calls, FEED/BIND, ruck wheel), lag on two machines.
+
+## 2026-10-19 — online with friends: private party site, each player's own Rugby 08 (the user's decision)
+- The user (following cranebeaker/coop-anything's AGENTS.md, triage = finish our own online-ha): friends are non-technical and must host each other without the user's Mac; private site now, public only after a clean-room replacement of EA parts; no hub PR. CLAUDE.md exception recorded.
+- pt.private_link PASS (server/gate.go: /k/PASSWORD sets the party cookie). pt.own_files PASS (own_copy.js + site_manifest.py: folder picked once, chunks checked against sha256 and kept in OPFS; the site serves no game file).
+- Learned: Homebrew python3 is now 3.15 without Playwright: checks run on python3.14. ls.leave: leaving works (233 hashes equal); the newcomer was told but its replay (1.5x real time with 3 headless games on one Mac) did not catch up in the check's fixed 10 min: check now waits while it gains.
+- Next: ls.leave rerun, ls.lag (two machines), pt.deploy (package + host: needs the user's go).
+
+## 2026-10-20 ls.lag PASS
+- Joins over a slow network: the test's lag model held each message with its own timer, which reorders them (delays cut to whole ms); one queue per direction now. The server sends idle inputs for a catching-up game gone quiet in a load (server/idle.go), so it is not dropped as stalled.
+- Catch-up was paced to virtual time (the joining screen's swap every 16 frames slept ~100 ms): now unpaced, web and native. Friend joins in 24 s (was 81), a relay-only one in 154 s.
+- Pings answered across a page block (a load) no longer count as trips: the input delay jumped to the cap (20 frames) after each load. Pace trace now reports time waited for inputs (two games on one Mac: ~18 ms/frame is real work, not waiting).
+- ls_lag_check: a browser per player; stable = <=3 stalls/600 frames, >=45 fps; delay bound counts a frame of handling at each end. Next: pt.deploy (needs the user's go to go live), then ls.fastjoin.
+
+## 2026-10-20 pt.deploy PASS
+- deploy_check: the private party site package builds, the server tests pass, a player brings their own Rugby 08 through the link and boots. Going live (host, account, domain) waits for the user's go. Next: ls.modes.
+
+2026-10-20 ls.modes PASS: all eight modes in a lockstep party (PLAY NOW, World Cup, Challenge, the five GAME MODES tournaments), two matches each, the friend back in the party view, 0 of ~950 hashes different.
+- Party-only memory corruption: own_camera.c kept match 1's freed LookAtCamera and its first step in match 2 wrote 0x110 bytes into it (match_camera.c's manager/listener too); out of a match they are now forgotten every Present.
+- File views get their own mspace (heap.c, RT_VIEWS_LO..HI): a freed 127 MiB script.big view was split by small allocations, match 2's MapViewOfFile failed.
+- Tri Nations (solo too) loaded into a never-lifted switch: stubemu's unicorn CPU kept state junk had set (ring 0), so in a full catalog build stubs stopped resolving; each run now restores the CPU (catalog 56373 -> 60630 entries). analysis/ in this tree is now its own copy (was a symlink to master's).
+- Next: master gets the views/stubemu/camera-forget fixes (+ re-lift there, regress); then ls.ha_out; a frame-time stability check in a party match (the user: real vsync'd frames, stable first).
+2026-10-20 check-all speed: tools/check/check_all.py runs the passing items on 8 workers, longest first, with a pass cache (inputs: command, binaries by content, files read); native items 309 s -> 2 s cached. Per-thread CPU state is one thread-local struct g_cpu (421eaac): user CPU -17% in a det match, hashes identical.
+- Learned: run_native's 120 s timeout sent SIGTERM, which the game ignores (a hung run blocked the queue 1 h 51 min); stdout to a file is buffered, so the early-stop verdict reads the game's own log too; Python checks write __pycache__ into hashed dirs.
+- Full clean run (16:00): 24 of 73 failed, nearly all the web boot hang (gamefs worker vs first chunk read, found by the rugby08-25 session); on.match_map / on.match_setup / oracle.wine / ls.ha_out failed as before.
+- Next: a full check-all once the gamefs fix is in (fresh, then cached) for the real wall time.
+
+## 2026-10-20 — fps.skip PASS (branch fps)
+- A device too slow to draw every step still steps the game 60 times a second: it draws one step in N (platform/sdl/sdl_skip.c: the smallest N its measured draw and step costs fit, at most 4); late steps run with draws and Clear skipped and no swap (d3d8 Present, plat_frame_late/plat_frame_skip, native and web). Each frame's slot is the game's own step length (its front end steps at 30 a second).
+- Check tools/check/fps_skip_check.sh: a PLAY NOW match (replay), plain vs a slow GPU (RT_TEST_DRAW_MS=25): 59.96 steps/s, 30 fps steady every second, 200 hashes the same; it says when the machine is too busy to judge.
+- Learned: the game's front end presents 30 times a second (det_period_ms 33 ms), so step rates are only comparable in a match.
+- Next: fps.interp (draw between steps on 120/144 Hz), then fps.party.
+
+2026-10-20 ls.camera recheck PASS on the merged web build (daf7973). The check summed only the player the friend controls at the end of the hold, but the game hands control to the player nearest the ball, so it judged an AI run (-59°). It now sums each step of whichever player the friend controls at that step: 743 cm at -6° from the friend's own look.
+features.json: ls.ha_out back to passes:false (84fbede flipped it, but tools/check/no_ha.sh does not exist). pt.freeze/controllers/webrtc/menu/sides/camera/pause_leave are noted as superseded by ls.* since ls.boot (their host room never opens); they go with ls.ha_out.
+Next: verify and commit master's gamefs boot fix; then fps.interp.
+
+## 2026-10-21 fps.interp built (passes stays false)
+- Frames between steps (RT64 way): each step's device calls recorded, replayed per refresh with transforms blended; buffers rewritten after a recorded draw keep a copy (CPU mirror + pooled GL buffer, no glCopyBufferSubData on Apple GL 4.1); a render-target readback (stadium shadow map) first runs the step's recorded calls. 144 Hz run: 225 state hashes the same as the plain run.
+- Learned: on this Mac a match step costs ~10 ms game + ~2 ms renderer, so a 144 Hz refresh (6.9 ms) has no room: interp frames need cheaper steps (hot functions decompiled/optimized) or a render thread. Slow frames (~40 ms, ~6/s) are outside the renderer (cost ledger, cost.cpp).
+- Next: profile the match's hottest guest functions (first decompilation candidates); fps_skip_check on a quiet machine.
+
+## 2026-10-21 speed: x87 stack in locals, first game function in C
+- Profile of open play (sample, 30 s): 85% of the game's own time is in functions using the x87 stack; the model shifted 8 thread-local doubles per push/pop. Now each body that uses it keeps it in a local array (recomp_fp.h, lift_passes.fp_locals; synced with g_st where the registers are). Open play: game functions 9363 -> 6859 samples (-27%), all busy -16%; 225 det hashes the same; lift.difftest, crt_math, fidelity PASS. Prior art: box64 x87 cache, FEX x87 stack pass.
+- game/overrides/math/vec3_transform.c (FUN_0079B230): bit-exact; a whole override must RECOMP_ENTER (det scheduler yields every 4096 entries).
+- Next: web build check of recomp_fp.h (split_big parts copy the locals), then the next hot spots (CPU skinning 0x773FD0, matrix multiply 0x7BA0D6, recomp_lookup).
+
+2026-10-21 (fps) Indirect-call lookup through a hash (runtime/core/dispatch.c): the binary search over ~60k
+functions (~16 scattered loads per call) was the third hottest spot in open play (896 samples); a read-only
+open-addressed hash built once on first use answers in about one load: 97 samples (-89%). 225 det hashes
+identical to the base run. Next: D3DXMatrixMultiply (0x7BA0D6) override, then CPU skinning (0x773FD0).
+2026-10-21 (fps) D3DXMatrixMultiply (0x7BA0D6) in C (game/overrides/math/matrix_multiply.c): open play
+1465 -> 76 samples, 225 det hashes identical. Learned: the det hash covers the whole main stack, so an
+override also writes the bytes the original frame leaves below esp (saved registers, the aliasing copy)
+and the x87 stack it leaves (FFREE frees, does not pop). Next: CPU skinning 0x773FD0 (1389 samples).
+2026-10-21 (fps) GAME_BLOCK: part of a lifted function in C (game/include/game.h, lift_passes.game_blocks;
+like N64Recomp's instruction hooks). First use: FUN_00773FD0's x87 skinning loop (game/overrides/math/
+skin_loop.c): 1389 -> 156 samples, vec3 455 -> 234; 225 det hashes identical; lift.difftest/fidelity/
+crt_math pass. Open play game code since the start of this work: 10826 -> 4898 samples (-55%); the
+profile is flat now (top 243). Next: port these to main, web check, then fps.interp headroom.
+2026-10-21 (fps) C++ EH pads use _setjmp/_longjmp natively (RT_SETJMP, CMake): macOS setjmp saves the
+signal mask with two system calls (sigprocmask 230 + sigaltstack 122 main-thread samples, gone); no
+longjmp ever leaves a signal handler (on_fault exits). Hashes identical. fps.interp still FAILS: its bar
+(median 70 in-between frames/s at 144 Hz) needs the drawing on its own thread (RT64, Dolphin dual core,
+PCSX2 MTGS, Mesa glthread): serially a step would have to cost < 3 ms; it is ~8 ms now (was ~12).
+
+## 2026-10-21 fps: render thread (native, on by default; RT_RENDER_THREAD=0 for tests)
+- render/webgl/queue.cpp: wined3d CSMT-style queue at our D3D9 device; a step's calls are handed over at Present, readbacks drain it. platform/native/render_thread.c owns the GL context and draws the in-between frames on a display-grid loop.
+- Learned: SDL3 Cocoa's swap dispatch_syncs to the main thread (deadlock) -> SDL_MAC_OPENGL_ASYNC_DISPATCH=1; a refresh mid-step (after a partial batch) changed what the game reads back -> no refresh until the step's swap, blend back-buffer draws only; shader draws now blended (vertex constants, consts_mix); the frame skipper also needs the render thread's time per drawn frame (fps.skip had dropped to 51.66 steps/s).
+- Proof: regress identical to the fps baseline (thread on), fps.interp PASS (144 Hz: 60 steps/s, 80 frames/s, camera on its way 97.1%), fps.skip PASS (slow GPU: 60.00 steps/s, steady 30 fps, 275 hashes the same).
+- Next: the browser render thread (OffscreenCanvas, plan gap 3), then port the general fixes to main.
+
+## 2026-10-21 fps.party: a 30 fps player and a 144 Hz player in one lockstep match
+- tools/net/fps_party_check.py: two native games in one room (relay, real time, net replays into a match): slow GPU 60.00 steps/s at a steady 30 fps; 144 Hz 60.00 steps/s, 143 frames/s shown; 124 netplay hashes equal.
+- Fixed: the faster player's lockstep wait for inputs counted as its frame cost, so its skipper went to 30 fps too (rt_net_waited_take, subtracted on native and web).
+- Learned: two web pages on one Mac cannot show this (shared CPU), and the web build's in-between frames are serial (~88 frames/s at 144 Hz): the web render thread (plan gap 3) is what a browser 144 Hz friend needs. RT_TEST_HZ now times web refreshes too (relative ms: emscripten_get_now has another origin).
+- Next: web render thread (OffscreenCanvas), then port general fixes to main.
+
+2026-10-21 fps (web render thread): the browser draws on its own worker (platform/web/render_thread.c, OffscreenCanvas). Chrome makes a worker's WebGL context only while the page thread is free, so the worker makes it at start while the page yields; the worker runs its own refresh loop (rAF, or a timer grid for RT_TEST_HZ). Solo at 144 Hz: ~136 frames/s shown (88 before), 0 of 600 steps undrawn, drawing ~1 ms/frame.
+- Native Metal abort ("command encoder already encoding") fixed at the root: no SDL async-dispatch hint; the game thread runs the main run loop while it waits for the render thread (plat_render_waiting). Regress under load identical.
+- Skip controller: the wait at Present for the render thread to take a batch is display pacing, not work (d3d9w_rq_hand_waited_take); ls.boot host match 36 -> 60 fps.
+- Checks: web.smoke, ls.boot, net.web_lockstep, fps.interp, fps.skip, fps.party PASS (pt.freeze: superseded, fails "no room" as noted). Next: Safari worker WebGL test, port to main/online-ha.
+
+2026-10-21 main: merged fps (frame pacing, render threads native and web, the lockstep party, speedups) on the user's call (main now carries the online code too). Kept main's own: the installable app (PWA, added to fps's party page), npm run dev, free-port checks, the public-source rule. Dropped main's quit_at.c and fe_pointer.c (fps's match_quit.c and browser pointer replace them).
+- A worktree's gen/ must be re-lifted (or copied, then touched: rsync -a keeps old mtimes and make links stale objects) after a merge brings new lifter passes; an Oct 14 gen hung the intro movie. CMake now re-globs build/web-gen (CONFIGURE_DEPENDS).
+- Checks on the merge: web.smoke, ls.boot, fps.interp, fps.skip PASS.

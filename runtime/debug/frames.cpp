@@ -2,6 +2,7 @@
 // trace line, the --frames exit with its --screenshot, replay `shot` PNGs, the menu-change probe of
 // replays, and RT_TRACE_DRAWS_FRAME (draw trace of chosen frames, with a PNG of each).
 #include "rt.h"
+#include "debug.h"
 #include "plat.h"
 #include "d3d9.h"
 #include <GLES3/gl3.h>
@@ -9,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 int rt_trace_vsc;   // RT_TRACE_DRAWS_FRAME is on for this frame: d3d8_device prints vertex shader constants
@@ -16,8 +18,10 @@ int rt_trace_vsc;   // RT_TRACE_DRAWS_FRAME is on for this frame: d3d8_device pr
 // Coarse 32x24 luma grid of the back buffer, to detect that an injected input changed the screen.
 static std::vector<float> screen_grid(int w, int h) {
     std::vector<uint8_t> px((size_t)w * h * 4);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    d3d9w_on_render([&] {   // (on the render thread, after this frame's draws)
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    });
     std::vector<float> g(32 * 24, 0.f);
     for (int gy = 0; gy < 24; gy++)
         for (int gx = 0; gx < 32; gx++) {
@@ -58,14 +62,84 @@ static void menu_change_probe(uint32_t frame, int w, int h) {
 // The presented frame (still in the back buffer, before the swap) as a PNG: --screenshot, replay shots.
 static void save_frame_png(int w, int h, const char *path) {
     std::vector<uint8_t> px((size_t)w * h * 4), flip(px.size());
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    d3d9w_on_render([&] {   // (on the render thread, after this frame's draws)
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    });
     for (int y = 0; y < h; y++) memcpy(&flip[(size_t)y * w * 4], &px[(size_t)(h - 1 - y) * w * 4], (size_t)w * 4);
     int rc = rt_png_write(path, w, h, flip.data());
     rt_trace("screenshot %s %dx%d (%s)", path, w, h, rc == 0 ? "ok" : "failed");
 }
 
+// RT_PIX=N: every N-th presented frame, "pix: frame F HASH" (FNV-1a of the game's picture, before the
+// local overlays: badge, toasts): every player of a lockstep session must see the same picture.
+void d3d8_debug_pixels(uint32_t frame, int w, int h) {
+    static long every = -1;
+    if (every < 0) every = getenv("RT_PIX") ? atol(getenv("RT_PIX")) : 0;
+    if (every <= 0 || frame % every) return;
+    std::vector<uint8_t> px((size_t)w * h * 4);
+    d3d9w_on_render([&] {   // (on the render thread, after this frame's draws)
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    });
+    uint64_t hash = 1469598103934665603ull;
+    for (uint8_t b : px) hash = (hash ^ b) * 1099511628211ull;
+    uint32_t cam = 2166136261u;   // the game's camera (view, projection): game state, unlike the picture
+    for (uint32_t va = 0xA60B68; va < 0xA60B68 + 64; va++) cam = (cam ^ rd8(va)) * 16777619u;
+    for (uint32_t va = 0xA60C28; va < 0xA60C28 + 64; va++) cam = (cam ^ rd8(va)) * 16777619u;
+    char blocks[16 * 12 * 4 + 1];   // 16x12 blocks, a 16-bit hash each: where two pictures differ
+    for (int by = 0; by < 12; by++)
+        for (int bx = 0; bx < 16; bx++) {
+            uint32_t bh = 2166136261u;
+            for (int y = by * h / 12; y < (by + 1) * h / 12; y++)
+                for (int x = bx * w / 16 * 4; x < (bx + 1) * w / 16 * 4; x++)
+                    bh = (bh ^ px[(size_t)y * w * 4 + x]) * 16777619u;
+            snprintf(blocks + (by * 16 + bx) * 4, 5, "%04X", (bh ^ bh >> 16) & 0xFFFF);
+        }
+    rt_trace("pix: frame %u %016llX cam %08X blocks %s", frame, (unsigned long long)hash, cam, blocks);
+    // RT_PIX_STRIP=1: with every picture, its top-left strip (blocks 0..5 of the top row: the HUD's score
+    // and clock, where two games' pictures have parted for one frame) at half size, "pix: strip F W H HEX"
+    static int strip = -1;
+    if (strip < 0) strip = getenv("RT_PIX_STRIP") != NULL;
+    if (strip) {
+        static const char *hd = "0123456789ABCDEF";
+        int x1 = w * 6 / 16, y0 = h * 11 / 12, sw = x1 / 2, sh = (h - y0) / 2;
+        std::string hex = "";
+        for (int y = 0; y < sh; y++)
+            for (int x = 0; x < sw; x++) {
+                const uint8_t *p = &px[((size_t)(y0 + 2 * y) * w + (size_t)(2 * x)) * 4];
+                for (int c = 0; c < 3; c++) hex += hd[p[c] >> 4], hex += hd[p[c] & 15];
+            }
+        rt_trace("pix: strip %u %d %d %s", frame, sw, sh, hex.c_str());
+    }
+    // RT_PIX_DUMP=A-B[/S]: those frames also as "pix: dump F W H HEX" (RGB, bottom row first; 1/S of the
+    // size, S 4 by default), to see a difference (tools/net/pix_dump.py turns them into PNGs)
+    static long a = -2, b = -1, sc = 4;
+    if (a == -2 && (a = -1, getenv("RT_PIX_DUMP"))) sscanf(getenv("RT_PIX_DUMP"), "%ld-%ld/%ld", &a, &b, &sc);
+    if ((long)frame < a || (long)frame > b || sc < 1) return;
+    int dw = w / (int)sc, dh = h / (int)sc;
+    std::string hex = "";
+    static const char *dig = "0123456789ABCDEF";
+    for (int y = 0; y < dh; y++)
+        for (int x = 0; x < dw; x++) {
+            const uint8_t *p = &px[((size_t)(y * h / dh) * w + (size_t)(x * w / dw)) * 4];
+            for (int c = 0; c < 3; c++) hex += dig[p[c] >> 4], hex += dig[p[c] & 15];
+        }
+    rt_trace("pix: dump %u %d %d %s", frame, dw, dh, hex.c_str());
+}
+
+/* A test that reads the picture gets every frame drawn (fps.skip leaves late ones undrawn, fps.interp draws them one step late), unless it
+   emulates a slow GPU or a fast display to test exactly that (RT_TEST_DRAW_MS, RT_TEST_HZ). */
+bool d3d8_debug_reads_frames(void) {
+    static int reads = -1;
+    if (reads < 0)
+        reads = !getenv("RT_TEST_DRAW_MS") && !getenv("RT_TEST_HZ") &&
+                (rt_screenshot_path[0] || rt_replay_path[0] || getenv("RT_PIX") || getenv("RT_TRACE_DRAWS_FRAME"));
+    return reads;
+}
+
 void d3d8_debug_present(uint32_t frame, int w, int h) {
+    ms_probe_frame(frame);   // match_probe.c: RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP
     if (rt_replay_path[0]) menu_change_probe(frame, w, h);
     if (frame == 1 || frame % 60 == 0 || (int)frame == rt_frame_limit) rt_trace("frame %u", frame);
     if (rt_frame_limit > 0 && (int)frame >= rt_frame_limit) {
@@ -128,4 +202,16 @@ void d3d8_debug_light(uint32_t index, const D3DLIGHT9 *lp, uint32_t caller, uint
         }
         rt_log("  lighting object list=0x%08X cur=0x%08X idx=%u obj=0x%08X:%s", list, cur, idx, obj, buf);
     }
+}
+
+/* RT_TRACE_INTERP=1 (fps_interp_check.sh): every frame fps.interp shows, its t between two steps and the
+   camera it was drawn from, and once a second the steps that rewrote a buffer their own draws read. */
+void d3d8_debug_interp(float t) {
+    static int on = -1;
+    if (on < 0) on = getenv("RT_TRACE_INTERP") != nullptr;
+    float e[3];
+    if (on && d3d9w_interp_eye(e)) printf("interp eye %.3f %.2f %.2f %.2f\n", t, e[0], e[1], e[2]);
+    static int n;
+    int copies, rewrites = on && t == 0 ? d3d9w_interp_rewrites(&copies) : 0;
+    if (on && t == 0 && ++n % 60 == 0) printf("interp rewrites %d copies %d\n", rewrites, copies);
 }

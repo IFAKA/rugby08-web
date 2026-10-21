@@ -1,5 +1,6 @@
 /* sdl_events.c -- SDL events translated to the Win32 messages the game's WndProc expects. */
 #include "sdl_int.h"
+#include "ui.h"
 
 #define WM_SIZE_        0x0005
 #define WM_ACTIVATE_    0x0006
@@ -22,10 +23,13 @@ static void push(uint32_t msg, uint32_t wp, uint32_t lp) {
 }
 
 static uint32_t mk_buttons(void) {
-    uint32_t b = SDL_GetMouseState(NULL, NULL), mk = 0;
+    uint32_t b = live_mouse(), mk = 0;
     if (b & SDL_BUTTON_LMASK) mk |= 0x01;
     if (b & SDL_BUTTON_RMASK) mk |= 0x02;
     if (b & SDL_BUTTON_MMASK) mk |= 0x10;
+    if (g_replay_buttons & 1) mk |= 0x01; /* injected (replay, netplay) */
+    if (g_replay_buttons & 2) mk |= 0x02;
+    if (g_replay_buttons & 4) mk |= 0x10;
     if (plat_vk_down(0x10)) mk |= 0x04;
     if (plat_vk_down(0x11)) mk |= 0x08;
     return mk;
@@ -33,12 +37,13 @@ static uint32_t mk_buttons(void) {
 
 /* Interactive play captures the pointer (SDL relative mode) and tracks the in-window position from
    the deltas, so the pointer can never stall at a window edge while the game cursor still has room. */
-static void rel_set(int on) {
+void rel_set(int on) {
 #ifdef __EMSCRIPTEN__
-    (void)on;   /* the browser: the game's menu cursor follows the pointer itself (plat_pointer) */
+    (void)on;   /* the browser: the game's menu cursor follows the pointer itself (plat_pointer; touch too) */
     return;
 #endif
-    if (virtual_cursor() || !g_win || on == g_rel) return;
+    /* netplay host: its real pointer is captured even under the virtual cursor */
+    if (g_desk_applying || (virtual_cursor() && !g_desk_on) || !g_win || on == g_rel) return;
     if (on) {
         int x, y;
         SDL_GetMouseState(&x, &y);
@@ -80,10 +85,14 @@ static void window_event(const SDL_WindowEvent *w) {
         push(WM_ACTIVATEAPP_, 1, 0);
         push(WM_ACTIVATE_, 1, 0);
         break;
-    case SDL_WINDOWEVENT_FOCUS_LOST:
-        rel_set(0);
+    case SDL_WINDOWEVENT_FOCUS_LOST: rel_set(0);
+#ifndef __EMSCRIPTEN__
         push(WM_ACTIVATE_, 0, 0);
         push(WM_ACTIVATEAPP_, 0, 0);
+#endif
+        /* the browser: the game is never deactivated (a deactivated game stops updating and drawing:
+           a party's host in another window stopped its friends' Team Select and its picture went
+           black, user-reported); only the keyboard follows the focus (js_key_held, keys of the page). */
         break;
     case SDL_WINDOWEVENT_SIZE_CHANGED:
         push(WM_SIZE_, 0, ((uint32_t)w->data2 << 16) | ((uint32_t)w->data1 & 0xFFFF));
@@ -140,7 +149,13 @@ void translate(const SDL_Event *e) {
     case SDL_QUIT: push(WM_CLOSE_, 0, 0); break;
     case SDL_WINDOWEVENT: window_event(&e->window); break;
     case SDL_KEYDOWN:
-    case SDL_KEYUP: key_event(&e->key); break;
+    case SDL_KEYUP: {   /* the in-game Online screens take keys first (runtime/core/ui_online.c) */
+        int down = e->type == SDL_KEYDOWN, sc = (int)e->key.keysym.scancode;
+        if (down && e->key.repeat ? ui_open() : ui_key(sc, down)) break;
+        if (!det_on() && !e->key.repeat && ui_camera_key(sc, down)) break;   /* (det: sdl_desk.c desk_record) */
+        key_event(&e->key);
+        break;
+    }
     case SDL_MOUSEMOTION: motion_event(&e->motion); break;
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP: button_event(&e->button); break;
@@ -156,6 +171,7 @@ int plat_pending(void) { return g_npending > 0 || g_activate_pending; }
 int plat_poll(plat_msg_t *m, int wait_ms) {
     if (!g_inited) return 0;
     SDL_Event e;
+    render_pump();
     if (g_activate_pending) {
         g_activate_pending = 0;
         push(WM_ACTIVATEAPP_, 1, 0);
@@ -163,7 +179,7 @@ int plat_poll(plat_msg_t *m, int wait_ms) {
     }
     if (det_on()) {   /* deterministic mode: the host window's own events never reach the guest; only
                          what the replay/netplay pushed at Present and the initial activation do */
-        while (SDL_PollEvent(&e)) {}
+        while (SDL_PollEvent(&e)) desk_record(&e);
         if (!g_npending) return 0;
         *m = g_pending[0];
         memmove(g_pending, g_pending + 1, (size_t)--g_npending * sizeof g_pending[0]);

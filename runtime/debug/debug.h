@@ -3,11 +3,32 @@
 #ifndef RT_DEBUG_H
 #define RT_DEBUG_H
 #include "rt.h"
+#include "plat.h"
 
-void rt_probe_enter(uint32_t va);      /* probes.c: RT_PROBE / RT_PROBE_DUMP at a function entry */
-void rt_dump_at(uint32_t frame);       /* probes.c: RT_DUMP memory ranges at a presented frame */
-void dbg_quit_frame(uint32_t frame);   /* quit_at.c: RT_QUIT_AT_FRAME */
-void rt_coverage_mark(uint32_t va);    /* coverage.c: RT_COVERAGE, a function entered */
-void rt_selftest_crt(void);            /* selftest_crt.c: RT_SELFTEST_CRT, then exit */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void rt_probe_enter(uint32_t va);     /* probes.c: RT_PROBE / RT_PROBE_DUMP at a function entry */
+void rt_dump_at(uint32_t frame);      /* probes.c: RT_DUMP memory ranges at a presented frame */
+void rt_coverage_mark(uint32_t va);   /* coverage.c: RT_COVERAGE, a function entered */
+void rt_selftest_crt(void);           /* selftest_crt.c: RT_SELFTEST_CRT, then exit */
+void ms_probe_frame(uint32_t frame);  /* match_probe.c: RT_MS_SCAN / RT_MS_DUMP / RT_MS_SNAP at a Present */
+void ms_stream_check_frame(void);     /* match_stream_check.c: RT_MS_STREAM_CHECK */
+void ms_quit_frame(uint32_t frame);   /* match_quit.c: RT_MS_QUIT_AT, RT_MS_RELAUNCH */
+void net_ha_test_press(rt_pad_t *local, int host_phase, uint32_t frame);   /* net_ha_press.c */
+int dbg_draw_who(const uint32_t *a, int kind, uint32_t prims, uint32_t vb, uint32_t ib, uint32_t tex,
+                 uint32_t vs);   /* draw_who.c: RT_DRAW_WHO, RT_DRAW_HIDE_VB (1: leave the draw out) */
+void dbg_buffer_made(uint32_t buf, int vertex, uint32_t len, uint32_t usage, uint32_t fvf,
+                     uint32_t pool); /* draw_who.c */
+#ifdef __cplusplus
+}
+#endif
 
+void dbg_test_options_frame(uint32_t frame); /* test_options.c: RT_TEST_CAMERA */
+void dbg_ptr_find(uint32_t frame);           /* draw_who.c: RT_PTR_FIND */
+void dbg_obj_scan(uint32_t frame);           /* draw_who.c: RT_OBJ_SCAN */
+void dbg_setpiece_frame(uint32_t frame);     /* setpiece_probe.c: RT_MS_SETPIECE */
+void dbg_camside_frame(uint32_t frame);      /* camside_probe.c: RT_MS_CAMSIDE */
+void dbg_render_writes_begin(uint32_t frame); /* render_writes.c: RT_RENDER_WRITES (at the camera step) */
+void dbg_render_writes_end(uint32_t frame);   /* (at the Present) */
 #endif

@@ -6,8 +6,9 @@ Every script prints ONE summary line and writes details to `logs/<name>.log` (pr
 |---|---|
 | `lift/` | exe → C: `lift.py` (+ `lift_ext.py`, `code_patch.py`, `jumptables.py`, `ranges.py`, `stubemu.py`), the catalog (`build_catalog.py`, `icall_seed.py`, `lift_fixpoint.sh`), sound-bank code (`aems_lift.py`), checks of the lift (`fidelity_report.py`, `difftest.py`, `lift_report.sh`), `split_big.py` (web), `patch_exe.py` (deobfuscated exe), `vendor_recomp_types.py` |
 | `gen/` | generated runtime tables CMake runs: `gen_imports.py` (import bridges), `gen_d3d8_bridges.py` (D3D8 vtables) |
-| `check/` | feature checks and gates: `run_native.sh`, `web_check.sh`, `serve_check.sh`, `run_wine.sh` (oracle), `det_synctest.sh`, `regress.sh` (refactor referee), `lint.sh`, `structure.sh`, image/audio/manifest stats |
-| `web/` | `serve.py` (localhost, COOP/COEP), `package_assets.py` (Game Files → 8 MiB chunks), `stamp_sw.cmake` (the app's service worker per build), `web_selftest.py`, `web_profile.py` |
+| `check/` | feature checks and gates: `run_native.sh`, `web_check.sh`, `serve_check.sh`, `run_wine.sh` (oracle), `det_synctest.sh`, `split_check.sh` (web split, native), `regress.sh` (refactor referee), `lint.sh`, `structure.sh`, image/audio/manifest stats |
+| `net/` | online play checks: `net_test.sh` (two natives over the relay), `net_web_test.sh`, `net_handoff.sh`, `net_dropin.py` / `net_live_input.py` (Playwright), `pov_check.sh` (per-player camera), `match_*_check.sh` (on.* items) |
+| `web/` | `serve.py` (localhost, COOP/COEP), `package_assets.py` (Game Files → 8 MiB chunks), `stamp_sw.cmake` (the app's service worker per build), `web_selftest.py` (CRT math in the browser), `web_profile.py` (CPU profile per lifted function) |
 | (top) | `setup_submodules.sh`: a fresh clone's third_party/ (upstream submodules + our patch series) |
 | `analysis/` | Ghidra, RTTI, disassembly, instruction stats, recovery score, Wine specs |
 | `oracle/` | Wine proxy DLLs that trace the original exe's D3D8/DInput/DSound calls |

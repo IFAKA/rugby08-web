@@ -22,6 +22,11 @@ class StubEmu:
         self.base, self.img = base, bytes(img)
         self.dirty = []
         self.uc.hook_add(UC_HOOK_MEM_WRITE, self._on_write)
+        # the CPU as created: each run starts from it. Unicorn runs at ring 0, so junk a run decodes
+        # (a segment load, a control register write) stays in effect and, unrestored, made every later
+        # stack write fault: the switch slot 0x402AAC[1] -> 0x45E637 resolved to nothing in a full
+        # catalog build and that Tri Nations case was never lifted (2026-10-20)
+        self.ctx = self.uc.context_save()
 
     def _on_write(self, u, access, addr, size, value, _):
         if self.base <= addr < self.base + len(self.img):
@@ -34,6 +39,7 @@ class StubEmu:
             o = addr - self.base
             uc.mem_write(addr, self.img[o : o + size])
         self.dirty = []
+        uc.context_restore(self.ctx)
         uc.reg_write(UC_X86_REG_ESP, STACK)
 
         def on_code(u, addr, size, _):
@@ -63,6 +69,7 @@ class StubEmu:
             o = addr - self.base
             uc.mem_write(addr, self.img[o : o + size])
         self.dirty = []
+        uc.context_restore(self.ctx)
         uc.reg_write(UC_X86_REG_ESP, STACK)
 
         def on_code(u, addr, size, _):

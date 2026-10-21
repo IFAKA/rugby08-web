@@ -2,11 +2,14 @@
  * (checks grep for it); prefixes select a probe: args:, list:, ctl:, stick: (controller fields at their
  * offsets in the game's objects), shadow: (runtime/debug/shadow.c). */
 #include "debug.h"
+#include "match_state.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 uint32_t rt_ms(void);   /* runtime/win32/k32_time.c */
+uint32_t rt_enter_mark(void);                          /* trace.c */
+int rt_enter_since(uint32_t mark, uint32_t *out, int max); /* trace.c */
 
 /* tools/hooks.json: a name starting with "args:" logs the first three stack arguments and ecx
  * (the caller's state at entry: globals are current until the body's first REGS_OUT). */
@@ -79,8 +82,12 @@ static void hook_stick(const char *name) {
 }
 
 static void hook_args(uint32_t va, const char *name) {
-    rt_trace("%s (0x%08X) ecx=%08X args %08X %08X %08X", name + 5, va, g_ecx, rd32(g_esp + 4), rd32(g_esp + 8),
-             rd32(g_esp + 12));
+    uint32_t prev[6] = { 0 };   /* the functions entered just before (the caller is among them) */
+    int np = rt_enter_since(rt_enter_mark() - 7, prev, 6);
+    rt_trace("%s (0x%08X) f%u ecx=%08X ret %08X args %08X %08X %08X before %08X %08X %08X %08X %08X", name + 5, va,
+             rt_present_frame, g_ecx, rd32(g_esp), rd32(g_esp + 4), rd32(g_esp + 8), rd32(g_esp + 12),
+             np > 4 ? prev[np - 6 + 1] : 0, np > 3 ? prev[np - 4] : 0, np > 2 ? prev[np - 3] : 0,
+             np > 1 ? prev[np - 2] : 0, np > 0 ? prev[np - 1] : 0);
     {   // RT_ARGS_DUMP=N: also the first N dwords at ecx as floats (finding position/heading fields)
         static int n = -1;
         static uint32_t off;   // RT_ARGS_DUMP_OFF=hex: start the dump at ecx+off
@@ -113,5 +120,6 @@ void rt_hook_enter(uint32_t va, const char *name) {
     else if (!strncmp(name, "shadow:", 7)) rt_shadow_enter(va, name + 7);
     else if (!strncmp(name, "stick:", 6)) hook_stick(name);
     else if (!strncmp(name, "args:", 5)) hook_args(va, name);
+    else if (!strcmp(name, "ms:launch")) ms_launch();   /* runtime/core/match_setup.c */
     else rt_trace("%s entered (0x%08X)", name, va);
 }

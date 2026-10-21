@@ -16,6 +16,7 @@ void EnsureUPBuffers() {
 
 void GLBufferStore::create(GLenum target, UINT len) {
     length = len;
+    mirror.assign(len, 0);
     glGenBuffers(1, &buffer);
     glBindBuffer(target, buffer);
     glBufferData(target, len, nullptr, GL_STATIC_DRAW);
@@ -42,8 +43,23 @@ HRESULT GLBufferStore::lock(UINT offset, UINT size, void **ppbData, DWORD flags)
 // still be reading flushes the command queue and waits (40% of a match frame). The lock flags say what
 // is safe: DISCARD / whole-buffer locks orphan the storage (a fresh allocation, no wait), NOOVERWRITE
 // writes a range the GPU is not using (an unsynchronized map; WebGL2 has no glMapBufferRange).
-HRESULT GLBufferStore::unlock(GLenum target) {
+HRESULT GLBufferStore::unlock(GLenum target, const void *owner) {
     if (!locked) return -1;
+    uint8_t *data = locked;   // the lock's memory goes with its upload (on the render thread, if there is one)
+    UINT off = locked_offset, size = locked_size;
+    DWORD flags = locked_flags;
+    locked = nullptr;
+    if (rq_game()) return rq_post([=] { upload(target, owner, data, off, size, flags); }), D3D_OK;
+    upload(target, owner, data, off, size, flags);
+    return D3D_OK;
+}
+
+void GLBufferStore::upload(GLenum target, const void *owner, uint8_t *locked, UINT locked_offset, UINT locked_size,
+                           DWORD locked_flags) {
+    CostScope cost(COST_BUFFER);
+    if (locked_size == length || !(locked_flags & D3DLOCK_NOOVERWRITE))   // (NOOVERWRITE keeps what draws read)
+        interp_upload(owner, buffer, length, target, mirror.data());
+    memcpy(mirror.data() + locked_offset, locked, locked_size);
     glBindBuffer(target, buffer);
     if (locked_size == length) {
         glBufferData(target, length, locked, GL_DYNAMIC_DRAW);
@@ -65,6 +81,4 @@ HRESULT GLBufferStore::unlock(GLenum target) {
     }
     glBindBuffer(target, 0);
     delete[] locked;
-    locked = nullptr;
-    return D3D_OK;
 }

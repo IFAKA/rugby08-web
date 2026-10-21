@@ -20,7 +20,6 @@ void rt_coverage_frame(uint32_t frame) {
     static int parsed;
     rt_present_frame = frame;
     rt_dump_at(frame);
-    dbg_quit_frame(frame);
     if (!parsed) {
         parsed = 1;
         spec = getenv("RT_COVERAGE");

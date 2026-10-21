@@ -1,6 +1,7 @@
 // resources.h -- the renderer's surface, texture and buffer objects.
 #pragma once
 #include "internal.h"
+#include <atomic>
 
 // surface.cpp: a render-target texture level, a depth/stencil renderbuffer, or the back buffer.
 class D3D9Surface : public IDirect3DSurface9 {
@@ -10,7 +11,7 @@ class D3D9Surface : public IDirect3DSurface9 {
     bool m_is_backbuffer;     // the default framebuffer (the canvas)
     UINT m_width;
     UINT m_height;
-    ULONG m_refCount;
+    std::atomic<ULONG> m_refCount;   // (the render thread's device holds and lets go of targets too)
 
     D3D9Surface(UINT width, UINT height, GLuint gl_obj, bool is_rb, bool is_bb = false);
     virtual ~D3D9Surface();
@@ -35,6 +36,7 @@ class D3D9Texture : public IDirect3DTexture9 {
     virtual HRESULT GetSurfaceLevel(UINT Level, IDirect3DSurface9 **ppSurfaceLevel) override;
     virtual HRESULT LockRect(UINT Level, D3DLOCKED_RECT *pLockedRect, const void *pRect, DWORD Flags) override;
     virtual HRESULT UnlockRect(UINT Level) override;
+    void upload(UINT Level, void *data);
     GLuint GetGLTexture() const { return m_texture; }
 };
 
@@ -46,11 +48,14 @@ struct GLBufferStore {
     uint8_t *locked = nullptr;
     UINT locked_offset = 0, locked_size = 0;
     DWORD locked_flags = 0;
+    std::vector<uint8_t> mirror;   // the contents, for fps.interp's copies (interp_upload)
 
     void create(GLenum target, UINT len);
     void destroy();
     HRESULT lock(UINT offset, UINT size, void **ppbData, DWORD flags);
-    HRESULT unlock(GLenum target);
+    HRESULT unlock(GLenum target, const void *owner);
+    void upload(GLenum target, const void *owner, uint8_t *locked, UINT locked_offset, UINT locked_size,
+                DWORD locked_flags);
 };
 
 class D3D9IndexBuffer : public IDirect3DIndexBuffer9 {
@@ -61,16 +66,20 @@ class D3D9IndexBuffer : public IDirect3DIndexBuffer9 {
     D3D9IndexBuffer(UINT length, D3DFORMAT format) : m_format(format) {
         m_store.create(GL_ELEMENT_ARRAY_BUFFER, length);
     }
-    virtual ~D3D9IndexBuffer() { m_store.destroy(); }
+    virtual ~D3D9IndexBuffer() {
+        interp_forget(this);
+        m_store.destroy();
+    }
     virtual ULONG AddRef() override { return 1; }   // the D3D8 layer owns the lifetime
     virtual ULONG Release() override {
+        if (rq_game()) return rq_post([this] { delete this; }), 0;
         delete this;
         return 0;
     }
     virtual HRESULT Lock(UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags) override {
         return m_store.lock(OffsetToLock, SizeToLock, ppbData, Flags);
     }
-    virtual HRESULT Unlock() override { return m_store.unlock(GL_ELEMENT_ARRAY_BUFFER); }
+    virtual HRESULT Unlock() override { return m_store.unlock(GL_ELEMENT_ARRAY_BUFFER, this); }
     GLuint GetGLBuffer() const { return m_store.buffer; }
     D3DFORMAT GetFormat() const { return m_format; }
 };
@@ -80,15 +89,19 @@ class D3D9VertexBuffer : public IDirect3DVertexBuffer9 {
 
   public:
     explicit D3D9VertexBuffer(UINT length) { m_store.create(GL_ARRAY_BUFFER, length); }
-    virtual ~D3D9VertexBuffer() { m_store.destroy(); }
+    virtual ~D3D9VertexBuffer() {
+        interp_forget(this);
+        m_store.destroy();
+    }
     virtual ULONG AddRef() override { return 1; }   // the D3D8 layer owns the lifetime
     virtual ULONG Release() override {
+        if (rq_game()) return rq_post([this] { delete this; }), 0;
         delete this;
         return 0;
     }
     virtual HRESULT Lock(UINT OffsetToLock, UINT SizeToLock, void **ppbData, DWORD Flags) override {
         return m_store.lock(OffsetToLock, SizeToLock, ppbData, Flags);
     }
-    virtual HRESULT Unlock() override { return m_store.unlock(GL_ARRAY_BUFFER); }
+    virtual HRESULT Unlock() override { return m_store.unlock(GL_ARRAY_BUFFER, this); }
     GLuint GetGLBuffer() const { return m_store.buffer; }
 };

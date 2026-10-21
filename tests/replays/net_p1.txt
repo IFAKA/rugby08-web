@@ -1,0 +1,20 @@
+# Netplay test, player 1 (virtual pad only): title -> PLAY NOW -> dialogs -> Team Select: own pad to HOME -> match.
+8100 pad 0 tap cross
+8400 pad 0 tap cross
+9000 pad 0 tap cross
+9300 pad 0 tap cross
+9600 pad 0 tap cross
+9900 pad 0 tap cross
+10400 pad 0 tap cross
+11300 pad 0 down lleft
+11360 pad 0 up lleft
+11700 pad 0 tap cross
+12100 pad 0 tap cross
+12600 pad 0 tap cross
+13000 pad 0 tap cross
+13400 pad 0 tap cross
+13800 pad 0 tap cross
+14200 pad 0 tap cross
+11650 shot logs/net/p1_11650.png
+13000 shot logs/net/p1_13000.png
+14900 shot logs/net/p1_14900.png

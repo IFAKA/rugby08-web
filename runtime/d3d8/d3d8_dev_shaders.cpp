@@ -93,14 +93,17 @@ HLE_D3D(IDirect3DDevice8, SetVertexShader) {  // FVF codes, or a handle from Cre
             static int off = getenv("RT_NO_PROGVS") != nullptr;   // A/B: draw without the GL program
             D3D9WProgVS *gl = off ? nullptr : vs8_gl(v, (int)i);
             d3d9w_progvs_use(gl, s->vsc);
+            s->progvs = gl != nullptr;
             if (!gl) d3d8_unimpl("SetVertexShader(programmable: GL program failed)", 0);
             return D3D_OK_;
         }
         d3d9w_progvs_use(nullptr, nullptr);
+        s->progvs = false;
         D(a)->SetFVF(v->fvf);
         return D3D_OK_;
     }
     d3d9w_progvs_use(nullptr, nullptr);
+    s->progvs = false;
     {   /* each distinct FVF once: position kinds the backend may not handle (XYZB1-5 blend weights) */
         static uint32_t seen[64];
         static int nseen;

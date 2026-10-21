@@ -20,6 +20,8 @@ option(RECOMP_SPLIT "use build/web-gen (split giant functions) in a native build
 if(EMSCRIPTEN OR RECOMP_SPLIT)
   # build/web-gen/*.c: the giant lifted functions cut into parts (tools/lift/split_big.py, run by ./init.sh build-web);
   # V8 runs out of compiler memory (renderer crash) on the 850 KB wasm functions otherwise
+  # (CONFIGURE_DEPENDS: a new split set, e.g. after a new lift, reconfigures: else stale parts link twice)
+  file(GLOB _split_now CONFIGURE_DEPENDS ${ROOT}/build/web-gen/*.c)
   set(_split)
   foreach(s ${GEN_SRCS})
     get_filename_component(n ${s} NAME)
@@ -127,7 +129,7 @@ if(NOT EMSCRIPTEN)
   find_package(Threads REQUIRED)
   target_link_libraries(rugby08 PRIVATE Threads::Threads)
   find_package(SDL2 REQUIRED CONFIG)
-  target_link_libraries(rugby08 PRIVATE SDL2::SDL2 "-framework OpenGL")
+  target_link_libraries(rugby08 PRIVATE SDL2::SDL2 "-framework OpenGL" "-framework CoreFoundation")
 else()
   target_compile_options(rugby08 PRIVATE -sUSE_SDL=2)
 endif()
@@ -147,14 +149,20 @@ if(EMSCRIPTEN)
   # -O0 at link skips the wasm-opt -O3 pass (>1h and >24 GB on the 91 MB module); revisit for release builds.
   target_link_options(rugby08 PRIVATE -O0 -pthread -sUSE_SDL=2 -sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=1gb -sMAXIMUM_MEMORY=2gb -sPTHREAD_POOL_SIZE=16 -sEXIT_RUNTIME=1
+    -sOFFSCREENCANVAS_SUPPORT=1   # the canvas moves to the render thread (platform/web/render_thread.c)
     -sJSPI   # the Windows loop yields to the browser at every Present (d3d8_device.cpp) without Asyncify
+    -sEXPORTED_RUNTIME_METHODS=callMain   # the page (shell.html) starts the game: solo, or an online session
     -sSUPPORT_LONGJMP=wasm -fwasm-exceptions
-    --pre-js=${ROOT}/platform/web/js/gamefs.js --pre-js=${ROOT}/platform/web/js/audio.js
-    --pre-js=${ROOT}/platform/web/js/errors.js --shell-file=${ROOT}/platform/web/shell.html
+    --profiling-funcs   # function names in the wasm: a crash's stack names the guest function
+    --pre-js=${ROOT}/platform/web/js/own_copy.js --pre-js=${ROOT}/platform/web/js/gamefs.js --pre-js=${ROOT}/platform/web/js/audio.js
+    --pre-js=${ROOT}/platform/web/js/errors.js --pre-js=${ROOT}/platform/web/js/rtc.js
+    --pre-js=${ROOT}/platform/web/js/peers.js --shell-file=${ROOT}/platform/web/shell.html
     --preload-file=${ROOT}/Rugby08_unpacked.exe@/Rugby08_unpacked.exe)
-  set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/js/gamefs.js ${ROOT}/platform/web/js/audio.js
+  set_property(TARGET rugby08 APPEND PROPERTY LINK_DEPENDS ${ROOT}/platform/web/js/own_copy.js ${ROOT}/platform/web/js/gamefs.js ${ROOT}/platform/web/js/audio.js ${ROOT}/platform/web/js/rtc.js ${ROOT}/platform/web/js/peers.js
     ${ROOT}/platform/web/js/errors.js ${ROOT}/platform/web/shell.html)
-  add_custom_command(TARGET rugby08 POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:rugby08>/rugby08.html $<TARGET_FILE_DIR:rugby08>/index.html
+  # index.html: the page with this build's id stamped in (a party plays one build: server/main.go)
+  add_custom_command(TARGET rugby08 POST_BUILD COMMAND ${CMAKE_COMMAND} -DIN=$<TARGET_FILE_DIR:rugby08>/rugby08.html
+    -DOUT=$<TARGET_FILE_DIR:rugby08>/index.html -P ${ROOT}/tools/web/stamp_build.cmake
     # the installable app (platform/web/pwa/README.md): icons in pwa/, the worker and manifest beside the page
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${ROOT}/platform/web/pwa $<TARGET_FILE_DIR:rugby08>/pwa
     COMMAND ${CMAKE_COMMAND} -E copy ${ROOT}/platform/web/pwa/manifest.webmanifest $<TARGET_FILE_DIR:rugby08>

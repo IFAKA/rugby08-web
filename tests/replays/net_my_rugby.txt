@@ -1,0 +1,11 @@
+# Netplay pad 0 (the web keyboard mapped to controller 1): main menu -> MY RUGBY, the presses of the
+# browser repro that crashed (2026-10-12): S at the title, Down to MY RUGBY, S twice.
+8100 pad 0 tap cross
+9500 pad 0 down ldown
+9512 pad 0 up ldown
+9732 pad 0 down cross
+9741 pad 0 up cross
+9900 shot logs/mr/n9900.png
+10031 pad 0 down cross
+10050 pad 0 up cross
+10300 shot logs/mr/n10300.png

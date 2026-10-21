@@ -32,6 +32,33 @@ int plat_gl_create(void);                                   /* 0 = ok */
 void plat_gl_size(int *w, int *h);                           /* drawable size in pixels */
 void plat_gl_set_size(int w, int h);                         /* resize the window to w x h */
 void plat_gl_swap(void);
+void plat_render_early(void);                               /* before the device: the browser's render thread */
+void plat_render_waiting(void);                             /* the game's thread waits for the render thread */
+void plat_render_start(void);                               /* the device exists: drawing moves to its thread */
+/* A device too slow to draw every step at 60 a second still steps the game at 60: it draws one step in
+ * N (the smallest N its measured draw and step costs fit in, at most 4: platform/sdl/sdl_skip.c), the
+ * others step without drawing (plat_frame_late) and their slots pass without a swap (plat_frame_skip).
+ * Real frames only: nothing is shown twice to make a number. */
+int plat_frame_late(void);   /* the next frame is not drawn: step it, draw nothing */
+void plat_frame_skip(void);  /* this frame was not drawn: its slot passes (no swap, no wait) */
+/* A display faster than the game's steps draws a real frame at every refresh between them: the last
+ * step's draws, blended from the step before (platform/sdl/sdl_interp.c, render/webgl/interp.cpp). */
+int plat_interp_wanted(void);       /* the next step is recorded and its frames come from refreshes */
+int rt_interp_frame(float t);       /* the runtime draws the frame between steps at t (0..1); 0: none */
+void rt_interp_frame_end(void);     /* after its swap */
+/* Netplay keyboard and mouse ("desk"): the host's real key and mouse events travel with its input
+ * and every instance injects them at the same frame, like replay input (deterministic). */
+typedef struct {
+    uint8_t type, a;
+    int16_t x, y;
+} plat_desk_ev_t;   /* 6 bytes on the wire */
+enum { PLAT_DESK_KEY = 1, PLAT_DESK_MOVE, PLAT_DESK_BUTTON, PLAT_DESK_WHEEL };
+/* KEY: a = down, x = SDL scancode. MOVE: x, y = relative motion. BUTTON: a = down, x = 1 left,
+ * 2 middle, 3 right. WHEEL: y = notches. */
+void plat_desk_capture(int on);                             /* record this machine's events */
+int plat_desk_take(plat_desk_ev_t *out, int max);           /* recorded events, oldest first */
+void plat_desk_apply(const plat_desk_ev_t *ev);             /* inject one into the guest */
+void plat_frame_yield(void);   /* web: hand control to the browser and come back at once (JSPI); native: nothing */
 void plat_set_gamma(const uint16_t *ramp);                   /* 3 x 256 WORDs (R, G, B), D3DGAMMARAMP layout */
 
 /* Next pending event as a WM_* message (hwnd filled in by user32). 1 = got one, 0 = none.
@@ -44,6 +71,7 @@ uint8_t plat_vk_down(uint32_t vk); /* 1 while virtual key vk is held */
 uint8_t plat_dik_down(uint32_t dik); /* 1 while DirectInput key dik (set-1 scan | 0x80 extended) is held */
 void plat_mouse_delta(int *dx, int *dy, int *dwheel); /* motion since the last call */
 int plat_pointer(float *x, float *y); /* the browser's pointer in game units (640x480); 1 if it moved */
+int plat_local_pointer(float *x, float *y); /* this player's own real pointer, game units; 1 once it moved */
 uint8_t plat_mouse_buttons(void); /* bit 0 left, 1 right, 2 middle */
 uint32_t plat_vk_to_scancode(uint32_t vk); /* Win32 set-1 scan code, 0 if none */
 void plat_cursor_pos(int *x, int *y); /* screen coordinates */
@@ -81,6 +109,61 @@ extern int rt_npads; /* pads the game can see (RT_PADS=N, netplay players) */
 extern int rt_pads_first; /* 1: pads enumerate before the keyboard (netplay) */
 int rt_pad_event(int pad, const char *name, int down);
 int rt_pad_count(void); /* replay "pad N tap|down|up NAME"; 0 = unknown name */
+void plat_local_pad(rt_pad_t *p); /* this player's live devices -> p (unchanged in replay runs) */
+int plat_gamepad(rt_pad_t *p);    /* this machine's game controller alone -> p: 1 while connected */
+/* Which pad slots are plugged in (pads.c, runtime/core/pad_attach.c): a slot exists from boot (the
+   game enumerates once) and the game's controller for it is attached or not, as a pad that comes
+   and goes on Windows: slot 0 this machine's game controller, slots 1..3 the party's friends (host). */
+extern uint32_t rt_pads_party; /* host: bit k = room slot k has a member */
+int rt_pad_attached(int k);
+void rt_pads_present(uint32_t frame); /* every Present, before the frame's input reaches the game */
+void rt_pad_pause_frame(uint32_t frame); /* every Present, after it: Start pauses a match (pad_pause.c) */
+
+/* Netplay (runtime/core/netplay.c). Transport: platform/native/net_native.c, platform/web/. */
+extern int rt_net;
+extern int rt_ff; /* catching up (netplay): skip drawing and sound */
+int rt_net_start(int argc, char **argv); /* --net URL --net-room CODE ...: 1 if a session started */
+int rt_net_begin(int slot, int creator, int64_t since);
+extern int rt_net_cfg_delay; /* --net-delay D (net_join.c; 0: default) */
+extern const char *rt_net_room; /* --net-room CODE (net_join.c) */
+rt_pad_t *rt_net_local_pad(void);
+int rt_net_active(int k);   /* lockstep: room slot k plays at the frame being resolved */
+int rt_net_slot(void);      /* lockstep: this player's room slot */
+double rt_net_waited_take(void); /* ms this game waited for others' inputs since asked: pacing, not work (fps.skip) */
+int rt_net_host(void); /* lockstep: the slot in the party the longest (it drives the menus: net_leave.c) */
+int rt_net_desk(void); /* lockstep: the slot whose keyboard and mouse are the game's */
+void rt_net_leave(void); /* lockstep: this player leaves the party and plays on alone */
+int rt_net_left(void); /* lockstep, once: 1 this player left the party, 2 lost the connection, else 0 */
+int rt_net_external_source(void); /* net_external.c: this game reads its machine */
+void rt_net_external_put(const void *data, uint32_t len); /* ... and shares what it read */
+void rt_net_external_get(void *data, uint32_t len); /* ... or gets the bytes another game read */
+const char *plat_session_code(void); /* lockstep: this session's room code ("": none) */
+void plat_session_join(const char *code); /* lockstep: play in that room instead (the page reloads) */
+int net_tx_forked(void); /* lockstep: 1 once the server gave this game a room of its own */
+/* joining a party: its screen from the start (platform/web/join_view.c; native: none) */
+int plat_join_preview(int *slot, uint32_t *players, char *code, int cap); /* 1: joining that room as SLOT */
+void plat_join_snapshot(int menu_x); /* the frame just drawn is that party's screen: keep it (and the menu's x) */
+int plat_join_menu_x(void); /* after the reload: that menu x (front-end units), -1 none */
+int plat_join_backdrop(uint8_t *rgba, int w, int h); /* while catching up: the kept picture, W x H RGBA */
+int plat_join_progress(int slot); /* the others: player SLOT joining, percent caught up; -1 not joining */
+const char *plat_page_message(void); /* a message for the game to show (the page: join errors...), or NULL */
+extern int rt_net_progress; /* lockstep: catching up, percent done */
+/* Host-authoritative mode (runtime/core/net_ha.c, --net-mode ha) */
+extern int rt_net_ha; /* 1 host, 2 friend */
+int rt_net_begin_ha(int slot, int creator);
+void rt_net_end_ha(void); /* back to playing alone (the Online screens' LEAVE) */
+extern const char *rt_net_url; /* the relay (--net URL; ui_lobby.c) */
+void net_ha_present(uint32_t frame); /* d3d8 Present, before the frame's input */
+int net_tx_open(const char *url); /* 0 = connected */
+int net_tx_send(const void *data, int len, int text);
+void net_tx_close(void);
+int net_tx_recv(void *buf, int cap, int wait_ms); /* >0 length, 0 none, -1 closed */
+int net_tx_recv_peer(void *buf, int cap); /* a peer's direct copy of an 'I'/'H' (web), >0 length, 0 none */
+int net_tx_delay(void);
+int net_tx_hints(int64_t *grant, int64_t *front);
+/* lockstep: the server's hints the page holds (1: some) */ /* this player's input delay in frames (0: no preference) */
+void net_tx_status(int kind, int value); /* for the page: 0 running, 1 waiting for slot value,
+                                                     2 catching up value %, 3 connection lost (offline) */
 
 /* Input replay (--replay FILE, tests/replays/): lines "<frame> tap|down|up <SDL key name>", '#'
  * comments. Called once per presented frame; due events become ordinary SDL key events, so they

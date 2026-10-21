@@ -9,7 +9,7 @@
  *    virtual time, never on host wake-up order. Replaces the FIFO guest lock (cpu.c) in this mode.
  *  - Host -> guest input crosses only at Present (det_frame): replay/netplay input, then window
  *    messages, in a fixed order.
- *  - det_hash: 64-bit hash of guest state (image, main stack, heap) for synctests and desync checks. */
+ *  - det_hash (det_hash.c): 64-bit hash of guest state (image, main stack, heap) for synctests and desync checks. */
 #include "rt.h"
 #include <pthread.h>
 #include <stdlib.h>
@@ -52,26 +52,32 @@ uint64_t det_now_ns(void) { return __atomic_load_n(&g_vt, __ATOMIC_RELAXED); }
  * advances DET_SPIN_NS. Reads scattered through real work (profiling stopwatches) never count, so
  * an ordinary frame's dt stays exactly 1/60 s. Counts are per thread and depend only on the guest's
  * own code path: deterministic. */
+static void time_step(const char *why);   /* (RT_DET_SCHED) */
 #define DET_SPIN     32
 #define DET_SPIN_GAP 64
 #define DET_SPIN_NS  500000ull
 static RECOMP_TLS uint32_t t_reads, t_last_entries;
 uint32_t rt_enter_mark(void);   /* log.c: guest function entries on this thread */
 uint64_t det_clock_read(void) {
-    if (t_id < 0) return det_now_ns();
+    if (t_id < 0 || t_det_local) return det_now_ns();   /* (one player's own work: never a poll) */
     uint32_t e = rt_enter_mark();
     if (e - t_last_entries >= DET_SPIN_GAP) t_reads = 0;
     t_last_entries = e;
     if (++t_reads >= DET_SPIN) {
         t_reads = 0;
         __atomic_add_fetch(&g_vt, DET_SPIN_NS, __ATOMIC_RELAXED);
+        time_step("clock poll");
         det_yield();
     }
     return det_now_ns();
 }
 int det_thread_id(void) { return t_id; }
 
-void det_init_main(void) {            /* the boot thread: slot 0, holds the baton */
+void det_init_main(void) {
+    {
+        extern int rt_ff;
+        if (getenv("RT_FF")) rt_ff = 1;
+    } /* tests: run as if catching up (no drawing, no sound) */ /* the boot thread: slot 0, holds the baton */
     pthread_mutex_lock(&g_mu);
     pthread_cond_init(&g_t[0].cv, NULL);
     g_t[0].state = T_RUN;
@@ -90,6 +96,16 @@ static int runnable(dthr_t *t) {
         return 1;
     }
     return 0;
+}
+
+static uint32_t g_scheds, g_handoffs; /* stats: scheduling points, and those that changed thread */
+/* RT_DET_SCHED=1 (diagnosis: two games that should be one): every Present's scheduling totals and every
+   time step taken by work or polling, with the thread, to find where two runs part */
+static int g_sched_trace = -1;
+static uint64_t g_all_scheds, g_all_handoffs;
+static void time_step(const char *why) {
+    if (g_sched_trace < 0) g_sched_trace = getenv("RT_DET_SCHED") != NULL;
+    if (g_sched_trace) rt_trace("det: step %s thread %d vt %llu", why, t_id, (unsigned long long)g_vt);
 }
 
 /* g_mu held. Pick the next thread after `me` (me itself last), advancing virtual time while
@@ -114,8 +130,10 @@ static void schedule(int me) {
         __atomic_store_n(&g_vt, m, __ATOMIC_RELAXED);
         g_slices = 0;
     }
+    g_scheds++, g_all_scheds++;
     if (next == me) return;
-    static int chaos = -1;   /* RT_DET_CHAOS=1: random host delays at every hand-over (synctest) */
+    g_handoffs++, g_all_handoffs++;
+    static int chaos = -1; /* RT_DET_CHAOS=1: random host delays at every hand-over (synctest) */
     if (chaos < 0) {
         const char *e = getenv("RT_DET_CHAOS");
         chaos = e && *e == '1';
@@ -138,8 +156,8 @@ static void schedule(int me) {
 #define DET_STALL   256
 #define DET_WORK_NS 100000ull
 void det_preempt(void) {
-    if (t_id < 0) return;
-    if (++g_slices > DET_STALL) __atomic_add_fetch(&g_vt, DET_WORK_NS, __ATOMIC_RELAXED);
+    if (t_id < 0 || t_det_local) return;   /* (det_local.c) */
+    if (++g_slices > DET_STALL) __atomic_add_fetch(&g_vt, DET_WORK_NS, __ATOMIC_RELAXED), time_step("work");
     det_yield();
 }
 
@@ -155,6 +173,7 @@ void det_yield(void) {
  * acquires afterwards, still holding the baton, so nothing can intervene). */
 int det_wait(det_ready_fn ready, void *arg, uint64_t deadline) {
     if (t_id < 0) rt_fatal("det_wait from a host thread");
+    if (t_det_local) rt_trace("det: a wait inside one player's own work (det_local.c): scheduling may differ");
     pthread_mutex_lock(&g_mu);
     dthr_t *t = &g_t[t_id];
     if (!(ready && ready(arg)) && deadline > g_vt) {
@@ -171,8 +190,22 @@ int det_wait(det_ready_fn ready, void *arg, uint64_t deadline) {
     return ok;
 }
 
+/* Sleep(0) gives up the time slice and no time. A thread that calls it DET_SPIN times without a
+ * Present in between is waiting for time to pass, as a clock-polling thread is (det_clock_read):
+ * the movie player loops `while (!frame_due()) { tasks; SleepEx(0); }` until EA's sound clock
+ * reaches the next frame. Its loop body is too long for the clock-read rule, so time crept only
+ * by the stall rule (0.1 ms per 4096 function entries): the intro ran at 7 fps in the browser,
+ * against 25 natively. From the DET_SPIN-th on, each Sleep(0) passes DET_SPIN_NS. Per-thread
+ * counts on the guest's own code path: deterministic. Ordinary frames never get there. */
+static volatile uint32_t g_frame_no; /* the last det_frame */
+static RECOMP_TLS uint32_t t_s0_frame, t_s0_n;
 void det_sleep_ms(uint32_t ms) {
     if (!ms) {
+        if (t_s0_frame != g_frame_no) {
+            t_s0_frame = g_frame_no;
+            t_s0_n = 0;
+        }
+        if (++t_s0_n >= DET_SPIN) __atomic_add_fetch(&g_vt, DET_SPIN_NS, __ATOMIC_RELAXED), time_step("sleep 0");
         det_yield();
         return;
     }
@@ -218,61 +251,40 @@ void det_on_frame(det_frame_fn fn) {
     if (g_nhooks < 8) g_hooks[g_nhooks++] = fn;
 }
 
-static uint64_t hash_range(uint64_t h, uint32_t lo, uint32_t hi) {
-    const uint64_t *p = (const uint64_t *)G2H(lo);
-    for (uint32_t n = (hi - lo) / 8; n; n--, p++) {
-        h ^= *p;
-        h *= 0x100000001B3ull;
-        h ^= h >> 29;
-    }
-    return h;
-}
-uint32_t rt_heap_top(void);   /* heap.c */
-uint64_t det_hash(void) {
-    uint64_t h = 0xCBF29CE484222325ull;
-    h = hash_range(h, RT_IMAGE_BASE, RT_IMAGE_END);
-    h = hash_range(h, RT_STACK0_LO, RT_STACK0_HI);
-    h = hash_range(h, RT_HEAP_LO, rt_heap_top());
-    return h;
-}
-
-/* RT_DET_HASH=N: "det: frame F hash H" every N frames. RT_DET_PAGES=F: page hashes at frame F
- * (one line per 64 KiB page) to locate the first difference between two runs. */
-static void hash_frame(uint32_t frame) {
-    static int every = -1;
-    static long pages_at = -1;
-    if (every < 0) {
-        const char *e = getenv("RT_DET_HASH"), *p = getenv("RT_DET_PAGES");
-        every = e ? atoi(e) : 0;
-        pages_at = p ? atol(p) : -1;
-    }
-    if (every > 0 && frame % (uint32_t)every == 0)
-        rt_trace("det: frame %u hash %016llX vt %llu", frame, (unsigned long long)det_hash(), (unsigned long long)g_vt);
-    if ((long)frame == pages_at) {
-        uint32_t ranges[3][2] = { { RT_IMAGE_BASE, RT_IMAGE_END },
-                                  { RT_STACK0_LO, RT_STACK0_HI },
-                                  { RT_HEAP_LO, rt_heap_top() } };
-        for (int r = 0; r < 3; r++)
-            for (uint32_t a = ranges[r][0]; a < ranges[r][1]; a += 0x10000) {
-                uint32_t e = a + 0x10000 < ranges[r][1] ? a + 0x10000 : ranges[r][1];
-                rt_log("det: page %08X %016llX", a, (unsigned long long)hash_range(0, a, e));
-            }
-    }
-}
-
 /* Present: input for this frame, then virtual time moves to the frame's slot and every thread
  * due by then runs before the game continues. */
 void det_frame(uint32_t frame) {
     for (int i = 0; i < g_nhooks; i++) g_hooks[i](frame);
     uint64_t slot = (uint64_t)frame * 1000000000ull / 60ull;
-    static unsigned over, n;   /* frames whose work ran past their 1/60 s slot (dt > 1/60 there) */
+    static unsigned over, n; /* frames whose work ran past their 1/60 s slot (dt > 1/60 there) */
     if (slot > g_vt) __atomic_store_n(&g_vt, slot, __ATOMIC_RELAXED);
     else over++;
+    if (g_sched_trace < 0) g_sched_trace = getenv("RT_DET_SCHED") != NULL;
+    if (g_sched_trace > 0)
+        rt_trace("det: frame %u sched %llu handoffs %llu slices %u vt %llu", frame, (unsigned long long)g_all_scheds,
+                 (unsigned long long)g_all_handoffs, g_slices, (unsigned long long)g_vt);
     g_slices = 0;
+    g_frame_no = frame;
     if (++n == 600) {
-        rt_log("det: %u of 600 frames ran past their slot", over);
+        rt_log("det: %u of 600 frames ran past their slot; per frame %u scheduling points, %u thread hand-overs", over,
+               g_scheds / 600, g_handoffs / 600);
         over = n = 0;
+        g_scheds = g_handoffs = 0;
     }
     det_yield();
-    hash_frame(frame);
+    det_hash_frame(frame);   /* det_hash.c: RT_DET_HASH / RT_DET_PAGES / RT_DET_DUMP */
+}
+
+/* The virtual time the last Present advanced, for the frame pacers (platform/native/frame.c,
+   platform/web/platform.c): 1/60 s for an ordinary frame, a whole movie frame (40 ms) when the movie
+   player presents only once the next one is due (paced at 1/60 the intro ran 2.4x fast), 0 while
+   frames catch up with time a loading jump already passed. Capped: a long stall has already taken
+   its wall time. -1 outside deterministic mode. */
+double det_period_ms(void) {
+    static uint64_t last;
+    if (!det_on()) return -1;
+    uint64_t vt = det_now_ns();
+    double d = last && vt >= last ? (double)(vt - last) / 1e6 : 1000.0 / 60.0;
+    last = vt;
+    return d > 100.0 ? 100.0 : d;
 }

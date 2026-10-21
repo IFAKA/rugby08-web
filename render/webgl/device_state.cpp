@@ -119,6 +119,8 @@ void D3D9Device::set_test_state(D3DRENDERSTATETYPE State, DWORD Value) {
 }
 
 HRESULT D3D9Device::SetRenderState(D3DRENDERSTATETYPE State, DWORD Value) {
+    RQ_POST(SetRenderState(State, Value));
+    interp_rec(1ull << 32 | State, nullptr, [=](D3D9Device *d) { d->SetRenderState(State, Value); });
     if ((UINT)State < 256) m_render_states[State] = Value;
     if ((int)State == 29) g_render_state_specular = Value != 0;
     if ((int)State == 152) { // D3DRS_CLIPPLANEENABLE
@@ -130,6 +132,12 @@ HRESULT D3D9Device::SetRenderState(D3DRENDERSTATETYPE State, DWORD Value) {
 }
 
 HRESULT D3D9Device::SetTransform(D3DTRANSFORMSTATETYPE State, const D3DMATRIX *pMatrix) {
+    if (rq_game() && pMatrix) {
+        D3DMATRIX m = *pMatrix;
+        RQ_POST(SetTransform(State, &m));
+    }
+    interp_transform(State, *pMatrix);
+    interp_rec(2ull << 32 | State, nullptr, [=, m = *pMatrix](D3D9Device *d) { d->SetTransform(State, &m); });
     if (!pMatrix) return -1;
     switch (State) {
     case D3DTS_WORLD: m_world = *pMatrix; break;
@@ -155,36 +163,62 @@ HRESULT D3D9Device::SetTransform(D3DTRANSFORMSTATETYPE State, const D3DMATRIX *p
 }
 
 HRESULT D3D9Device::SetClipPlane(DWORD Index, const float *pPlane) {
+    if (rq_game() && pPlane) {
+        std::array<float, 4> p{ pPlane[0], pPlane[1], pPlane[2], pPlane[3] };
+        RQ_POST(SetClipPlane(Index, p.data()));
+    }
+    interp_rec(3ull << 32 | Index, nullptr,
+               [=, p = std::array<float, 4>{ pPlane[0], pPlane[1], pPlane[2], pPlane[3] }](D3D9Device *d) {
+                   d->SetClipPlane(Index, p.data());
+               });
     if (Index > 0 || !pPlane) return D3DERR_INVALIDCALL;
     memcpy(m_clip_planes[Index], pPlane, 4 * sizeof(float));
     return D3D_OK;
 }
 
 HRESULT D3D9Device::SetLight(DWORD Index, const D3DLIGHT9 *pLight) {
+    if (rq_game() && pLight) {
+        D3DLIGHT9 l = *pLight;
+        RQ_POST(SetLight(Index, &l));
+    }
+    interp_rec(4ull << 32 | Index, nullptr, [=, l = *pLight](D3D9Device *d) { d->SetLight(Index, &l); });
     if (Index >= 8 || !pLight) return D3DERR_INVALIDCALL;
     g_lights[Index] = *pLight;
     return D3D_OK;
 }
 
 HRESULT D3D9Device::LightEnable(DWORD Index, BOOL Enable) {
+    RQ_POST(LightEnable(Index, Enable));
+    interp_rec(5ull << 32 | Index, nullptr, [=](D3D9Device *d) { d->LightEnable(Index, Enable); });
     if (Index >= 8) return D3DERR_INVALIDCALL;
     g_light_enabled[Index] = Enable != FALSE;
     return D3D_OK;
 }
 
 HRESULT D3D9Device::SetMaterial(const D3DMATERIAL9 *pMaterial) {
+    if (rq_game() && pMaterial) {
+        D3DMATERIAL9 m = *pMaterial;
+        RQ_POST(SetMaterial(&m));
+    }
+    interp_rec(6ull << 32, nullptr, [m = *pMaterial](D3D9Device *d) { d->SetMaterial(&m); });
     if (!pMaterial) return D3DERR_INVALIDCALL;
     g_material = *pMaterial;
     return D3D_OK;
 }
 
 HRESULT D3D9Device::SetTextureStageState(DWORD Stage, D3DTEXTURESTAGESTATETYPE Type, DWORD Value) {
+    RQ_POST(SetTextureStageState(Stage, Type, Value));
+    interp_rec(7ull << 32 | Stage << 8 | Type, nullptr,
+               [=](D3D9Device *d) { d->SetTextureStageState(Stage, Type, Value); });
     if (Stage >= 8 || Type >= 33) return D3DERR_INVALIDCALL;
     g_texture_stage_states[Stage][Type] = Value;
     return D3D_OK;
 }
 
 HRESULT D3D9Device::SetSamplerState(DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value) {
+    RQ_POST(SetSamplerState(Sampler, Type, Value));
+    interp_rec(8ull << 32 | Sampler << 8 | Type, nullptr,
+               [=](D3D9Device *d) { d->SetSamplerState(Sampler, Type, Value); });
     if (Sampler >= 8) return D3DERR_INVALIDCALL;
     if (Type < 14) { g_sampler_states[Sampler][Type] = Value; }
     return D3D_OK;
