@@ -25,6 +25,16 @@ subs = [
     ),
     ("extern uint32_t g_fs_base;", "extern RECOMP_TLS uint32_t g_fs_base;"),
     ("extern uint64_t g_mm[8];", "extern RECOMP_TLS uint64_t g_mm[8];"),
+    # the x87 stack in locals where a body uses it (lift_passes.fp_locals; recomp_fp.h)
+    (
+        "RECOMP_REGS_OUT() (g_eax = l_eax, g_ecx = l_ecx, g_edx = l_edx, g_ebx = l_ebx, g_esp = l_esp, g_esi = l_esi, g_edi = l_edi, g_ebp = l_ebp)",
+        "RECOMP_REGS_OUT() (g_eax = l_eax, g_ecx = l_ecx, g_edx = l_edx, g_ebx = l_ebx, g_esp = l_esp, g_esi = l_esi, g_edi = l_edi, g_ebp = l_ebp, RECOMP_FP_OUT())",
+    ),
+    (
+        "RECOMP_REGS_IN() (l_eax = g_eax, l_ecx = g_ecx, l_edx = g_edx, l_ebx = g_ebx, l_esp = g_esp, l_esi = g_esi, l_edi = g_edi, l_ebp = g_ebp)",
+        "RECOMP_REGS_IN() (l_eax = g_eax, l_ecx = g_ecx, l_edx = g_edx, l_ebx = g_ebx, l_esp = g_esp, l_esi = g_esi, l_edi = g_edi, l_ebp = g_ebp, RECOMP_FP_IN())",
+    ),
+    ("#define _st g_st\n#define _fp_top g_fp_top\n", '#include "recomp_fp.h"\n'),
 ]
 for a, b in subs:
     if t.count(a) != 1:

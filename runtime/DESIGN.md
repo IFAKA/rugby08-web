@@ -1,7 +1,7 @@
 # Runtime design (decisions; change them here first)
 
 ## ABI the lifted code expects (pcrecomp `runtime/recomp32/recomp_types.h`)
-- Registers are globals (`g_eax`…`g_ebp`), and the x87 stack (`g_st`, `g_fp_top`, `g_fpu_cw`), lazy flags (`g_flag_*`) and `g_cur_func` are globals too.
+- Registers are globals (`g_eax`…`g_ebp`), and the x87 stack (`g_st`, `g_fp_top`, `g_fpu_cw`), lazy flags (`g_flag_*`) and `g_cur_func` are globals too. Lifted bodies keep the registers (RECOMP_LOCAL_REGS) and the x87 stack (`recomp_fp.h`, in bodies that use it) in locals and sync them at calls, returns and tail jumps.
   - The game uses threads, so all of these are `_Thread_local`. We vendor `recomp_types.h` into `runtime/include/recomp/` and add `RECOMP_TLS` to those declarations. Build the generated code with `RECOMP_LOCAL_REGS` so the TLS is touched only at call boundaries.
 - Memory: `ADDR(va) = (uint32_t)va + g_mem_base`, with one guest arena:
   - Native (arm64 macOS): `mmap` 4 GiB reserved with `MAP_NORESERVE`, so every 32-bit VA is backed.

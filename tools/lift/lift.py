@@ -29,6 +29,7 @@ from capstone import CS_ARCH_X86, CS_MODE_32, Cs  # noqa: E402
 from lift_passes import (  # noqa: E402
     carry_flags,
     eh_wrap,
+    fp_locals,
     overlap_fallthroughs,
     overlap_gotos,
     ret_jumps,
@@ -198,7 +199,7 @@ def lift_one(idx):
         leaders = set(leaders) | {b for b, _ in falls} | {e for _, e in falls if e in starts}
         code = generate.lift_function_linear(_G["lifter"], name, trimmed, leaders, addr)
         code = overlap_gotos(code, falls, starts)
-        code = zero_fill_tails(carry_flags(ret_jumps(code)), _G["code"], _G["code_start"])
+        code = fp_locals(zero_fill_tails(carry_flags(ret_jumps(code)), _G["code"], _G["code_start"]))
         hook = _G["hooks"].get(addr)
         if hook:  # tools/hooks.json: announce entry (checks grep for "<name> entered")
             code = code.replace(

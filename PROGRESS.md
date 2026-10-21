@@ -543,3 +543,8 @@ Next: verify and commit master's gamefs boot fix; then fps.interp.
 - Frames between steps (RT64 way): each step's device calls recorded, replayed per refresh with transforms blended; buffers rewritten after a recorded draw keep a copy (CPU mirror + pooled GL buffer, no glCopyBufferSubData on Apple GL 4.1); a render-target readback (stadium shadow map) first runs the step's recorded calls. 144 Hz run: 225 state hashes the same as the plain run.
 - Learned: on this Mac a match step costs ~10 ms game + ~2 ms renderer, so a 144 Hz refresh (6.9 ms) has no room: interp frames need cheaper steps (hot functions decompiled/optimized) or a render thread. Slow frames (~40 ms, ~6/s) are outside the renderer (cost ledger, cost.cpp).
 - Next: profile the match's hottest guest functions (first decompilation candidates); fps_skip_check on a quiet machine.
+
+## 2026-10-21 speed: x87 stack in locals, first game function in C
+- Profile of open play (sample, 30 s): 85% of the game's own time is in functions using the x87 stack; the model shifted 8 thread-local doubles per push/pop. Now each body that uses it keeps it in a local array (recomp_fp.h, lift_passes.fp_locals; synced with g_st where the registers are). Open play: game functions 9363 -> 6859 samples (-27%), all busy -16%; 225 det hashes the same; lift.difftest, crt_math, fidelity PASS. Prior art: box64 x87 cache, FEX x87 stack pass.
+- game/overrides/math/vec3_transform.c (FUN_0079B230): bit-exact; a whole override must RECOMP_ENTER (det scheduler yields every 4096 entries).
+- Next: web build check of recomp_fp.h (split_big parts copy the locals), then the next hot spots (CPU skinning 0x773FD0, matrix multiply 0x7BA0D6, recomp_lookup).
