@@ -14,7 +14,7 @@ void trace_rig_frame(uint32_t frame) {
     if (!g_init) {
         g_init = 1;
         const char *p = getenv("RT_TRACE_RIG");
-        if (p && *p) g_out = fopen(p, "w");
+        if (p && *p && (g_out = fopen(p, "w"))) setvbuf(g_out, NULL, _IOLBF, 1 << 16); /* runs end at a frame limit without fclose */
     }
     if (!g_out || !ms_active()) return;
     ms_ball_t b = { { 0 }, { 0 }, -1, -1 };
@@ -38,5 +38,4 @@ void trace_rig_frame(uint32_t frame) {
                         (double)p.pos[2], (double)p.heading, p.parked, p.state_vt);
         }
     fprintf(g_out, "]}\n");
-    if (frame % 600 == 0) fflush(g_out);
 }
