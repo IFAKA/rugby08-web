@@ -108,7 +108,7 @@ def into_match(host, friend, out):
         return f"Team Select not reached on both ({err})"
     host.key("ArrowLeft", 2000)
     friend.key("ArrowRight", 3000)
-    err = play_now(host.page, host.lines)
+    err = play_now(host.page, host.lines, ready=[friend.page])
     if err or not friend.wait(BACKEND, 60):
         return f"the match did not start on both ({err})"
     return None

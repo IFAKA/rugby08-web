@@ -61,7 +61,7 @@ def into_match(players, sides, out):
     for p, s in zip(players[1:], sides[1:]):
         if s in KEY:
             p.key(KEY[s], 2000)
-    err = play_now(host.page, host.lines)
+    err = play_now(host.page, host.lines, ready=[p.page for p in players[1:]])
     if err or not all(p.wait(BACKEND, 90) for p in players[1:]):
         return f"the match did not start for everyone ({err})"
     return None

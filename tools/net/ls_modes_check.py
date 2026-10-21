@@ -105,6 +105,7 @@ def one_match(host, friend, n, out, name, together):
     for _ in range(12):  # CONTINUE (and whatever the mode shows before the match)
         if count(host, BACKEND) > starts or screen(host.lines) == 0:
             break
+        friend.key("s", 800)  # ready (Team Select: ls_ready.c; elsewhere the host's menus ignore it)
         host.key("s", 2500)
     if not friend.wait_for(lambda: count(friend, BACKEND) > starts, 120):
         return f"{name}: the friend's game did not start match {n}"

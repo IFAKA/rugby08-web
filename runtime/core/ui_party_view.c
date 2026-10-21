@@ -59,7 +59,7 @@ static void rows(ui_image_t *im, int sc) {   /* the players, as the party screen
         char l[48];
         fe_party_layout(3 + k, &x, &y, &by);
         fe_rect(im, (float)x - 8, (float)y - 2, 330, 20, r);
-        ui_rect(im, r[0], r[1], r[2], r[3], 0xF0000000u);
+        ui_rect(im, r[0], r[1], r[2], r[3], 0xFF000000u);   /* (opaque: the host's menu is under it) */
         if (mask >> k & 1)
             snprintf(l, sizeof l, "%d  PLAYER %d%s%s", k + 1, k + 1, k == rt_net_host() ? " (HOST)" : "",
                      k == rt_net_slot() ? " (YOU)" : "");
@@ -84,7 +84,7 @@ void ui_party_view(ui_image_t *im, const char *msg) {
     fe_rect(im, (float)x - 8, (float)by - 4, 0, 56, r);
     int pw = ui_text_width(msg, sc) + 24;
     if (r[0] + pw > im->w - 8 && sc > 1) sc--, pw = ui_text_width(msg, sc) + 24;   /* (fits the screen) */
-    ui_rect(im, r[0], r[1], pw, r[3], 0xF4000000u);
+    ui_rect(im, r[0], r[1], pw, r[3], 0xFF000000u);   /* (opaque: no ghost of the host's menu) */
     ui_text(im, r[0] + 12, r[1] + r[3] / 2 - 7 * sc / 2, sc, msg, UI_GOLD);
     rt_trace("ms: party view %s", msg);
 }

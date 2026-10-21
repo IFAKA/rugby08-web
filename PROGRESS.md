@@ -607,3 +607,9 @@ PCSX2 MTGS, Mesa glthread): serially a step would have to cost < 3 ms; it is ~8 
 2026-10-21 main: merged fps (frame pacing, render threads native and web, the lockstep party, speedups) on the user's call (main now carries the online code too). Kept main's own: the installable app (PWA, added to fps's party page), npm run dev, free-port checks, the public-source rule. Dropped main's quit_at.c and fe_pointer.c (fps's match_quit.c and browser pointer replace them).
 - A worktree's gen/ must be re-lifted (or copied, then touched: rsync -a keeps old mtimes and make links stale objects) after a merge brings new lifter passes; an Oct 14 gen hung the intro movie. CMake now re-globs build/web-gen (CONFIGURE_DEPENDS).
 - Checks on the merge: web.smoke, ls.boot, fps.interp, fps.skip PASS.
+
+2026-10-21 party play test fixes (the user's two-window test):
+- 120 Hz freeze after party → leave → PLAY NOW: a resource destroyed mid-step freed the recorded step and the half-recorded step was shown; the rest of that step now draws live (interp.cpp g_live).
+- Overlays at 120 Hz in the browser: the worker undid the overlay before its canvas was shown, so every in-between frame lacked the pause cover, YOU tags and party view (blinking; the host's pause menu visible). Undo now at the next tick (render_thread.c). Pause cover and party view opaque (no ghost of the host's menus).
+- Team Select ready-up (ls_ready.c): every player presses S/Enter (A); the host's confirm waits for all; a side move takes the ready back. Checks' play_now(ready=[...]) presses it for friends.
+- Open: per-player CHANGE CAMERA. Swapping own options around the camera step and its events does not keep the friend's style (krn state negative); the style lives elsewhere. Next: find where the CHANGE CAMERA screen sets the CameraManager.

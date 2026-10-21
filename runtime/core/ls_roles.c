@@ -45,6 +45,7 @@ static int in_match(void) {
 /* Screens where every player moves their own controller's icon to a side. */
 static int sides_screen(int id) { return id == 0x6 || id == 0xF || id == 0x31D || id == 0x1A0A; }
 static void sides_trace(void);
+static char side_of(int k);
 
 int ls_roles_may_pause(int slot) {   /* a player with pauses left (no limit outside a party) */
     return !ls_on() || __builtin_popcount(ls_members()) < 2 || (slot >= 0 && slot < RT_MAX_PADS && g_left[slot] > 0);
@@ -54,6 +55,7 @@ void ls_roles_paused_by(int slot) {   /* pad_pause.c: Start, every game at the s
 }
 /* The desk's keyboard Esc pauses too (its player's pause): none once its pauses are used up. */
 int ls_roles_desk_event(const plat_desk_ev_t *e) {
+    if (ls_on() && !ls_ready_desk(e)) return 0;   /* (Team Select: the host's confirm waits for all) */
     if (!ls_on() || e->type != PLAT_DESK_KEY || e->x != SC_ESCAPE || !e->a || !in_match()) return 1;
     if (fe_screen_id() != SCR_HUD || g_pauser >= 0) return 1;
     if (!ls_roles_may_pause(rt_net_desk())) return 0;
@@ -91,10 +93,10 @@ int ls_roles_actor(void) {
    mouse (player 1's, applied as desk events) may. */
 int ls_roles_filter(const plat_desk_ev_t *d, int nd) {
     if (!ls_on()) return 1;
-    (void)d, (void)nd;
     int match = in_match(), id = fe_screen_id();
     pause_step(match, id);
     if (!match && sides_screen(id)) sides_trace();
+    ls_ready_frame(!match && sides_screen(id) ? id : -1, d, nd, side_of);
     int only = -1;   /* the one slot whose controller acts, or -1: everyone */
     if (match && g_paused) only = g_pauser;
     else if (!match && fe_in_menus() && !sides_screen(id)) only = ls_host();
@@ -151,6 +153,7 @@ static int others_choice(int id, char *line, int cap) {
 int ls_roles_banner(char *line, int cap) {
     if (!ls_on() || __builtin_popcount(ls_members()) < 2) return 0;
     int me = rt_net_slot(), id = fe_screen_id();
+    if (!in_match() && sides_screen(id)) return ls_ready_banner(line, cap);
     if (in_match() && others_choice(id, line, cap)) return LS_BANNER_COVER;
     if (in_match() && g_paused && g_pauser != me)
         return snprintf(line, (size_t)cap, "PAUSED BY PLAYER %d  %d S", g_pauser + 1, ls_roles_pause_left()),

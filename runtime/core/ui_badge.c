@@ -44,7 +44,13 @@ static void ls_toasts(uint32_t frame) {
 /* Another player's turn: the screen dimmed (or covered) and whose turn it is (ROLE). */
 static void turn(ui_image_t *im, int rk, const char *role) {
     int w = im->w, h = im->h;
-    ui_rect(im, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xE8000000u : 0x90000000u);
+    if (rk == LS_BANNER_STRIP) {   /* (Team Select: the screen stays, the line at the bottom) */
+        int tw = ui_text_width(role, 2) + 24;
+        ui_rect(im, (w - tw) / 2, h - 52, tw, 32, UI_PANEL);
+        ui_text(im, (w - tw) / 2 + 12, h - 44, 2, role, UI_GOLD);
+        return;
+    }
+    ui_rect(im, 0, 0, w, h, rk == LS_BANNER_COVER ? 0xFF000000u : 0x90000000u);
     int sc = ui_text_width(role, 3) + 24 <= w - 16 ? 3 : 2;   /* (fits the screen) */
     int tw = ui_text_width(role, sc) + 24;
     ui_rect(im, (w - tw) / 2, h / 2 - 22, tw, 44, UI_PANEL);

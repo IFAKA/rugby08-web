@@ -69,7 +69,7 @@ def into_match(host, f1, f2, out):
     for p, k in ((host, "ArrowLeft"), (f1, "ArrowRight"), (f2, "ArrowLeft")):
         p.key(k, 2000)
     out.append(f"sides: {controllers(host)}")
-    err = play_now(host.page, host.lines)
+    err = play_now(host.page, host.lines, ready=[f1.page, f2.page])
     if err or not all(f.wait(BACKEND, 60) for f in (f1, f2)):
         return f"the match did not start for everyone ({err})"
     play([host, f1, f2], 30)

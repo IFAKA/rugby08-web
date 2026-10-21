@@ -53,6 +53,7 @@ struct Pool {   // copies no step needs, per target (WebGL fixes a buffer's targ
 size_t g_at;                                    // the rec being replayed
 const Step *g_rp = &g_prev;                     // the step being replayed (g_cur when flushed)
 size_t g_flushed;                               // g_cur's recs already run (a readback needed them)
+bool g_live;   // a resource the step used was destroyed: its log so far was run, the rest is drawn as it comes
 
 void step_drop(Step &s) {
     for (const Snap &x : s.snaps) g_pool.v[x.index].push_back(x.copy);
@@ -75,7 +76,7 @@ GLuint snap(GLuint id) {   // what the replayed rec reads for buffer `id`: the f
 // A setter: kept as its slot's last value; in a step's log while recording. Runs as usual (false).
 bool interp_rec(uint64_t slot, const void *obj, std::function<void(D3D9Device *)> f) {
     if (g_replaying) return false;
-    if (g_on) {
+    if (g_on && !g_live) {
         g_cur.recs.push_back({ f, obj, -1 });
         if (obj) g_used[obj] = 1;
     }
@@ -91,7 +92,7 @@ void interp_transform(D3DTRANSFORMSTATETYPE s, const D3DMATRIX &m) {
 
 // A draw or Clear: recorded and not run while the refreshes draw the frames (true).
 bool D3D9Device::rec_draw(unsigned op, unsigned a, unsigned b, std::function<void(D3D9Device *)> f) {
-    if (g_replaying || !g_on) return false;
+    if (g_replaying || !g_on || g_live) return false;
     g_dev = this;
     DrawInfo di;
     di.key = ((uint64_t)op << 56) ^ ((uint64_t)a << 36) ^ ((uint64_t)b << 20) ^
@@ -144,6 +145,7 @@ static void step_open() {
     g_used.clear();
     g_copied.clear();
     g_flushed = 0;
+    g_live = false;
     g_cur.recs.reserve(g_shadow.size() + 2048);
     for (auto &kv : g_shadow) g_cur.recs.push_back(kv.second);   // the state the step starts from
     for (auto &r : g_cur.recs)
@@ -152,7 +154,7 @@ static void step_open() {
 
 void interp_present() {   // D3D9Device::Present: the step's log is complete
     if (!g_on || g_replaying) return;
-    g_cur.ok = true;
+    g_cur.ok = !g_live;   // (a step drawn live has its frame drawn already: no replays of it)
     step_drop(g_older);
     g_older = std::move(g_prev);
     g_prev = std::move(g_cur);
@@ -168,10 +170,27 @@ void interp_present() {   // D3D9Device::Present: the step's log is complete
     }
 }
 
-void interp_forget(const void *obj) noexcept {   // a resource is destroyed: no log may name it
+static void run_cur() {   // g_cur's recs not run yet, run now, in order
+    if (!g_dev || g_flushed >= g_cur.recs.size()) return;
+    g_replaying = true;
+    g_rp = &g_cur;
+    for (g_at = g_flushed; g_at < g_cur.recs.size(); g_at++) g_cur.recs[g_at].f(g_dev);
+    g_flushed = g_cur.recs.size();
+    g_rp = &g_prev;
+    g_replaying = false;
+}
+
+// A resource is destroyed: no log may name it. If this step's log does (a screen that frees a texture
+// it drew with, mid-step: Team Select), the log so far is run while the resource still exists and the
+// rest of the step is drawn as it comes, so its frame is whole (a log cut there lost its clear and
+// start state: a frozen picture under a trail of cursors).
+void interp_forget(const void *obj) noexcept {   // NOLINT(bugprone-exception-escape): every rec holds a call
     for (auto it = g_shadow.begin(); it != g_shadow.end();)
         it = it->second.obj == obj ? g_shadow.erase(it) : std::next(it);
-    if (g_used.count(obj)) step_free(g_cur);   // (not ok: never replayed)
+    if (g_on && !g_live && g_used.count(obj)) {
+        run_cur();
+        step_free(g_cur), g_live = true;
+    }
     for (Step *st : { &g_older, &g_prev })
         for (auto &r : st->recs)
             if (r.obj == obj) {
@@ -184,7 +203,7 @@ void interp_forget(const void *obj) noexcept {   // a resource is destroyed: no 
 // `len` bytes, `old` its contents) is copied first, so the draws recorded so far replay with what they
 // read: uploaded from the CPU (Apple's GL 4.1 lacks a GPU glCopyBufferSubData, WebGL's would wait).
 void interp_upload(const void *obj, GLuint buf, UINT len, GLenum target, const uint8_t *old) {
-    if (!g_on || g_replaying || !g_used.count(obj) || g_cur.draws.empty()) return;
+    if (!g_on || g_replaying || g_live || !g_used.count(obj) || g_cur.draws.empty()) return;
     if (!buf) {
         g_rewrites++;
         return;
@@ -217,13 +236,7 @@ extern "C" void d3d9w_interp_mode(int on) {
 // them again later, as every draw.
 extern "C" void d3d9w_interp_flush(void) {
     if (rq_game()) return rq_post([] { d3d9w_interp_flush(); });
-    if (!g_on || g_replaying || !g_dev || g_flushed >= g_cur.recs.size()) return;
-    g_replaying = true;
-    g_rp = &g_cur;
-    for (g_at = g_flushed; g_at < g_cur.recs.size(); g_at++) g_cur.recs[g_at].f(g_dev);
-    g_flushed = g_cur.recs.size();
-    g_rp = &g_prev;
-    g_replaying = false;
+    if (g_on && !g_replaying && !g_live) run_cur();
 }
 
 extern "C" int d3d9w_interp_rewrites(int *copies) {

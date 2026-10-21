@@ -63,8 +63,9 @@ def changed(page, lines, old, secs):
     return False
 
 
-def play_now(page, lines, log=None, secs=600, until=None):
-    """From the title or the main menu into a PLAY NOW match, the keyboard on the home side."""
+def play_now(page, lines, log=None, secs=600, until=None, ready=()):
+    """From the title or the main menu into a PLAY NOW match, the keyboard on the home side. READY: the
+    party's other pages, each confirming on Team Select first (runtime/core/ls_ready.c)."""
     end, moved = time.time() + secs, False
     while time.time() < end:
         if any(BACKEND in x for x in lines):
@@ -79,6 +80,9 @@ def play_now(page, lines, log=None, secs=600, until=None):
             page.wait_for_timeout(1500)
             moved = True
             continue
+        if s == TEAM_SELECT and until is None:
+            for other in ready:
+                tap(other, "s")
         if s is not None:
             tap(page, "s")  # accept: the title, PLAY NOW (first item), Team Select, Stadium, popups
         changed(page, lines, s, 20)

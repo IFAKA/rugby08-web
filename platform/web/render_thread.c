@@ -45,14 +45,15 @@ static int run_wait(double ms) {
     return 1;
 }
 
-static void swap_none(void) {}   /* (the browser shows the canvas when the tick returns) */
+static int r_between; /* the last tick drew a frame between steps: its overlay is undone at the next one */
 
 static void tick(void) {   /* (one display refresh: the browser shows the canvas when it returns) */
     int frames = r_swaps;
+    if (r_between) rt_interp_frame_end(), r_between = 0;
     while (r_swaps == frames && run_wait(0)) {}   /* (a step's frame a refresh: each one is shown) */
     for (double end = emscripten_get_now() + 100; r_open && emscripten_get_now() < end;) run_wait(5);
     if (r_swaps == frames && !r_open && interp_period() > 0)
-        interp_refresh(r_shown, r_slot, emscripten_get_now(), swap_none);
+        r_between = interp_refresh(r_shown, r_slot, emscripten_get_now(), NULL);
 }
 
 /* The refreshes: the browser's animation frames; RT_TEST_HZ=N (tests), an emulated display's, a timer to

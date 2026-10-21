@@ -6,7 +6,8 @@
 enum {
     LS_BANNER_VEIL = 1,
     LS_BANNER_COVER = 2,
-    LS_BANNER_LOBBY = 3
+    LS_BANNER_LOBBY = 3,
+    LS_BANNER_STRIP = 4   /* a line at the bottom, the screen as it is */
 };   /* over a dimmed / covered screen;
                                                                          the party view (ui_party_view.c) */
 int ls_host(void);                                    /* the room slot that drives the shared menus */
@@ -18,6 +19,9 @@ int ls_roles_actor(void);                             /* the slot acting in the 
 int ls_roles_filter(const plat_desk_ev_t *d, int nd); /* every game: other slots' pads off; 1: desk may act */
 int ls_roles_banner(char *line, int cap);             /* this player's banner (LS_BANNER_*), 0: none */
 void ls_roles_local(const rt_pad_t *p);               /* this player's own presses (leave the party?) */
+void ls_ready_frame(int sides, const plat_desk_ev_t *d, int nd, char (*side_of)(int)); /* (ls_ready.c) */
+int ls_ready_desk(const plat_desk_ev_t *e);           /* the desk's event may reach the game (Team Select) */
+int ls_ready_banner(char *line, int cap);             /* this player's line on Team Select */
 int ls_team_of(int slot);                             /* that slot's team: 0 home, 1 away, -1 none (watching) */
 int ls_team_has_players(int team);                    /* a party player is on that team */
 #endif
