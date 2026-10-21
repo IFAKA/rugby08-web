@@ -5,6 +5,7 @@
 
 void d3d9w_rq_post(void (*f)(void *), void *arg);
 void d3d9w_rq_hand(void);
+int d3d9w_rq_syncs_take(void);
 
 /* Present at most 60 frames per second (RT_FPS=N, 0 = uncapped), as on the 60 Hz displays the game
    was made for. Vsync alone runs it at the host's refresh rate (120 Hz on ProMotion Macs), and the
@@ -123,10 +124,10 @@ static void frame_stats(double swap_ticks) {
     if (now - t0 >= f && n) {
         double span = now - t0;
         rt_trace("perf: %d fps, %.1f steps/s (%d not drawn), avg %.1f ms, worst %.1f ms, %d frames >20 ms, swap %.1f "
-                 "ms, paced-wait %.1f ms, %d frames between steps",
+                 "ms, paced-wait %.1f ms, %d frames between steps, %d queue waits",
                  (int)(n * f / span + 0.5), (n + g_skipped) * f / span, g_skipped, span * 1000 / f / n,
                  worst * 1000 / f, (int)over, swap_sum * 1000 / f / n, g_wait_ticks * 1000 / f / n,
-                 interp_frames_take());
+                 interp_frames_take(), d3d9w_rq_syncs_take());
 #ifdef __APPLE__
         /* Three slow seconds in a row: `sample` this process (5 s of stacks) into logs/, at most 3 times a
            run, so a slow scene explains itself without anyone attaching a profiler. */

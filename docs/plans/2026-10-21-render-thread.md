@@ -69,3 +69,19 @@ D3D8 layer calls ~40 of its entry points; GL has 90 functions at ~400 call sites
   view. Filled: vertex shader constants are blended (`consts_mix`: a register that jumps is a cut,
   so the step's own constants are drawn), and the eye comes from the first draw that moved.
 - Still open: gap 3 (browser), gap 4 (allocation per call; not measured as a cost yet).
+
+## Gap 3, the browser: findings and the design (2026-10-21)
+- A worker that owns a transferred canvas shows a frame only when it returns to its event loop: a busy
+  loop with emscripten_webgl_commit_frame never refreshes (emscripten issues #17816, #8307; settings
+  reference: OFFSCREENCANVAS_SUPPORT, OFFSCREEN_FRAMEBUFFER). So the native `for (;;)` loop cannot be
+  copied: the web render thread is a pthread with the canvas transferred
+  (emscripten_pthread_attr_settransferredcanvases), its loop driven by the worker's
+  requestAnimationFrame (emscripten_set_main_loop in the thread). Each callback runs the batches that
+  came, then at most one in-between frame (interp_refresh), and returns: the browser shows it.
+- Cost: while the worker is between callbacks, a game wait for the drawing (rq_sync) waits up to one
+  refresh. Measured natively (perf line "queue waits"): 311 waits in ~12000 steps, all in loading
+  (up to 27 a second), 0 in a match. So matches pay nothing; loading pays up to ~0.4 s a second.
+- Open: resizes (the canvas element cannot be resized after transferControlToOffscreen: size the
+  OffscreenCanvas in the worker), SDL2's emscripten window keeping its events on the main thread,
+  the fallback without OffscreenCanvas (no render thread: today's serial path), and Safari's
+  OffscreenCanvas WebGL2 in workers (16.4+).

@@ -26,6 +26,7 @@ thread_local bool t_render;   // this thread runs the queue
 const float (*g_game_vsc)[4], (*g_game_psc)[4];
 float g_sent_vsc[100][4], g_sent_psc[8][4];
 bool g_sent_any;
+int g_syncs;   // the game's waits for the render thread since d3d9w_rq_syncs_take
 
 void hand(void) {   // g_fill to the render thread, once it took the batch before
     std::unique_lock<std::mutex> l(g_mu);
@@ -69,6 +70,7 @@ void rq_post(std::function<void()> f) {
 
 void rq_sync(void) {
     if (!rq_game()) return;
+    g_syncs++;
     hand();
     std::unique_lock<std::mutex> l(g_mu);
     g_cv.wait(l, [] { return g_done == g_handed; });
@@ -84,6 +86,12 @@ void rq_call(const std::function<void()> &f) {   // run on the render thread, re
 extern "C" void d3d9w_rq_start(void) {
     t_render = true;
     g_on = true;
+}
+
+extern "C" int d3d9w_rq_syncs_take(void) {   // (perf line: how often the game waited for the drawing)
+    int n = g_syncs;
+    g_syncs = 0;
+    return n;
 }
 
 extern "C" void d3d9w_rq_hand(void) {   // at Present: the step's calls to the render thread

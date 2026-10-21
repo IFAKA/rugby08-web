@@ -662,6 +662,7 @@ extern "C" int d3d9w_frame_read(unsigned char *rgba, int w, int h);
 // runs batches; runtime/ code that reads the GPU runs there (d3d9w_on_render), after what was drawn.
 extern "C" void d3d9w_rq_start(void); // on the render thread, before its first batch
 extern "C" void d3d9w_rq_hand(void); // at Present: the step's calls to the render thread
+extern "C" int d3d9w_rq_syncs_take(void); // the game's waits for the render thread since last asked
 extern "C" double d3d9w_rq_run(double ms); // render thread: the next batch, waiting up to ms (ms it ran, < 0: none)
 extern "C" void d3d9w_rq_post(void (*f)(void *), void *arg);
 extern "C" void d3d9w_rq_call(void (*f)(void *), void *arg);
