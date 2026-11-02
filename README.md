@@ -77,3 +77,11 @@ Built on [pcrecomp](https://github.com/sp00nznet/pcrecomp) and
 
 **Keywords:** Rugby 08 PC, EA Sports Rugby 08 browser, play Rugby 08 online in browser, Rugby 08 WebAssembly,
 static recompilation, x86 to WebAssembly, Direct3D 8 to WebGL, PC game port, retro sports game, PWA game.
+
+---
+
+## Support
+
+If this project is useful to you, you can support my work:
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/zfaka)
